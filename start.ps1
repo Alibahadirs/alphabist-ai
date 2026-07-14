@@ -2,9 +2,9 @@ if (-Not (Test-Path ".venv")) {
     py -m venv .venv
 }
 
-Set-ExecutionPolicy -Scope Process Bypass
-.\.venv\Scripts\Activate.ps1
+Set-ExecutionPolicy -Scope Process Bypass -Force
+& ".\.venv\Scripts\Activate.ps1"
 
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-python -m streamlit run main.py
+py -m pip install --upgrade pip
+py -m pip install -r requirements.txt
+py -m streamlit run main.py
