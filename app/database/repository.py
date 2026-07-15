@@ -2,6 +2,7 @@ import sqlite3
 from pathlib import Path
 
 from app.history.models import ScoreHistoryEntry
+from app.portfolio.models import PortfolioPosition
 from app.scoring.models import FinancialMetrics, ScoreBreakdown
 from app.watchlist.models import WatchlistEntry
 
@@ -43,6 +44,14 @@ def init_db():
         conn.execute(
             """CREATE INDEX IF NOT EXISTS idx_score_history_symbol_id
             ON score_history(symbol, id)"""
+        )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS portfolio_positions(
+            symbol TEXT PRIMARY KEY,
+            quantity REAL NOT NULL,
+            average_cost REAL NOT NULL,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(symbol) REFERENCES companies(symbol))"""
         )
 
 def upsert_company(m):
@@ -94,6 +103,36 @@ def list_score_history(
             (symbol.upper().strip(), safe_limit),
         ).fetchall()
     return [ScoreHistoryEntry(**dict(row)) for row in reversed(rows)]
+
+
+def upsert_portfolio_position(position: PortfolioPosition) -> None:
+    with connect() as conn:
+        conn.execute(
+            """INSERT INTO portfolio_positions(symbol, quantity, average_cost)
+            VALUES(?, ?, ?)
+            ON CONFLICT(symbol) DO UPDATE SET
+            quantity=excluded.quantity,
+            average_cost=excluded.average_cost,
+            updated_at=CURRENT_TIMESTAMP""",
+            (position.symbol, position.quantity, position.average_cost),
+        )
+
+
+def remove_portfolio_position(symbol: str) -> None:
+    with connect() as conn:
+        conn.execute(
+            "DELETE FROM portfolio_positions WHERE symbol=?",
+            (symbol.upper().strip(),),
+        )
+
+
+def list_portfolio_positions() -> list[PortfolioPosition]:
+    with connect() as conn:
+        rows = conn.execute(
+            """SELECT symbol, quantity, average_cost
+            FROM portfolio_positions ORDER BY updated_at, symbol"""
+        ).fetchall()
+    return [PortfolioPosition(**dict(row)) for row in rows]
 
 
 def upsert_watchlist_entry(entry: WatchlistEntry) -> None:

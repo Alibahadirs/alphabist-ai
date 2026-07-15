@@ -11,10 +11,13 @@ from app.database.repository import (
     add_score_history,
     get_company,
     list_companies,
+    list_portfolio_positions,
     list_score_history,
     list_watchlist_entries,
     remove_watchlist_entry,
+    remove_portfolio_position,
     upsert_company,
+    upsert_portfolio_position,
     upsert_watchlist_entry,
 )
 from app.market_data.provider import get_history, get_quote
@@ -29,6 +32,8 @@ from app.parser.models import (
     FinancialReportDraft,
     PdfExtractionResult,
 )
+from app.portfolio.models import PortfolioPosition
+from app.portfolio.service import build_portfolio_summary
 from app.scoring.engine import calculate_alpha_score
 from app.scoring.models import FinancialMetrics, ScoreBreakdown
 from app.technical.engine import calculate_combined_score, calculate_technical_score
@@ -75,6 +80,11 @@ def _parse_activity_pdf(
 @st.cache_data(ttl="15m", max_entries=50, show_spinner=False)
 def _load_market_data(symbol: str):
     return get_quote(symbol), get_history(symbol)
+
+
+@st.cache_data(ttl="15m", max_entries=100, show_spinner=False)
+def _load_quote(symbol: str):
+    return get_quote(symbol)
 
 
 def _score_table(score: ScoreBreakdown) -> pd.DataFrame:
@@ -1100,4 +1110,142 @@ def render_watchlist() -> None:
     if remove_submitted:
         remove_watchlist_entry(remove_symbol)
         st.success(f"{remove_symbol} takip listesinden çıkarıldı.")
+        st.rerun()
+
+
+def render_portfolio() -> None:
+    st.title("Portföy")
+    st.caption("Pozisyonlarınızın değerini, getirisini ve ağırlıklı Alpha Score'unu izleyin.")
+
+    companies = list_companies()
+    if not companies:
+        st.info("Portföye eklemek için önce bir şirket kaydedin.")
+        return
+
+    company_by_symbol = {company.symbol: company for company in companies}
+    with st.form("portfolio_position_form", border=True):
+        st.subheader("Pozisyon ekle veya güncelle")
+        symbol = st.selectbox("Hisse", list(company_by_symbol))
+        quantity = st.number_input(
+            "Lot",
+            min_value=1.0,
+            value=1.0,
+            step=1.0,
+            format="%.0f",
+        )
+        average_cost = st.number_input(
+            "Ortalama maliyet (TL/lot)",
+            min_value=0.0,
+            value=0.0,
+            step=0.01,
+            format="%.2f",
+        )
+        submitted = st.form_submit_button(
+            "Portföye kaydet",
+            type="primary",
+            icon=":material/add_chart:",
+        )
+
+    if submitted:
+        upsert_portfolio_position(
+            PortfolioPosition(
+                symbol=symbol,
+                quantity=quantity,
+                average_cost=average_cost,
+            )
+        )
+        st.success(f"{symbol} pozisyonu portföye kaydedildi.")
+
+    positions = list_portfolio_positions()
+    if not positions:
+        st.info("Portföyünüz henüz boş.")
+        return
+
+    prices: dict[str, float | None] = {}
+    failed_symbols: list[str] = []
+    with st.spinner("Gecikmeli fiyatlar alınıyor..."):
+        for position in positions:
+            try:
+                quote = _load_quote(position.symbol)
+                prices[position.symbol] = float(quote["last"])
+            except Exception:
+                prices[position.symbol] = None
+                failed_symbols.append(position.symbol)
+
+    summary = build_portfolio_summary(positions, company_by_symbol, prices)
+    if failed_symbols:
+        st.warning(
+            "Fiyat alınamayan hisselerde güncel değer yerine maliyet kullanıldı: "
+            + ", ".join(failed_symbols)
+        )
+
+    with st.container(horizontal=True):
+        st.metric(
+            "Toplam maliyet",
+            f"{_format_turkish_amount(summary.total_cost)} TL",
+            border=True,
+        )
+        st.metric(
+            "Güncel değer",
+            f"{_format_turkish_amount(summary.total_market_value)} TL",
+            border=True,
+        )
+        st.metric(
+            "Kâr / zarar",
+            f"{_format_turkish_amount(summary.total_profit_loss)} TL",
+            f"%{summary.total_return_percent:+.2f}",
+            border=True,
+        )
+        st.metric(
+            "Ağırlıklı Alpha",
+            f"{summary.weighted_alpha_score:.1f}/100",
+            border=True,
+        )
+
+    rows = [
+        {
+            "Hisse": row.symbol,
+            "Şirket": row.company_name,
+            "Lot": row.quantity,
+            "Maliyet (TL)": row.average_cost,
+            "Son fiyat (TL)": row.last_price,
+            "Güncel değer (TL)": row.market_value,
+            "Kâr / zarar (TL)": row.profit_loss,
+            "Getiri (%)": row.return_percent,
+            "Alpha": row.alpha_score,
+            "Fiyat durumu": "Güncel" if row.price_available else "Fiyat bekleniyor",
+        }
+        for row in summary.rows
+    ]
+    with st.container(border=True):
+        st.subheader("Pozisyonlar")
+        st.dataframe(
+            pd.DataFrame(rows),
+            hide_index=True,
+            width="stretch",
+            column_config={
+                "Lot": st.column_config.NumberColumn(format="%.0f"),
+                "Maliyet (TL)": st.column_config.NumberColumn(format="%.2f"),
+                "Son fiyat (TL)": st.column_config.NumberColumn(format="%.2f"),
+                "Güncel değer (TL)": st.column_config.NumberColumn(format="localized"),
+                "Kâr / zarar (TL)": st.column_config.NumberColumn(format="localized"),
+                "Getiri (%)": st.column_config.NumberColumn(format="%.2f"),
+                "Alpha": st.column_config.ProgressColumn(
+                    "Alpha", min_value=0, max_value=100, format="%.1f"
+                ),
+            },
+        )
+
+    with st.form("portfolio_remove_form"):
+        remove_symbol = st.selectbox(
+            "Portföyden çıkarılacak hisse",
+            [row.symbol for row in summary.rows],
+        )
+        remove_submitted = st.form_submit_button(
+            "Portföyden çıkar",
+            icon=":material/delete:",
+        )
+    if remove_submitted:
+        remove_portfolio_position(remove_symbol)
+        st.success(f"{remove_symbol} portföyden çıkarıldı.")
         st.rerun()

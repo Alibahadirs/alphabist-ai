@@ -8,6 +8,7 @@ from app.ui.pages import (
     render_company_list,
     render_dashboard,
     render_pdf_analysis,
+    render_portfolio,
     render_watchlist,
 )
 
@@ -30,6 +31,7 @@ page = st.sidebar.radio(
         "Genel bakış",
         "Şirket karşılaştırma",
         "Takip listesi",
+        "Portföy",
         "PDF analizi",
         "Şirket ekle veya güncelle",
         "Kayıtlı şirketler",
@@ -42,6 +44,8 @@ elif page == "Şirket karşılaştırma":
     render_comparison()
 elif page == "Takip listesi":
     render_watchlist()
+elif page == "Portföy":
+    render_portfolio()
 elif page == "PDF analizi":
     render_pdf_analysis()
 elif page == "Şirket ekle veya güncelle":
