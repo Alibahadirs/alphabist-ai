@@ -1,62 +1,226 @@
 import pandas as pd
 import streamlit as st
-from app.database.repository import list_companies, get_company, upsert_company
-from app.scoring.engine import calculate_alpha_score
-from app.scoring.models import FinancialMetrics
-from app.market_data.provider import get_quote, get_history
+from pydantic import ValidationError
 
-def render_dashboard():
-    st.title('📊 AlphaBIST AI Dashboard')
+from app.core.constants import CATEGORY_MAX_POINTS
+from app.database.repository import get_company, list_companies, upsert_company
+from app.market_data.provider import get_history, get_quote
+from app.scoring.engine import calculate_alpha_score
+from app.scoring.models import FinancialMetrics, ScoreBreakdown
+
+
+CATEGORY_LABELS = {
+    "profitability": "Karlılık",
+    "growth": "Büyüme",
+    "leverage": "Borçluluk",
+    "liquidity": "Likidite",
+    "cash_flow": "Nakit akışı",
+    "efficiency": "Verimlilik",
+    "valuation": "Değerleme",
+    "risk": "Risk dayanıklılığı",
+    "management": "Yönetim",
+}
+
+
+def _score_table(score: ScoreBreakdown) -> pd.DataFrame:
+    rows = []
+    for category, maximum in CATEGORY_MAX_POINTS.items():
+        rows.append(
+            {
+                "Kategori": CATEGORY_LABELS[category],
+                "Puan": getattr(score, category),
+                "Maksimum": maximum,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def render_dashboard() -> None:
+    st.title("Genel bakış")
+    st.caption("Finansal kalite puanı ve gecikmeli piyasa görünümü")
+
     companies = list_companies()
-    symbol = st.selectbox('Şirket seç', [c.symbol for c in companies])
+    if not companies:
+        st.info("Analize başlamak için önce bir şirket ekleyin.")
+        return
+
+    symbol = st.selectbox(
+        "Şirket seç",
+        [company.symbol for company in companies],
+    )
     company = get_company(symbol)
+    if company is None:
+        st.error("Seçilen şirket kaydı bulunamadı.")
+        return
+
     score = calculate_alpha_score(company)
-    c1,c2,c3,c4 = st.columns(4)
-    c1.metric('Alpha Score', f'{score.total:.1f}/100')
-    c2.metric('Not', score.grade)
-    c3.metric('Karar', score.decision)
-    c4.metric('Şirket', company.company_name)
-    table = pd.DataFrame([
-        ['Karlılık',score.profitability,15],['Büyüme',score.growth,15],['Borçluluk',score.leverage,15],
-        ['Likidite',score.liquidity,10],['Nakit Akışı',score.cash_flow,15],['Verimlilik',score.efficiency,10],
-        ['Değerleme',score.valuation,10],['Risk',score.risk,5],['Yönetim',score.management,5]
-    ], columns=['Kategori','Puan','Maksimum'])
-    st.dataframe(table, use_container_width=True, hide_index=True)
-    st.subheader('Piyasa Verisi')
+    score_col, grade_col, decision_col, company_col = st.columns(4)
+    score_col.metric("Alpha Score", f"{score.total:.1f}/100")
+    grade_col.metric("Not", score.grade)
+    decision_col.metric("Karar", score.decision)
+    company_col.metric("Hisse", company.symbol)
+
+    with st.container(border=True):
+        st.subheader(company.company_name)
+        st.dataframe(
+            _score_table(score),
+            hide_index=True,
+            width="stretch",
+            column_config={
+                "Puan": st.column_config.ProgressColumn(
+                    "Puan",
+                    min_value=0,
+                    max_value=15,
+                    format="%.2f",
+                ),
+                "Maksimum": st.column_config.NumberColumn(format="%.0f"),
+            },
+        )
+
+    st.subheader("Piyasa görünümü")
     try:
         quote = get_quote(symbol)
         history = get_history(symbol)
-        q1,q2,q3 = st.columns(3)
-        q1.metric('Son Fiyat', f"{quote['last']:,.2f} TRY")
-        q2.metric('Günlük Değişim', f"{quote['change'] or 0:,.2f}", f"{quote['change_percent'] or 0:.2f}%")
-        q3.metric('Kaynak', 'Yahoo Finance')
-        st.caption('Veri gecikmeli olabilir.')
-        st.line_chart(history[['Close','SMA_20','SMA_50']])
+
+        price_col, change_col, source_col = st.columns(3)
+        price_col.metric("Son fiyat", f"{quote['last']:,.2f} TRY")
+        change_col.metric(
+            "Günlük değişim",
+            f"{quote['change'] or 0:,.2f}",
+            f"{quote['change_percent'] or 0:.2f}%",
+        )
+        source_col.metric("Veri kaynağı", "Yahoo Finance")
+        st.caption("Piyasa verisi gecikmeli olabilir.")
+
+        st.line_chart(history[["Close", "SMA_20", "SMA_50"]])
         latest = history.iloc[-1]
-        st.write({'RSI 14': round(float(latest['RSI_14']),2), 'MACD': round(float(latest['MACD']),4), 'MACD Sinyal': round(float(latest['MACD_SIGNAL']),4)})
+        indicator_col, macd_col, signal_col = st.columns(3)
+        indicator_col.metric("RSI 14", f"{float(latest['RSI_14']):.2f}")
+        macd_col.metric("MACD", f"{float(latest['MACD']):.4f}")
+        signal_col.metric(
+            "MACD sinyal",
+            f"{float(latest['MACD_SIGNAL']):.4f}",
+        )
     except Exception as exc:
-        st.warning(f'Piyasa verisi alınamadı: {exc}')
+        st.warning(f"Piyasa verisi alınamadı: {exc}")
 
-def render_company_form():
-    st.title('📝 Şirket Ekle / Güncelle')
-    with st.form('company'):
-        symbol = st.text_input('Hisse Kodu','ASELS').upper().strip()
-        name = st.text_input('Şirket Adı','Aselsan Elektronik Sanayi ve Ticaret A.Ş.')
-        left,right = st.columns(2)
+
+def render_company_form() -> None:
+    st.title("Şirket ekle veya güncelle")
+    st.caption("Finansal verileri yüzde değerleriyle girin ve puanı hesaplayın.")
+
+    with st.form("company_form"):
+        symbol = st.text_input("Hisse kodu", "ASELS")
+        company_name = st.text_input(
+            "Şirket adı",
+            "Aselsan Elektronik Sanayi ve Ticaret A.Ş.",
+        )
+
+        left, right = st.columns(2)
         with left:
-            rg=st.number_input('Ciro Büyümesi (%)',value=10.0); ng=st.number_input('Net Kâr Büyümesi (%)',value=10.0); nm=st.number_input('Net Kâr Marjı (%)',value=10.0); roe=st.number_input('ROE (%)',value=15.0); de=st.number_input('Borç / Özkaynak',value=.5,min_value=0.0); cr=st.number_input('Cari Oran',value=1.5,min_value=0.0)
-        with right:
-            ocf=st.number_input('Operasyonel Nakit Akışı',value=1000000.0); fcf=st.number_input('Serbest Nakit Akışı',value=500000.0); at=st.number_input('Aktif Devir Hızı',value=.7,min_value=0.0); val=st.slider('Değerleme Girdisi',0,100,70); man=st.slider('Yönetim Girdisi',0,100,75); risk=st.slider('Risk Dayanıklılığı',0,100,65)
-        submitted = st.form_submit_button('Kaydet', type='primary')
-    if submitted:
-        metrics = FinancialMetrics(symbol=symbol, company_name=name, revenue_growth=rg, net_profit_growth=ng, net_margin=nm, roe=roe, debt_to_equity=de, current_ratio=cr, operating_cash_flow=ocf, free_cash_flow=fcf, asset_turnover=at, valuation_score_input=val, management_score_input=man, risk_score_input=risk)
-        upsert_company(metrics)
-        st.success(f'{symbol} kaydedildi. Alpha Score: {calculate_alpha_score(metrics).total:.1f}')
+            revenue_growth = st.number_input("Ciro büyümesi (%)", value=10.0)
+            net_profit_growth = st.number_input(
+                "Net kâr büyümesi (%)",
+                value=10.0,
+            )
+            net_margin = st.number_input("Net kâr marjı (%)", value=10.0)
+            roe = st.number_input("ROE (%)", value=15.0)
+            debt_to_equity = st.number_input(
+                "Borç / özkaynak",
+                value=0.5,
+                min_value=0.0,
+            )
+            current_ratio = st.number_input(
+                "Cari oran",
+                value=1.5,
+                min_value=0.0,
+            )
 
-def render_company_list():
-    st.title('📚 Kayıtlı Şirketler')
-    rows=[]
+        with right:
+            operating_cash_flow = st.number_input(
+                "Operasyonel nakit akışı",
+                value=1_000_000.0,
+            )
+            free_cash_flow = st.number_input(
+                "Serbest nakit akışı",
+                value=500_000.0,
+            )
+            asset_turnover = st.number_input(
+                "Aktif devir hızı",
+                value=0.7,
+                min_value=0.0,
+            )
+            valuation = st.slider("Değerleme girdisi", 0, 100, 70)
+            management = st.slider("Yönetim girdisi", 0, 100, 75)
+            risk = st.slider("Risk dayanıklılığı", 0, 100, 65)
+
+        submitted = st.form_submit_button(
+            "Hesapla ve kaydet",
+            type="primary",
+            icon=":material/save:",
+        )
+
+    if not submitted:
+        return
+
+    try:
+        metrics = FinancialMetrics(
+            symbol=symbol.upper().strip(),
+            company_name=company_name.strip(),
+            revenue_growth=revenue_growth,
+            net_profit_growth=net_profit_growth,
+            net_margin=net_margin,
+            roe=roe,
+            debt_to_equity=debt_to_equity,
+            current_ratio=current_ratio,
+            operating_cash_flow=operating_cash_flow,
+            free_cash_flow=free_cash_flow,
+            asset_turnover=asset_turnover,
+            valuation_score_input=valuation,
+            management_score_input=management,
+            risk_score_input=risk,
+        )
+    except ValidationError as exc:
+        st.error(f"Girilen bilgiler geçerli değil: {exc}")
+        return
+
+    upsert_company(metrics)
+    score = calculate_alpha_score(metrics)
+    st.success(
+        f"{metrics.symbol} kaydedildi. Alpha Score: {score.total:.1f}/100"
+    )
+
+
+def render_company_list() -> None:
+    st.title("Kayıtlı şirketler")
+
+    rows = []
     for company in list_companies():
-        score=calculate_alpha_score(company)
-        rows.append({'Hisse':company.symbol,'Şirket':company.company_name,'Alpha Score':score.total,'Not':score.grade,'Karar':score.decision})
-    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+        score = calculate_alpha_score(company)
+        rows.append(
+            {
+                "Hisse": company.symbol,
+                "Şirket": company.company_name,
+                "Alpha Score": score.total,
+                "Not": score.grade,
+                "Karar": score.decision,
+            }
+        )
+
+    if not rows:
+        st.info("Henüz kayıtlı şirket bulunmuyor.")
+        return
+
+    st.dataframe(
+        pd.DataFrame(rows),
+        hide_index=True,
+        width="stretch",
+        column_config={
+            "Alpha Score": st.column_config.ProgressColumn(
+                "Alpha Score",
+                min_value=0,
+                max_value=100,
+                format="%.2f",
+            )
+        },
+    )
