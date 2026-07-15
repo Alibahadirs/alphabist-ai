@@ -8,8 +8,10 @@ from app.comparison.service import build_comparison
 from app.core.constants import CATEGORY_MAX_POINTS
 from app.core.exceptions import PdfParsingError, ValidationError as AppValidationError
 from app.database.repository import (
+    add_score_history,
     get_company,
     list_companies,
+    list_score_history,
     list_watchlist_entries,
     remove_watchlist_entry,
     upsert_company,
@@ -140,11 +142,23 @@ def render_dashboard() -> None:
         return
 
     score = calculate_alpha_score(company)
-    score_col, grade_col, decision_col, company_col = st.columns(4)
-    score_col.metric("Alpha Score", f"{score.total:.1f}/100")
-    grade_col.metric("Not", score.grade)
-    decision_col.metric("Karar", score.decision)
-    company_col.metric("Hisse", company.symbol)
+    score_history = list_score_history(symbol)
+    score_delta = None
+    if len(score_history) >= 2:
+        score_delta = score_history[-1].total_score - score_history[-2].total_score
+
+    with st.container(horizontal=True):
+        st.metric(
+            "Alpha Score",
+            f"{score.total:.1f}/100",
+            f"{score_delta:+.1f}" if score_delta is not None else None,
+            border=True,
+            chart_data=[entry.total_score for entry in score_history] or None,
+            chart_type="line",
+        )
+        st.metric("Not", score.grade, border=True)
+        st.metric("Karar", score.decision, border=True)
+        st.metric("Hisse", company.symbol, border=True)
 
     with st.container(border=True):
         st.subheader(company.company_name)
@@ -162,6 +176,26 @@ def render_dashboard() -> None:
                 "Maksimum": st.column_config.NumberColumn(format="%.0f"),
             },
         )
+
+    if score_history:
+        with st.container(border=True):
+            st.subheader("Alpha Score geçmişi")
+            history_frame = pd.DataFrame(
+                [
+                    {
+                        "Tarih": entry.created_at,
+                        "Alpha Score": entry.total_score,
+                    }
+                    for entry in score_history
+                ]
+            )
+            st.line_chart(
+                history_frame,
+                x="Tarih",
+                y="Alpha Score",
+                y_label="Puan",
+            )
+            st.caption(f"Son {len(score_history)} kayıt gösteriliyor.")
 
     st.subheader("Piyasa görünümü")
     try:
@@ -635,6 +669,7 @@ def _validate_and_save_company(
 
     upsert_company(metrics)
     score = calculate_alpha_score(metrics)
+    add_score_history(metrics.symbol, score)
     st.success(
         f"{metrics.symbol} kaydedildi. Alpha Score: {score.total:.1f}/100"
     )
@@ -815,6 +850,7 @@ def render_pdf_analysis() -> None:
 
     upsert_company(metrics)
     score = calculate_alpha_score(metrics)
+    add_score_history(metrics.symbol, score)
     st.success(
         f"{metrics.symbol} kaydedildi. Alpha Score: {score.total:.1f}/100"
     )

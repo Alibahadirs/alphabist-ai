@@ -1,7 +1,8 @@
 import sqlite3
 from pathlib import Path
 
-from app.scoring.models import FinancialMetrics
+from app.history.models import ScoreHistoryEntry
+from app.scoring.models import FinancialMetrics, ScoreBreakdown
 from app.watchlist.models import WatchlistEntry
 
 DB_PATH = Path(__file__).resolve().parents[2] / 'data' / 'alphabist.db'
@@ -29,6 +30,20 @@ def init_db():
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY(symbol) REFERENCES companies(symbol))"""
         )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS score_history(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            symbol TEXT NOT NULL,
+            total_score REAL NOT NULL,
+            grade TEXT NOT NULL,
+            decision TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(symbol) REFERENCES companies(symbol))"""
+        )
+        conn.execute(
+            """CREATE INDEX IF NOT EXISTS idx_score_history_symbol_id
+            ON score_history(symbol, id)"""
+        )
 
 def upsert_company(m):
     d = m.model_dump()
@@ -48,6 +63,37 @@ def get_company(symbol):
     with connect() as conn:
         row = conn.execute('SELECT * FROM companies WHERE symbol=?', (symbol.upper(),)).fetchone()
     return FinancialMetrics(**dict(row)) if row else None
+
+
+def add_score_history(symbol: str, score: ScoreBreakdown) -> None:
+    with connect() as conn:
+        conn.execute(
+            """INSERT INTO score_history(symbol, total_score, grade, decision)
+            VALUES(?, ?, ?, ?)""",
+            (
+                symbol.upper().strip(),
+                score.total,
+                score.grade,
+                score.decision,
+            ),
+        )
+
+
+def list_score_history(
+    symbol: str,
+    limit: int = 20,
+) -> list[ScoreHistoryEntry]:
+    safe_limit = max(1, min(limit, 100))
+    with connect() as conn:
+        rows = conn.execute(
+            """SELECT id, symbol, total_score, grade, decision, created_at
+            FROM score_history
+            WHERE symbol=?
+            ORDER BY id DESC
+            LIMIT ?""",
+            (symbol.upper().strip(), safe_limit),
+        ).fetchall()
+    return [ScoreHistoryEntry(**dict(row)) for row in reversed(rows)]
 
 
 def upsert_watchlist_entry(entry: WatchlistEntry) -> None:
