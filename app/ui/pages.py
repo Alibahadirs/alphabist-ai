@@ -36,6 +36,8 @@ from app.portfolio.models import PortfolioPosition
 from app.portfolio.service import build_portfolio_summary
 from app.scoring.engine import calculate_alpha_score
 from app.scoring.models import FinancialMetrics, ScoreBreakdown
+from app.scanner.models import ScannerFilters
+from app.scanner.service import scan_companies
 from app.technical.engine import calculate_combined_score, calculate_technical_score
 from app.technical.models import TechnicalScoreBreakdown
 from app.watchlist.models import WatchlistEntry
@@ -271,6 +273,122 @@ def render_dashboard() -> None:
             )
     except Exception as exc:
         st.warning(f"Piyasa verisi alınamadı: {exc}")
+
+
+def render_scanner() -> None:
+    st.title("Hisse tarayıcı")
+
+    companies = list_companies()
+    if not companies:
+        st.info("Tarama için önce şirket verisi kaydedin.")
+        return
+
+    with st.form("scanner_filters", border=True):
+        st.subheader("Filtreler")
+        left, right = st.columns(2)
+        with left:
+            minimum_alpha = st.slider("Minimum Alpha Score", 0, 100, 70)
+            minimum_revenue_growth = st.number_input(
+                "Minimum ciro büyümesi (%)",
+                value=0.0,
+                step=1.0,
+                format="%.2f",
+            )
+            minimum_net_margin = st.number_input(
+                "Minimum net kâr marjı (%)",
+                value=0.0,
+                step=1.0,
+                format="%.2f",
+            )
+        with right:
+            maximum_debt_to_equity = st.number_input(
+                "Maksimum borç / özkaynak",
+                min_value=0.0,
+                value=3.0,
+                step=0.1,
+                format="%.2f",
+            )
+            positive_cash_flow = st.toggle(
+                "Yalnızca pozitif operasyonel nakit akışı",
+                value=True,
+            )
+        st.form_submit_button(
+            "Filtrele",
+            type="primary",
+            icon=":material/filter_alt:",
+        )
+
+    summary = scan_companies(
+        companies,
+        ScannerFilters(
+            minimum_alpha_score=minimum_alpha,
+            minimum_revenue_growth=minimum_revenue_growth,
+            minimum_net_margin=minimum_net_margin,
+            maximum_debt_to_equity=maximum_debt_to_equity,
+            positive_operating_cash_flow_only=positive_cash_flow,
+        ),
+    )
+
+    with st.container(horizontal=True):
+        st.metric("Taranan", summary.total_scanned, border=True)
+        st.metric("Eşleşen", summary.matched_count, border=True)
+        st.metric(
+            "Ortalama Alpha",
+            f"{summary.average_alpha_score:.1f}/100",
+            border=True,
+        )
+        st.metric(
+            "Lider",
+            summary.rows[0].symbol if summary.rows else "-",
+            border=True,
+        )
+
+    if not summary.rows:
+        st.info("Seçilen ölçütlere uyan şirket bulunamadı.")
+        return
+
+    rows = [
+        {
+            "Sıra": index,
+            "Hisse": row.symbol,
+            "Şirket": row.company_name,
+            "Alpha": row.alpha_score,
+            "Not": row.grade,
+            "Karar": row.decision,
+            "Ciro büyümesi (%)": row.revenue_growth,
+            "Net marj (%)": row.net_margin,
+            "ROE (%)": row.roe,
+            "Borç / özkaynak": row.debt_to_equity,
+            "Cari oran": row.current_ratio,
+            "Operasyonel nakit (TL)": row.operating_cash_flow,
+        }
+        for index, row in enumerate(summary.rows, start=1)
+    ]
+    result_frame = pd.DataFrame(rows)
+    with st.container(border=True):
+        st.subheader("Tarama sonuçları")
+        st.dataframe(
+            result_frame,
+            hide_index=True,
+            width="stretch",
+            column_config={
+                "Alpha": st.column_config.ProgressColumn(
+                    "Alpha", min_value=0, max_value=100, format="%.1f"
+                ),
+                "Ciro büyümesi (%)": st.column_config.NumberColumn(format="%.2f"),
+                "Net marj (%)": st.column_config.NumberColumn(format="%.2f"),
+                "ROE (%)": st.column_config.NumberColumn(format="%.2f"),
+                "Borç / özkaynak": st.column_config.NumberColumn(format="%.4f"),
+                "Cari oran": st.column_config.NumberColumn(format="%.2f"),
+                "Operasyonel nakit (TL)": st.column_config.NumberColumn(
+                    format="localized"
+                ),
+            },
+        )
+
+    with st.container(border=True):
+        st.subheader("Alpha sıralaması")
+        st.bar_chart(result_frame.set_index("Hisse")[["Alpha"]])
 
 
 def render_company_form() -> None:

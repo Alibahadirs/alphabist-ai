@@ -12,6 +12,7 @@ yerel Streamlit uygulaması.
 - Gecikmeli piyasa verileri ve teknik analiz göstergeleri
 - Temel ve teknik puanı birleştiren AI puanı
 - Şirket karşılaştırma ve takip listesi
+- Finansal ölçütlerle çalışan şirket tarayıcı ve otomatik sıralama
 - Lot, maliyet, güncel değer ve kâr/zarar hesaplayan portföy ekranı
 - Alpha Score geçmişi ve önceki analize göre puan değişimi
 - SQLite ile yerel veri saklama
