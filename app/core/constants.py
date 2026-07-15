@@ -1,46 +1,7 @@
-from enum import Enum
-
-
-class DecisionLabel(str, Enum):
-    STRONG_BUY = "Güçlü Al"
-    BUY = "Al"
-    WATCH = "İzle"
-    HOLD = "Bekle"
-    AVOID = "Kaçın"
-
-
-class RiskLevel(str, Enum):
-    LOW = "Düşük"
-    MEDIUM = "Orta"
-    HIGH = "Yüksek"
-
-
-ALPHA_SCORE_MIN = 0
-ALPHA_SCORE_MAX = 100
-
-GRADE_THRESHOLDS = {
-    "A+": 95,
-    "A": 90,
-    "A-": 85,
-    "B+": 80,
-    "B": 70,
-    "C+": 60,
-    "C": 50,
-    "D": 0,
-}
-
-DECISION_THRESHOLDS = {
-    DecisionLabel.STRONG_BUY: 90,
-    DecisionLabel.BUY: 80,
-    DecisionLabel.WATCH: 70,
-    DecisionLabel.HOLD: 60,
-    DecisionLabel.AVOID: 0,
-}
-
-DEFAULT_SCORE_WEIGHTS = {
+CATEGORY_MAX_POINTS = {
     "profitability": 15,
     "growth": 15,
-    "debt": 15,
+    "leverage": 15,
     "liquidity": 10,
     "cash_flow": 15,
     "efficiency": 10,
@@ -48,3 +9,14 @@ DEFAULT_SCORE_WEIGHTS = {
     "risk": 5,
     "management": 5,
 }
+
+GRADE_RULES = (
+    (90, "A+", "Güçlü Al"),
+    (80, "A", "Al"),
+    (70, "B+", "İzle / Kademeli Al"),
+    (60, "B", "İzle"),
+    (50, "C", "Temkinli"),
+    (0, "D", "Kaçın"),
+)
+
+TOTAL_SCORE = sum(CATEGORY_MAX_POINTS.values())
