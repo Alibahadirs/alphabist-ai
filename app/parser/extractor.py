@@ -11,6 +11,7 @@ from app.parser.models import (
     FinancialReportDraft,
     PdfExtractionResult,
 )
+from app.sector.profiles import CompanyProfile, detect_company_profile
 
 
 NUMBER_PATTERN = re.compile(
@@ -87,6 +88,19 @@ SYMBOL_ALIASES = {
 COMPANY_SYMBOL_HINTS = {
     "kervansaray yatirim holding": "KERVN",
     "kervansaray yatırım holding": "KERVN",
+}
+
+SECTOR_METRIC_LABELS = {
+    "capital_adequacy_ratio": ("sermaye yeterliliği oranı", "sermaye yeterlilik oranı"),
+    "npl_ratio": ("takipteki krediler oranı", "takipteki alacaklar oranı", "takipteki kredi oranı"),
+    "loan_to_deposit_ratio": ("kredi/mevduat oranı", "kredi mevduat oranı"),
+    "net_interest_margin": ("net faiz marjı",),
+    "cost_income_ratio": ("maliyet/gelir oranı", "gider/gelir oranı"),
+    "premium_growth": ("prim üretimi büyümesi", "prim büyümesi"),
+    "combined_ratio": ("bileşik oran", "kombine oran"),
+    "solvency_ratio": ("sermaye yeterlilik rasyosu", "ödeme gücü oranı"),
+    "nav_discount": ("net aktif değer iskontosu", "nad iskontosu"),
+    "occupancy_rate": ("doluluk oranı",),
 }
 
 
@@ -224,7 +238,29 @@ def extract_company_metadata(text: str, file_name: str = "") -> CompanyMetadata:
         symbol=symbol,
         company_name=company_name,
         period_months=period_months,
+        company_profile=detect_company_profile(company_name, text[:20000]),
     )
+
+
+def extract_sector_metrics(text: str) -> dict[str, float]:
+    metrics: dict[str, float] = {}
+    for raw_line in text.splitlines():
+        line = " ".join(raw_line.split())
+        folded = _fold(line)
+        for field, labels in SECTOR_METRIC_LABELS.items():
+            if field in metrics:
+                continue
+            for label in labels:
+                if _fold(label) not in folded:
+                    continue
+                values = _line_values(line, label)
+                if values:
+                    value = values[0]
+                    if 0 <= abs(value) <= 1 and ("%" in line or "oran" in folded):
+                        value *= 100
+                    metrics[field] = value
+                    break
+    return metrics
 
 
 def extract_financial_values(
@@ -268,7 +304,10 @@ def extract_financial_report(
     metadata_updates = {
         "symbol": metadata.symbol,
         "company_name": metadata.company_name,
+        "company_profile": metadata.company_profile,
     }
+    sector_metrics = extract_sector_metrics(text)
+    metadata_updates.update(sector_metrics)
     if metadata.period_months is not None:
         metadata_updates["period_months"] = metadata.period_months
     draft = draft.model_copy(update=metadata_updates)
@@ -306,6 +345,7 @@ def extract_activity_report(
 ) -> ActivityReportExtractionResult:
     text, page_count = _read_pdf(file_bytes)
     metadata = extract_company_metadata(text, file_name)
+    sector_metrics = extract_sector_metrics(text)
     warnings = []
     if not metadata.symbol:
         warnings.append("Faaliyet raporunda hisse kodu bulunamadı.")
@@ -315,4 +355,5 @@ def extract_activity_report(
         metadata=metadata,
         page_count=page_count,
         warnings=warnings,
+        sector_metrics=sector_metrics,
     )

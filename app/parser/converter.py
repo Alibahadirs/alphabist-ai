@@ -27,6 +27,7 @@ def to_financial_metrics(draft: FinancialReportDraft) -> FinancialMetrics:
     return FinancialMetrics(
         symbol=symbol,
         company_name=company_name,
+        company_profile=draft.company_profile,
         revenue_growth=_growth_rate(draft.revenue, draft.previous_revenue),
         net_profit_growth=_growth_rate(
             draft.net_profit,
@@ -50,4 +51,14 @@ def to_financial_metrics(draft: FinancialReportDraft) -> FinancialMetrics:
         valuation_score_input=draft.valuation_score_input,
         management_score_input=draft.management_score_input,
         risk_score_input=draft.risk_score_input,
+        capital_adequacy_ratio=draft.capital_adequacy_ratio,
+        npl_ratio=draft.npl_ratio,
+        loan_to_deposit_ratio=draft.loan_to_deposit_ratio,
+        net_interest_margin=draft.net_interest_margin,
+        cost_income_ratio=draft.cost_income_ratio,
+        premium_growth=draft.premium_growth,
+        combined_ratio=draft.combined_ratio,
+        solvency_ratio=draft.solvency_ratio,
+        nav_discount=draft.nav_discount,
+        occupancy_rate=draft.occupancy_rate,
     )

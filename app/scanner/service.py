@@ -3,6 +3,7 @@ from collections.abc import Sequence
 from app.scanner.models import ScannerFilters, ScannerRow, ScannerSummary
 from app.scoring.engine import calculate_alpha_score
 from app.scoring.models import FinancialMetrics
+from app.sector.profiles import CompanyProfile
 
 
 def scan_companies(
@@ -14,17 +15,16 @@ def scan_companies(
         score = calculate_alpha_score(company)
         if score.total < filters.minimum_alpha_score:
             continue
-        if company.revenue_growth < filters.minimum_revenue_growth:
-            continue
-        if company.net_margin < filters.minimum_net_margin:
-            continue
-        if company.debt_to_equity > filters.maximum_debt_to_equity:
-            continue
-        if (
-            filters.positive_operating_cash_flow_only
-            and company.operating_cash_flow <= 0
-        ):
-            continue
+        profile = CompanyProfile(company.company_profile)
+        if profile in (CompanyProfile.STANDARD, CompanyProfile.REIT):
+            if (company.revenue_growth or 0) < filters.minimum_revenue_growth:
+                continue
+            if (company.net_margin or 0) < filters.minimum_net_margin:
+                continue
+            if (company.debt_to_equity or 0) > filters.maximum_debt_to_equity:
+                continue
+            if filters.positive_operating_cash_flow_only and (company.operating_cash_flow or 0) <= 0:
+                continue
 
         rows.append(
             ScannerRow(
@@ -33,12 +33,14 @@ def scan_companies(
                 alpha_score=score.total,
                 grade=score.grade,
                 decision=score.decision,
-                revenue_growth=company.revenue_growth,
-                net_margin=company.net_margin,
-                roe=company.roe,
-                debt_to_equity=company.debt_to_equity,
-                current_ratio=company.current_ratio,
-                operating_cash_flow=company.operating_cash_flow,
+                revenue_growth=company.revenue_growth or 0,
+                net_margin=company.net_margin or 0,
+                roe=company.roe or 0,
+                debt_to_equity=company.debt_to_equity or 0,
+                current_ratio=company.current_ratio or 0,
+                operating_cash_flow=company.operating_cash_flow or 0,
+                company_profile=profile.value,
+                data_completeness=score.data_completeness,
             )
         )
 

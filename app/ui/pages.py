@@ -36,12 +36,14 @@ from app.portfolio.models import PortfolioPosition
 from app.portfolio.service import build_portfolio_summary
 from app.scoring.engine import calculate_alpha_score
 from app.scoring.models import FinancialMetrics, ScoreBreakdown
+from app.sector.profiles import CompanyProfile, PROFILE_LABELS
 from app.scanner.models import ScannerFilters
 from app.scanner.service import scan_companies
 from app.technical.engine import calculate_combined_score, calculate_technical_score
 from app.technical.models import TechnicalScoreBreakdown
 from app.watchlist.models import WatchlistEntry
 from app.watchlist.service import build_watchlist_summary
+from app.validation.service import validate_financial_metrics
 
 
 CATEGORY_LABELS = {
@@ -135,6 +137,65 @@ def _parse_amount_input(label: str, raw_value: str) -> float:
         raise AppValidationError(f"{label} geçerli bir TL tutarı değil.") from exc
 
 
+def _profile_select(label: str, value: CompanyProfile, key: str) -> CompanyProfile:
+    profiles = list(CompanyProfile)
+    return st.selectbox(
+        label,
+        profiles,
+        index=profiles.index(CompanyProfile(value)),
+        format_func=lambda item: PROFILE_LABELS[item],
+        key=key,
+        help="PDF'den otomatik algılanır; rapor yapısı farklıysa değiştirebilirsiniz.",
+    )
+
+
+def _sector_inputs(profile: CompanyProfile, key_prefix: str, defaults: FinancialMetrics | None = None) -> dict[str, float | None]:
+    def default(name: str, fallback: float) -> float | None:
+        value = getattr(defaults, name, None) if defaults else None
+        if defaults is not None and value is None:
+            return None
+        return float(fallback if value is None else value)
+
+    if profile == CompanyProfile.BANK:
+        st.subheader("Bankaya özgü göstergeler")
+        left, right = st.columns(2)
+        with left:
+            capital = st.number_input("Sermaye yeterliliği (%)", value=default("capital_adequacy_ratio", 15), step=0.1, key=f"{key_prefix}_car")
+            npl = st.number_input("Takipteki kredi oranı (%)", value=default("npl_ratio", 3), min_value=0.0, step=0.1, key=f"{key_prefix}_npl")
+            loan_deposit = st.number_input("Kredi / mevduat (%)", value=default("loan_to_deposit_ratio", 100), min_value=0.0, step=0.1, key=f"{key_prefix}_ldr")
+        with right:
+            margin = st.number_input("Net faiz marjı (%)", value=default("net_interest_margin", 4), step=0.1, key=f"{key_prefix}_nim")
+            cost_income = st.number_input("Maliyet / gelir (%)", value=default("cost_income_ratio", 50), min_value=0.0, step=0.1, key=f"{key_prefix}_cir")
+        return {"capital_adequacy_ratio": capital, "npl_ratio": npl, "loan_to_deposit_ratio": loan_deposit, "net_interest_margin": margin, "cost_income_ratio": cost_income}
+    if profile == CompanyProfile.INSURANCE:
+        st.subheader("Sigortaya özgü göstergeler")
+        left, right = st.columns(2)
+        with left:
+            premium = st.number_input("Prim büyümesi (%)", value=default("premium_growth", 10), step=0.1, key=f"{key_prefix}_premium")
+            combined = st.number_input("Bileşik oran (%)", value=default("combined_ratio", 100), min_value=0.0, step=0.1, key=f"{key_prefix}_combined")
+        with right:
+            solvency = st.number_input("Sermaye yeterliliği / ödeme gücü (%)", value=default("solvency_ratio", 130), min_value=0.0, step=0.1, key=f"{key_prefix}_solvency")
+        return {"premium_growth": premium, "combined_ratio": combined, "solvency_ratio": solvency}
+    if profile == CompanyProfile.REIT:
+        st.subheader("GYO'ya özgü göstergeler")
+        left, right = st.columns(2)
+        with left:
+            nav = st.number_input("Net aktif değer iskontosu (%)", value=default("nav_discount", 0), step=0.1, key=f"{key_prefix}_nav")
+        with right:
+            occupancy = st.number_input("Doluluk oranı (%)", value=default("occupancy_rate", 0), min_value=0.0, max_value=100.0, step=0.1, key=f"{key_prefix}_occupancy")
+        return {"nav_discount": nav, "occupancy_rate": occupancy}
+    if profile == CompanyProfile.FINANCIAL_SERVICES:
+        st.subheader("Finansal hizmet göstergeleri")
+        left, right = st.columns(2)
+        with left:
+            capital = st.number_input("Sermaye yeterliliği (%)", value=default("capital_adequacy_ratio", 15), step=0.1, key=f"{key_prefix}_car")
+            npl = st.number_input("Takipteki alacak oranı (%)", value=default("npl_ratio", 3), min_value=0.0, step=0.1, key=f"{key_prefix}_npl")
+        with right:
+            cost_income = st.number_input("Maliyet / gelir (%)", value=default("cost_income_ratio", 50), min_value=0.0, step=0.1, key=f"{key_prefix}_cir")
+        return {"capital_adequacy_ratio": capital, "npl_ratio": npl, "cost_income_ratio": cost_income}
+    return {}
+
+
 def render_dashboard() -> None:
     st.title("Genel bakış")
     st.caption("Finansal kalite puanı ve gecikmeli piyasa görünümü")
@@ -171,6 +232,13 @@ def render_dashboard() -> None:
         st.metric("Not", score.grade, border=True)
         st.metric("Karar", score.decision, border=True)
         st.metric("Hisse", company.symbol, border=True)
+
+    st.caption(
+        f"Profil: {PROFILE_LABELS[CompanyProfile(company.company_profile)]} | "
+        f"Veri yeterliliği: %{score.data_completeness:.0f}"
+    )
+    for warning in score.validation_warnings:
+        st.warning(warning)
 
     with st.container(border=True):
         st.subheader(company.company_name)
@@ -285,6 +353,10 @@ def render_scanner() -> None:
 
     with st.form("scanner_filters", border=True):
         st.subheader("Filtreler")
+        st.caption(
+            "Ciro, marj, borç ve nakit filtreleri standart şirketler ile GYO'lara "
+            "uygulanır. Banka, sigorta ve finansal hizmetler kendi sektör puanlarıyla taranır."
+        )
         left, right = st.columns(2)
         with left:
             minimum_alpha = st.slider("Minimum Alpha Score", 0, 100, 70)
@@ -447,12 +519,21 @@ def _render_pdf_company_form() -> None:
     draft = financial_result.draft
     if activity_result:
         metadata = activity_result.metadata
-        draft = draft.model_copy(
-            update={
+        activity_updates = dict(activity_result.sector_metrics)
+        activity_updates.update(
+            {
                 "symbol": metadata.symbol or draft.symbol,
                 "company_name": metadata.company_name or draft.company_name,
                 "period_months": metadata.period_months or draft.period_months,
+                "company_profile": (
+                    metadata.company_profile
+                    if metadata.company_profile != CompanyProfile.STANDARD
+                    else draft.company_profile
+                ),
             }
+        )
+        draft = draft.model_copy(
+            update=activity_updates
         )
 
     with st.container(horizontal=True):
@@ -505,11 +586,17 @@ def _render_pdf_company_form() -> None:
         format_func=lambda value: f"{value} aylık",
         key="pdf_period",
     )
+    company_profile = _profile_select(
+        "Şirket türü / sektör profili",
+        draft.company_profile,
+        "pdf_company_profile",
+    )
     calculation_draft = draft.model_copy(
         update={
             "symbol": draft.symbol or "TEMP",
             "company_name": draft.company_name or "Geçici şirket",
             "period_months": period_months,
+            "company_profile": company_profile,
         }
     )
     defaults = to_financial_metrics(calculation_draft)
@@ -539,6 +626,12 @@ def _render_pdf_company_form() -> None:
             "Şirket adı",
             value=draft.company_name,
             key="pdf_field_company_name",
+        )
+
+        sector_metrics = _sector_inputs(
+            company_profile,
+            "pdf_sector",
+            defaults,
         )
 
         left, right = st.columns(2)
@@ -650,10 +743,17 @@ def _render_pdf_company_form() -> None:
         valuation=valuation,
         management=management,
         risk=risk,
+        company_profile=company_profile,
+        sector_metrics=sector_metrics,
     )
 
 
 def _render_manual_company_form() -> None:
+    company_profile = _profile_select(
+        "Şirket türü / sektör profili",
+        CompanyProfile.STANDARD,
+        "manual_company_profile",
+    )
     st.caption("Finansal oranları elle girin ve Alpha puanını hesaplayın.")
 
     with st.form("company_form"):
@@ -717,6 +817,8 @@ def _render_manual_company_form() -> None:
             management = st.slider("Yönetim girdisi", 0, 100, 75)
             risk = st.slider("Risk dayanıklılığı", 0, 100, 65)
 
+        sector_metrics = _sector_inputs(company_profile, "manual_sector")
+
         submitted = st.form_submit_button(
             "Hesapla ve kaydet",
             type="primary",
@@ -754,6 +856,8 @@ def _render_manual_company_form() -> None:
         valuation=valuation,
         management=management,
         risk=risk,
+        company_profile=company_profile,
+        sector_metrics=sector_metrics,
     )
 
 
@@ -773,11 +877,15 @@ def _validate_and_save_company(
     valuation: float,
     management: float,
     risk: float,
+    company_profile: CompanyProfile = CompanyProfile.STANDARD,
+    sector_metrics: dict[str, float | None] | None = None,
 ) -> None:
+    sector_metrics = sector_metrics or {}
     try:
         metrics = FinancialMetrics(
             symbol=symbol.upper().strip(),
             company_name=company_name.strip(),
+            company_profile=company_profile,
             revenue_growth=revenue_growth,
             net_profit_growth=net_profit_growth,
             net_margin=net_margin,
@@ -790,16 +898,29 @@ def _validate_and_save_company(
             valuation_score_input=valuation,
             management_score_input=management,
             risk_score_input=risk,
+            **sector_metrics,
         )
     except ValidationError as exc:
         st.error(f"Girilen bilgiler geçerli değil: {exc}")
         return
+
+    validation = validate_financial_metrics(metrics)
+    if validation.errors:
+        for error in validation.errors:
+            st.error(error)
+        return
+    for warning in validation.warnings:
+        st.warning(warning)
 
     upsert_company(metrics)
     score = calculate_alpha_score(metrics)
     add_score_history(metrics.symbol, score)
     st.success(
         f"{metrics.symbol} kaydedildi. Alpha Score: {score.total:.1f}/100"
+    )
+    st.caption(
+        f"Profil: {PROFILE_LABELS[CompanyProfile(metrics.company_profile)]} | "
+        f"Veri yeterliliği: %{score.data_completeness:.0f}"
     )
 
 
@@ -989,6 +1110,15 @@ def render_pdf_analysis() -> None:
         st.dataframe(_score_table(score), hide_index=True, width="stretch")
 
 
+def render_pdf_analysis() -> None:
+    st.title("PDF analizi")
+    st.caption(
+        "Finansal ve faaliyet raporlarını birlikte okuyun; sektör profilini ve "
+        "çıkarılan göstergeleri doğruladıktan sonra kaydedin."
+    )
+    _render_pdf_company_form()
+
+
 def render_company_list() -> None:
     st.title("Kayıtlı şirketler")
 
@@ -998,8 +1128,10 @@ def render_company_list() -> None:
         rows.append(
             {
                 "Hisse": company.symbol,
+                "Profil": PROFILE_LABELS[CompanyProfile(company.company_profile)],
                 "Şirket": company.company_name,
                 "Alpha Score": score.total,
+                "Veri yeterliliği (%)": score.data_completeness,
                 "Not": score.grade,
                 "Karar": score.decision,
             }

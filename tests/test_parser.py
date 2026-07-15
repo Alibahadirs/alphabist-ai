@@ -7,6 +7,7 @@ from app.parser.extractor import (
     extract_financial_values,
     parse_turkish_number,
 )
+from app.sector.profiles import CompanyProfile
 from app.parser.models import FinancialReportDraft
 
 
@@ -21,6 +22,14 @@ from app.parser.models import FinancialReportDraft
 )
 def test_parse_turkish_number(raw_value, expected):
     assert parse_turkish_number(raw_value) == expected
+
+
+def test_bank_profile_is_detected_from_report_title():
+    metadata = extract_company_metadata(
+        "ÖRNEK BANKASI ANONİM ŞİRKETİ 31.03.2026 FAALİYET RAPORU"
+    )
+
+    assert metadata.company_profile == CompanyProfile.BANK
 
 
 def test_extract_financial_values_from_statement_text():

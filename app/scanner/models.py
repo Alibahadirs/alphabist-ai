@@ -21,6 +21,8 @@ class ScannerRow(BaseModel):
     debt_to_equity: float
     current_ratio: float
     operating_cash_flow: float
+    company_profile: str = "standard"
+    data_completeness: float = Field(default=100, ge=0, le=100)
 
 
 class ScannerSummary(BaseModel):

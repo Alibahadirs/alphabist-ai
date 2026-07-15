@@ -5,6 +5,7 @@ from app.history.models import ScoreHistoryEntry
 from app.portfolio.models import PortfolioPosition
 from app.scoring.models import FinancialMetrics, ScoreBreakdown
 from app.watchlist.models import WatchlistEntry
+from app.sector.profiles import CompanyProfile, detect_company_profile
 
 DB_PATH = Path(__file__).resolve().parents[2] / 'data' / 'alphabist.db'
 
@@ -23,6 +24,39 @@ def init_db():
     management_score_input REAL, risk_score_input REAL)"""
     with connect() as conn:
         conn.execute(sql)
+        existing_columns = {
+            row[1] for row in conn.execute("PRAGMA table_info(companies)").fetchall()
+        }
+        sector_columns = {
+            "company_profile": "TEXT NOT NULL DEFAULT 'standard'",
+            "capital_adequacy_ratio": "REAL",
+            "npl_ratio": "REAL",
+            "loan_to_deposit_ratio": "REAL",
+            "net_interest_margin": "REAL",
+            "cost_income_ratio": "REAL",
+            "premium_growth": "REAL",
+            "combined_ratio": "REAL",
+            "solvency_ratio": "REAL",
+            "nav_discount": "REAL",
+            "occupancy_rate": "REAL",
+        }
+        for column, definition in sector_columns.items():
+            if column not in existing_columns:
+                conn.execute(
+                    f"ALTER TABLE companies ADD COLUMN {column} {definition}"
+                )
+        for row in conn.execute(
+            "SELECT symbol, company_name, company_profile FROM companies"
+        ).fetchall():
+            detected = detect_company_profile(row["company_name"])
+            if (
+                row["company_profile"] == CompanyProfile.STANDARD.value
+                and detected != CompanyProfile.STANDARD
+            ):
+                conn.execute(
+                    "UPDATE companies SET company_profile=? WHERE symbol=?",
+                    (detected.value, row["symbol"]),
+                )
         conn.execute(
             """CREATE TABLE IF NOT EXISTS watchlist(
             symbol TEXT PRIMARY KEY,
@@ -55,7 +89,7 @@ def init_db():
         )
 
 def upsert_company(m):
-    d = m.model_dump()
+    d = m.model_dump(mode="json")
     columns = ','.join(d)
     placeholders = ','.join('?' for _ in d)
     updates = ','.join(f'{k}=excluded.{k}' for k in d if k != 'symbol')

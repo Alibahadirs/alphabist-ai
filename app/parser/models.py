@@ -1,10 +1,13 @@
 from pydantic import BaseModel, Field
 
+from app.sector.profiles import CompanyProfile
+
 
 class FinancialReportDraft(BaseModel):
     symbol: str = ""
     company_name: str = ""
     period_months: int = Field(default=3, ge=1, le=12)
+    company_profile: CompanyProfile = CompanyProfile.STANDARD
 
     revenue: float = 0
     previous_revenue: float = 0
@@ -18,6 +21,17 @@ class FinancialReportDraft(BaseModel):
     operating_cash_flow: float = 0
     capital_expenditures: float = 0
     total_assets: float = 0
+
+    capital_adequacy_ratio: float | None = None
+    npl_ratio: float | None = None
+    loan_to_deposit_ratio: float | None = None
+    net_interest_margin: float | None = None
+    cost_income_ratio: float | None = None
+    premium_growth: float | None = None
+    combined_ratio: float | None = None
+    solvency_ratio: float | None = None
+    nav_discount: float | None = None
+    occupancy_rate: float | None = None
 
     valuation_score_input: float = Field(default=50, ge=0, le=100)
     management_score_input: float = Field(default=70, ge=0, le=100)
@@ -35,9 +49,11 @@ class CompanyMetadata(BaseModel):
     symbol: str = ""
     company_name: str = ""
     period_months: int | None = Field(default=None, ge=1, le=12)
+    company_profile: CompanyProfile = CompanyProfile.STANDARD
 
 
 class ActivityReportExtractionResult(BaseModel):
     metadata: CompanyMetadata
     page_count: int
     warnings: list[str] = Field(default_factory=list)
+    sector_metrics: dict[str, float] = Field(default_factory=dict)
