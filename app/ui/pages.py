@@ -11,6 +11,8 @@ from app.parser.extractor import extract_financial_report
 from app.parser.models import FinancialReportDraft, PdfExtractionResult
 from app.scoring.engine import calculate_alpha_score
 from app.scoring.models import FinancialMetrics, ScoreBreakdown
+from app.technical.engine import calculate_combined_score, calculate_technical_score
+from app.technical.models import TechnicalScoreBreakdown
 
 
 CATEGORY_LABELS = {
@@ -25,10 +27,24 @@ CATEGORY_LABELS = {
     "management": "Yönetim",
 }
 
+TECHNICAL_LABELS = {
+    "trend": ("Trend", 20),
+    "moving_averages": ("Hareketli ortalamalar", 20),
+    "rsi": ("RSI", 15),
+    "macd": ("MACD", 15),
+    "volume": ("Hacim", 15),
+    "support_resistance": ("Destek / direnç", 15),
+}
+
 
 @st.cache_data(show_spinner=False, max_entries=10)
 def _parse_pdf(file_bytes: bytes) -> PdfExtractionResult:
     return extract_financial_report(file_bytes)
+
+
+@st.cache_data(ttl="15m", max_entries=50, show_spinner=False)
+def _load_market_data(symbol: str):
+    return get_quote(symbol), get_history(symbol)
 
 
 def _score_table(score: ScoreBreakdown) -> pd.DataFrame:
@@ -42,6 +58,19 @@ def _score_table(score: ScoreBreakdown) -> pd.DataFrame:
             }
         )
     return pd.DataFrame(rows)
+
+
+def _technical_score_table(score: TechnicalScoreBreakdown) -> pd.DataFrame:
+    return pd.DataFrame(
+        [
+            {
+                "Kriter": label,
+                "Puan": getattr(score, field),
+                "Maksimum": maximum,
+            }
+            for field, (label, maximum) in TECHNICAL_LABELS.items()
+        ]
+    )
 
 
 def render_dashboard() -> None:
@@ -88,20 +117,41 @@ def render_dashboard() -> None:
 
     st.subheader("Piyasa görünümü")
     try:
-        quote = get_quote(symbol)
-        history = get_history(symbol)
+        with st.spinner("Piyasa verisi ve teknik göstergeler hesaplanıyor..."):
+            quote, history = _load_market_data(symbol)
+            technical_score = calculate_technical_score(history)
+            combined_score = calculate_combined_score(
+                score.total,
+                technical_score.total,
+            )
 
-        price_col, change_col, source_col = st.columns(3)
-        price_col.metric("Son fiyat", f"{quote['last']:,.2f} TRY")
-        change_col.metric(
-            "Günlük değişim",
-            f"{quote['change'] or 0:,.2f}",
-            f"{quote['change_percent'] or 0:.2f}%",
-        )
-        source_col.metric("Veri kaynağı", "Yahoo Finance")
+        with st.container(horizontal=True):
+            st.metric(
+                "Son fiyat",
+                f"{quote['last']:,.2f} TRY",
+                f"{quote['change_percent'] or 0:.2f}%",
+                border=True,
+            )
+            st.metric(
+                "Teknik puan",
+                f"{technical_score.total:.1f}/100",
+                technical_score.signal,
+                border=True,
+            )
+            st.metric(
+                "Birleşik AI puanı",
+                f"{combined_score:.1f}/100",
+                "Temel %70 + teknik %30",
+                border=True,
+            )
+            st.metric(
+                "ATR oynaklığı",
+                f"%{technical_score.atr_percent:.2f}",
+                border=True,
+            )
         st.caption("Piyasa verisi gecikmeli olabilir.")
 
-        st.line_chart(history[["Close", "SMA_20", "SMA_50"]])
+        st.line_chart(history[["Close", "EMA_20", "EMA_50", "EMA_200"]])
         latest = history.iloc[-1]
         indicator_col, macd_col, signal_col = st.columns(3)
         indicator_col.metric("RSI 14", f"{float(latest['RSI_14']):.2f}")
@@ -110,6 +160,23 @@ def render_dashboard() -> None:
             "MACD sinyal",
             f"{float(latest['MACD_SIGNAL']):.4f}",
         )
+
+        with st.container(border=True):
+            st.subheader("Teknik puan kırılımı")
+            st.dataframe(
+                _technical_score_table(technical_score),
+                hide_index=True,
+                width="stretch",
+                column_config={
+                    "Puan": st.column_config.ProgressColumn(
+                        "Puan",
+                        min_value=0,
+                        max_value=20,
+                        format="%.2f",
+                    ),
+                    "Maksimum": st.column_config.NumberColumn(format="%.0f"),
+                },
+            )
     except Exception as exc:
         st.warning(f"Piyasa verisi alınamadı: {exc}")
 

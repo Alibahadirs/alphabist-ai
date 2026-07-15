@@ -20,3 +20,7 @@ class ScoringError(AlphaBistError):
 
 class PdfParsingError(AlphaBistError):
     """Raised when a financial report PDF cannot be parsed."""
+
+
+class TechnicalAnalysisError(AlphaBistError):
+    """Raised when technical indicators or timing score cannot be calculated."""
