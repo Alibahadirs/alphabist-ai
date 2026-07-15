@@ -4,6 +4,7 @@ import pandas as pd
 import streamlit as st
 from pydantic import ValidationError
 
+from app.analysis.service import build_company_analysis
 from app.comparison.service import build_comparison
 from app.core.constants import CATEGORY_MAX_POINTS
 from app.core.exceptions import PdfParsingError, ValidationError as AppValidationError
@@ -102,6 +103,25 @@ def _score_table(score: ScoreBreakdown) -> pd.DataFrame:
             }
         )
     return pd.DataFrame(rows)
+
+
+def _analysis_table(company: FinancialMetrics, score: ScoreBreakdown) -> pd.DataFrame:
+    analysis = build_company_analysis(company, score)
+    return pd.DataFrame(
+        [
+            {
+                "Gösterge": item.label,
+                "Değer": (
+                    "Eksik"
+                    if item.value is None
+                    else f"{item.value:,.2f} {item.unit}".replace(",", "X").replace(".", ",").replace("X", ".")
+                ),
+                "Durum": item.status,
+                "Açıklama": item.interpretation,
+            }
+            for item in analysis.indicators
+        ]
+    )
 
 
 def _technical_score_table(score: TechnicalScoreBreakdown) -> pd.DataFrame:
@@ -256,6 +276,35 @@ def render_dashboard() -> None:
                 "Maksimum": st.column_config.NumberColumn(format="%.0f"),
             },
         )
+
+    analysis = build_company_analysis(company, score)
+    with st.container(border=True):
+        st.subheader("Analiz ve doğrulama")
+        st.write(analysis.summary)
+        st.dataframe(
+            _analysis_table(company, score),
+            hide_index=True,
+            width="stretch",
+            column_config={
+                "Gösterge": st.column_config.TextColumn(pinned=True),
+                "Durum": st.column_config.TextColumn(width="small"),
+            },
+        )
+        strengths_col, risks_col = st.columns(2)
+        with strengths_col:
+            st.markdown("**Güçlü yönler**")
+            if analysis.strengths:
+                for item in analysis.strengths:
+                    st.markdown(f"- {item}")
+            else:
+                st.caption("Doğrulanmış güçlü gösterge bulunamadı.")
+        with risks_col:
+            st.markdown("**Riskler ve eksikler**")
+            if analysis.risks:
+                for item in analysis.risks:
+                    st.markdown(f"- {item}")
+            else:
+                st.caption("Belirgin risk veya eksik gösterge bulunamadı.")
 
     if score_history:
         with st.container(border=True):
