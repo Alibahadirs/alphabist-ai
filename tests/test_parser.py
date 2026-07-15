@@ -137,3 +137,20 @@ def test_extract_symbol_from_pdf_filename_when_text_has_no_code():
 
     assert metadata.symbol == "GUBRF"
     assert metadata.company_name == "GÜBRE FABRİKALARI TÜRK A.Ş."
+
+
+def test_normalizes_kervansaray_report_filename_to_official_symbol():
+    metadata = extract_company_metadata(
+        "KERVANSARAY YATIRIM HOLDİNG ANONİM ŞİRKETİ",
+        "1-KRVN Özet 03.2026 Rapor F.pdf",
+    )
+
+    assert metadata.symbol == "KERVN"
+
+
+def test_infers_kervansaray_symbol_from_company_name():
+    metadata = extract_company_metadata(
+        "KERVANSARAY YATIRIM HOLDİNG ANONİM ŞİRKETİ"
+    )
+
+    assert metadata.symbol == "KERVN"

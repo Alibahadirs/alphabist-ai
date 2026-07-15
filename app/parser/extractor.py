@@ -79,6 +79,16 @@ IGNORED_FILENAME_WORDS = {
     "SPK",
 }
 
+# Common report filename abbreviations that are not valid BIST symbols.
+SYMBOL_ALIASES = {
+    "KRVN": "KERVN",
+}
+
+COMPANY_SYMBOL_HINTS = {
+    "kervansaray yatirim holding": "KERVN",
+    "kervansaray yatırım holding": "KERVN",
+}
+
 
 def parse_turkish_number(raw_value: str) -> float:
     value = raw_value.strip()
@@ -166,6 +176,18 @@ def _symbol_from_filename(file_name: str) -> str:
     return ""
 
 
+def _canonical_symbol(symbol: str, company_name: str = "") -> str:
+    normalized_symbol = re.sub(r"[^A-Z0-9]", "", symbol.upper())
+    if normalized_symbol in SYMBOL_ALIASES:
+        return SYMBOL_ALIASES[normalized_symbol]
+
+    folded_company_name = _fold(company_name)
+    for company_hint, official_symbol in COMPANY_SYMBOL_HINTS.items():
+        if company_hint in folded_company_name:
+            return official_symbol
+    return normalized_symbol
+
+
 def extract_company_metadata(text: str, file_name: str = "") -> CompanyMetadata:
     symbol = ""
     for pattern in SYMBOL_PATTERNS:
@@ -190,6 +212,8 @@ def extract_company_metadata(text: str, file_name: str = "") -> CompanyMetadata:
             if "BAĞIMSIZ DENET" not in candidate.upper():
                 company_name = candidate
                 break
+
+    symbol = _canonical_symbol(symbol, company_name)
 
     period_months = None
     date_match = re.search(r"(?:30|31)[./-](0[369]|12)[./-]\d{4}", text)

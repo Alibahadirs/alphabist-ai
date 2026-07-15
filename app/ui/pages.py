@@ -17,7 +17,11 @@ from app.database.repository import (
 )
 from app.market_data.provider import get_history, get_quote
 from app.parser.converter import to_financial_metrics
-from app.parser.extractor import extract_activity_report, extract_financial_report
+from app.parser.extractor import (
+    extract_activity_report,
+    extract_financial_report,
+    parse_turkish_number,
+)
 from app.parser.models import (
     ActivityReportExtractionResult,
     FinancialReportDraft,
@@ -99,6 +103,22 @@ def _technical_score_table(score: TechnicalScoreBreakdown) -> pd.DataFrame:
 
 def _format_turkish_amount(value: float) -> str:
     return f"{value:,.0f}".replace(",", ".")
+
+
+def _amount_input(label: str, value: float, key: str) -> str:
+    return st.text_input(
+        f"{label} (TL)",
+        value=_format_turkish_amount(value),
+        key=key,
+        help="Tutarı TL olarak girin. Binlik ayırıcı olarak nokta kullanabilirsiniz.",
+    )
+
+
+def _parse_amount_input(label: str, raw_value: str) -> float:
+    try:
+        return parse_turkish_number(raw_value)
+    except ValueError as exc:
+        raise AppValidationError(f"{label} geçerli bir TL tutarı değil.") from exc
 
 
 def render_dashboard() -> None:
@@ -364,50 +384,64 @@ def _render_pdf_company_form() -> None:
             revenue_growth = st.number_input(
                 "Ciro büyümesi (%)",
                 value=float(defaults.revenue_growth),
+                step=0.1,
+                format="%.2f",
                 key="pdf_field_revenue_growth",
             )
             net_profit_growth = st.number_input(
                 "Net kâr büyümesi (%)",
                 value=float(defaults.net_profit_growth),
+                step=0.1,
+                format="%.2f",
                 key="pdf_field_profit_growth",
             )
             net_margin = st.number_input(
                 "Net kâr marjı (%)",
                 value=float(defaults.net_margin),
+                step=0.1,
+                format="%.2f",
                 key="pdf_field_net_margin",
             )
             roe = st.number_input(
                 "ROE (%)",
                 value=float(defaults.roe),
+                step=0.1,
+                format="%.2f",
                 key="pdf_field_roe",
             )
             debt_to_equity = st.number_input(
                 "Borç / özkaynak",
                 value=float(defaults.debt_to_equity),
                 min_value=0.0,
+                step=0.01,
+                format="%.4f",
                 key="pdf_field_debt_to_equity",
             )
             current_ratio = st.number_input(
                 "Cari oran",
                 value=float(defaults.current_ratio),
                 min_value=0.0,
+                step=0.01,
+                format="%.2f",
                 key="pdf_field_current_ratio",
             )
         with right:
-            operating_cash_flow = st.number_input(
+            operating_cash_flow_input = _amount_input(
                 "Operasyonel nakit akışı",
-                value=float(defaults.operating_cash_flow),
+                defaults.operating_cash_flow,
                 key="pdf_field_operating_cash_flow",
             )
-            free_cash_flow = st.number_input(
+            free_cash_flow_input = _amount_input(
                 "Serbest nakit akışı",
-                value=float(defaults.free_cash_flow),
+                defaults.free_cash_flow,
                 key="pdf_field_free_cash_flow",
             )
             asset_turnover = st.number_input(
                 "Aktif devir hızı",
                 value=float(defaults.asset_turnover),
                 min_value=0.0,
+                step=0.01,
+                format="%.2f",
                 key="pdf_field_asset_turnover",
             )
             valuation = st.slider(
@@ -426,6 +460,18 @@ def _render_pdf_company_form() -> None:
         )
 
     if not submitted:
+        return
+    try:
+        operating_cash_flow = _parse_amount_input(
+            "Operasyonel nakit akışı",
+            operating_cash_flow_input,
+        )
+        free_cash_flow = _parse_amount_input(
+            "Serbest nakit akışı",
+            free_cash_flow_input,
+        )
+    except AppValidationError as exc:
+        st.error(str(exc))
         return
     _validate_and_save_company(
         symbol=symbol,
@@ -457,37 +503,53 @@ def _render_manual_company_form() -> None:
 
         left, right = st.columns(2)
         with left:
-            revenue_growth = st.number_input("Ciro büyümesi (%)", value=10.0)
+            revenue_growth = st.number_input(
+                "Ciro büyümesi (%)", value=10.0, step=0.1, format="%.2f"
+            )
             net_profit_growth = st.number_input(
                 "Net kâr büyümesi (%)",
                 value=10.0,
+                step=0.1,
+                format="%.2f",
             )
-            net_margin = st.number_input("Net kâr marjı (%)", value=10.0)
-            roe = st.number_input("ROE (%)", value=15.0)
+            net_margin = st.number_input(
+                "Net kâr marjı (%)", value=10.0, step=0.1, format="%.2f"
+            )
+            roe = st.number_input(
+                "ROE (%)", value=15.0, step=0.1, format="%.2f"
+            )
             debt_to_equity = st.number_input(
                 "Borç / özkaynak",
                 value=0.5,
                 min_value=0.0,
+                step=0.01,
+                format="%.4f",
             )
             current_ratio = st.number_input(
                 "Cari oran",
                 value=1.5,
                 min_value=0.0,
+                step=0.01,
+                format="%.2f",
             )
 
         with right:
-            operating_cash_flow = st.number_input(
+            operating_cash_flow_input = _amount_input(
                 "Operasyonel nakit akışı",
-                value=1_000_000.0,
+                1_000_000.0,
+                key="manual_operating_cash_flow",
             )
-            free_cash_flow = st.number_input(
+            free_cash_flow_input = _amount_input(
                 "Serbest nakit akışı",
-                value=500_000.0,
+                500_000.0,
+                key="manual_free_cash_flow",
             )
             asset_turnover = st.number_input(
                 "Aktif devir hızı",
                 value=0.7,
                 min_value=0.0,
+                step=0.01,
+                format="%.2f",
             )
             valuation = st.slider("Değerleme girdisi", 0, 100, 70)
             management = st.slider("Yönetim girdisi", 0, 100, 75)
@@ -500,6 +562,19 @@ def _render_manual_company_form() -> None:
         )
 
     if not submitted:
+        return
+
+    try:
+        operating_cash_flow = _parse_amount_input(
+            "Operasyonel nakit akışı",
+            operating_cash_flow_input,
+        )
+        free_cash_flow = _parse_amount_input(
+            "Serbest nakit akışı",
+            free_cash_flow_input,
+        )
+    except AppValidationError as exc:
+        st.error(str(exc))
         return
 
     _validate_and_save_company(
@@ -613,50 +688,67 @@ def render_pdf_analysis() -> None:
         st.subheader("Gelir ve kârlılık")
         left, right = st.columns(2)
         with left:
-            revenue = st.number_input("Hasılat", value=float(draft.revenue))
-            net_profit = st.number_input(
+            revenue_input = _amount_input(
+                "Hasılat",
+                draft.revenue,
+                key="verification_revenue",
+            )
+            net_profit_input = _amount_input(
                 "Net dönem kârı",
-                value=float(draft.net_profit),
+                draft.net_profit,
+                key="verification_net_profit",
             )
         with right:
-            previous_revenue = st.number_input(
+            previous_revenue_input = _amount_input(
                 "Önceki dönem hasılat",
-                value=float(draft.previous_revenue),
+                draft.previous_revenue,
+                key="verification_previous_revenue",
             )
-            previous_net_profit = st.number_input(
+            previous_net_profit_input = _amount_input(
                 "Önceki dönem net kâr",
-                value=float(draft.previous_net_profit),
+                draft.previous_net_profit,
+                key="verification_previous_net_profit",
             )
 
         st.subheader("Bilanço")
         left, right = st.columns(2)
         with left:
-            equity = st.number_input("Özkaynak", value=float(draft.equity))
-            total_debt = st.number_input(
-                "Finansal borç",
-                value=float(draft.total_debt),
+            equity_input = _amount_input(
+                "Özkaynak", draft.equity, key="verification_equity"
             )
-            cash = st.number_input("Nakit", value=float(draft.cash))
-            total_assets = st.number_input(
+            total_debt_input = _amount_input(
+                "Finansal borç",
+                draft.total_debt,
+                key="verification_total_debt",
+            )
+            cash_input = _amount_input(
+                "Nakit", draft.cash, key="verification_cash"
+            )
+            total_assets_input = _amount_input(
                 "Toplam varlık",
-                value=float(draft.total_assets),
+                draft.total_assets,
+                key="verification_total_assets",
             )
         with right:
-            current_assets = st.number_input(
+            current_assets_input = _amount_input(
                 "Dönen varlık",
-                value=float(draft.current_assets),
+                draft.current_assets,
+                key="verification_current_assets",
             )
-            current_liabilities = st.number_input(
+            current_liabilities_input = _amount_input(
                 "Kısa vadeli yükümlülük",
-                value=float(draft.current_liabilities),
+                draft.current_liabilities,
+                key="verification_current_liabilities",
             )
-            operating_cash_flow = st.number_input(
+            operating_cash_flow_input = _amount_input(
                 "Operasyonel nakit akışı",
-                value=float(draft.operating_cash_flow),
+                draft.operating_cash_flow,
+                key="verification_operating_cash_flow",
             )
-            capital_expenditures = st.number_input(
+            capital_expenditures_input = _amount_input(
                 "Yatırım harcaması",
-                value=float(draft.capital_expenditures),
+                draft.capital_expenditures,
+                key="verification_capital_expenditures",
             )
 
         st.subheader("Nitel değerlendirme")
@@ -674,6 +766,28 @@ def render_pdf_analysis() -> None:
         return
 
     try:
+        revenue = _parse_amount_input("Hasılat", revenue_input)
+        previous_revenue = _parse_amount_input(
+            "Önceki dönem hasılat", previous_revenue_input
+        )
+        net_profit = _parse_amount_input("Net dönem kârı", net_profit_input)
+        previous_net_profit = _parse_amount_input(
+            "Önceki dönem net kâr", previous_net_profit_input
+        )
+        equity = _parse_amount_input("Özkaynak", equity_input)
+        total_debt = _parse_amount_input("Finansal borç", total_debt_input)
+        cash = _parse_amount_input("Nakit", cash_input)
+        total_assets = _parse_amount_input("Toplam varlık", total_assets_input)
+        current_assets = _parse_amount_input("Dönen varlık", current_assets_input)
+        current_liabilities = _parse_amount_input(
+            "Kısa vadeli yükümlülük", current_liabilities_input
+        )
+        operating_cash_flow = _parse_amount_input(
+            "Operasyonel nakit akışı", operating_cash_flow_input
+        )
+        capital_expenditures = _parse_amount_input(
+            "Yatırım harcaması", capital_expenditures_input
+        )
         verified_draft = FinancialReportDraft(
             symbol=symbol,
             company_name=company_name,
