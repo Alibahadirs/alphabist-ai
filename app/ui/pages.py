@@ -14,6 +14,7 @@ from app.audit.models import (
 )
 from app.audit.service import build_pdf_field_sources
 from app.comparison.service import build_comparison
+from app.confidence.service import calculate_analysis_confidence
 from app.core.constants import CATEGORY_MAX_POINTS
 from app.core.exceptions import PdfParsingError, ValidationError as AppValidationError
 from app.database.repository import (
@@ -311,6 +312,7 @@ def render_dashboard() -> None:
 
     score = calculate_alpha_score(company)
     latest_audit = get_latest_company_data_audit(symbol)
+    confidence = calculate_analysis_confidence(company, score, latest_audit)
     audit_history = list_company_data_audits(symbol)
     score_history = list_score_history(symbol)
     score_delta = None
@@ -327,7 +329,12 @@ def render_dashboard() -> None:
             chart_type="line",
         )
         st.metric("Not", score.grade, border=True)
-        st.metric("Karar", score.decision, border=True)
+        st.metric("Karar", confidence.decision, border=True)
+        st.metric(
+            f"Analiz güveni · {confidence.status}",
+            f"{confidence.total:.1f}/100",
+            border=True,
+        )
         st.metric("Hisse", company.symbol, border=True)
 
     st.caption(
@@ -335,6 +342,26 @@ def render_dashboard() -> None:
         f"Veri yeterliliği: %{score.data_completeness:.0f}"
     )
     _render_data_source_caption(latest_audit)
+    with st.expander("Analiz güveni ayrıntıları"):
+        st.dataframe(
+            pd.DataFrame(
+                [
+                    {"Bileşen": "Zorunlu veri yeterliliği", "Puan": confidence.completeness_component, "Maksimum": 55},
+                    {"Bileşen": "Gösterge kaynak kapsamı", "Puan": confidence.source_component, "Maksimum": 25},
+                    {"Bileşen": "Rapor / kayıt kanıtı", "Puan": confidence.report_component, "Maksimum": 10},
+                    {"Bileşen": "Rapor dönemi", "Puan": confidence.period_component, "Maksimum": 5},
+                    {"Bileşen": "Doğrulama sağlığı", "Puan": confidence.validation_component, "Maksimum": 5},
+                ]
+            ),
+            hide_index=True,
+            width="stretch",
+            column_config={
+                "Puan": st.column_config.NumberColumn(format="%.1f"),
+                "Maksimum": st.column_config.NumberColumn(format="%.0f"),
+            },
+        )
+        for reason in confidence.reasons:
+            st.markdown(f"- {reason}")
     for warning in score.validation_warnings:
         st.warning(warning)
 
@@ -612,9 +639,18 @@ def render_data_quality() -> None:
         "Puanların dayandığı finansal göstergelerin sektör bazında yeterliliğini "
         "ve doğrulama durumunu izleyin."
     )
-    summary = build_data_quality_summary(list_companies())
+    companies = list_companies()
+    summary = build_data_quality_summary(companies)
     latest_audits = {
         audit.symbol: audit for audit in list_latest_company_data_audits()
+    }
+    confidences = {
+        company.symbol: calculate_analysis_confidence(
+            company,
+            calculate_alpha_score(company),
+            latest_audits.get(company.symbol),
+        )
+        for company in companies
     }
     if not summary.rows:
         st.info("Kontrol edilecek şirket kaydı bulunmuyor.")
@@ -654,6 +690,8 @@ def render_data_quality() -> None:
                 "Veri kaynağı": _audit_source_label(latest_audits.get(row.symbol)),
                 "Rapor dönemi": _audit_period_label(latest_audits.get(row.symbol)),
                 "Son doğrulama": _audit_date(latest_audits.get(row.symbol)),
+                "Analiz güveni (%)": confidences[row.symbol].total,
+                "Güven durumu": confidences[row.symbol].status,
                 "Yeterlilik (%)": row.completeness,
                 "Durum": row.status,
                 "Eksik göstergeler": ", ".join(row.missing_fields) or "Yok",
@@ -675,6 +713,9 @@ def render_data_quality() -> None:
                     "Hisse": st.column_config.TextColumn(pinned=True),
                     "Son doğrulama": st.column_config.DatetimeColumn(
                         "Son doğrulama", format="DD.MM.YYYY HH:mm"
+                    ),
+                    "Analiz güveni (%)": st.column_config.ProgressColumn(
+                        "Analiz güveni (%)", min_value=0, max_value=100, format="%.1f"
                     ),
                     "Yeterlilik (%)": st.column_config.ProgressColumn(
                         "Yeterlilik (%)", min_value=0, max_value=100, format="%.1f"

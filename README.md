@@ -18,6 +18,8 @@ yerel Streamlit uygulaması.
 - PDF, faaliyet raporu, manuel giriş ve kullanıcı düzeltmesi için veri kaynağı geçmişi
 - Her finansal göstergenin kaynağını alan bazında izleme
 - Banka, sigorta, GYO ve finansal hizmet şirketleri için sektöre özgü doğrulama
+- Veri yeterliliği ve kaynak kanıtına göre bağımsız analiz güveni puanı
+- Düşük güvenli kayıtlarda yatırım kararını otomatik doğrulama seviyesine çekme
 - SQLite ile yerel veri saklama
 
 ## Çalıştırma
