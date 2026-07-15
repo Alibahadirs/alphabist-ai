@@ -1,3 +1,5 @@
+import hashlib
+
 import pandas as pd
 import streamlit as st
 from pydantic import ValidationError
@@ -15,8 +17,12 @@ from app.database.repository import (
 )
 from app.market_data.provider import get_history, get_quote
 from app.parser.converter import to_financial_metrics
-from app.parser.extractor import extract_financial_report
-from app.parser.models import FinancialReportDraft, PdfExtractionResult
+from app.parser.extractor import extract_activity_report, extract_financial_report
+from app.parser.models import (
+    ActivityReportExtractionResult,
+    FinancialReportDraft,
+    PdfExtractionResult,
+)
 from app.scoring.engine import calculate_alpha_score
 from app.scoring.models import FinancialMetrics, ScoreBreakdown
 from app.technical.engine import calculate_combined_score, calculate_technical_score
@@ -48,8 +54,16 @@ TECHNICAL_LABELS = {
 
 
 @st.cache_data(show_spinner=False, max_entries=10)
-def _parse_pdf(file_bytes: bytes) -> PdfExtractionResult:
-    return extract_financial_report(file_bytes)
+def _parse_pdf(file_bytes: bytes, file_name: str = "") -> PdfExtractionResult:
+    return extract_financial_report(file_bytes, file_name)
+
+
+@st.cache_data(show_spinner=False, max_entries=10)
+def _parse_activity_pdf(
+    file_bytes: bytes,
+    file_name: str = "",
+) -> ActivityReportExtractionResult:
+    return extract_activity_report(file_bytes, file_name)
 
 
 @st.cache_data(ttl="15m", max_entries=50, show_spinner=False)
@@ -193,7 +207,207 @@ def render_dashboard() -> None:
 
 def render_company_form() -> None:
     st.title("Şirket ekle veya güncelle")
-    st.caption("Finansal verileri yüzde değerleriyle girin ve puanı hesaplayın.")
+    st.caption("Raporlardan otomatik doldurun veya finansal oranları elle girin.")
+
+    pdf_tab, manual_tab = st.tabs(["PDF ile otomatik doldur", "Manuel giriş"])
+    with pdf_tab:
+        _render_pdf_company_form()
+    with manual_tab:
+        _render_manual_company_form()
+
+
+def _render_pdf_company_form() -> None:
+    upload_left, upload_right = st.columns(2)
+    with upload_left:
+        financial_file = st.file_uploader(
+            "Finansal rapor",
+            type=["pdf"],
+            key="company_financial_pdf",
+            help="SPK/KAP finansal tablo ve dipnot PDF'ini yükleyin.",
+        )
+    with upload_right:
+        activity_file = st.file_uploader(
+            "Faaliyet raporu",
+            type=["pdf"],
+            key="company_activity_pdf",
+            help="Şirket adı, hisse kodu ve dönem bilgisini tamamlar.",
+        )
+
+    if financial_file is None:
+        st.info("Otomatik doldurma için önce finansal raporu yükleyin.")
+        return
+
+    financial_bytes = financial_file.getvalue()
+    activity_bytes = activity_file.getvalue() if activity_file else b""
+    document_token = hashlib.sha256(financial_bytes + activity_bytes).hexdigest()
+    if st.session_state.get("company_pdf_token") != document_token:
+        for key in list(st.session_state):
+            if key.startswith("pdf_field_") or key == "pdf_period":
+                del st.session_state[key]
+        st.session_state["company_pdf_token"] = document_token
+
+    try:
+        with st.spinner("Raporlar okunuyor ve finansal oranlar hazırlanıyor..."):
+            financial_result = _parse_pdf(financial_bytes, financial_file.name)
+            activity_result = (
+                _parse_activity_pdf(activity_bytes, activity_file.name)
+                if activity_file
+                else None
+            )
+    except PdfParsingError as exc:
+        st.error(str(exc))
+        return
+
+    draft = financial_result.draft
+    if activity_result:
+        metadata = activity_result.metadata
+        draft = draft.model_copy(
+            update={
+                "symbol": metadata.symbol or draft.symbol,
+                "company_name": metadata.company_name or draft.company_name,
+                "period_months": metadata.period_months or draft.period_months,
+            }
+        )
+
+    with st.container(horizontal=True):
+        st.metric(
+            "Bulunan finansal kalem",
+            len(financial_result.extracted_fields),
+            border=True,
+        )
+        st.metric("Finansal rapor", f"{financial_result.page_count} sayfa", border=True)
+        if activity_result:
+            st.metric("Faaliyet raporu", f"{activity_result.page_count} sayfa", border=True)
+
+    for warning in financial_result.warnings:
+        st.warning(warning)
+    if activity_result:
+        for warning in activity_result.warnings:
+            st.warning(warning)
+
+    period_options = [3, 6, 9, 12]
+    period_default = draft.period_months if draft.period_months in period_options else 3
+    period_months = st.selectbox(
+        "Rapor dönemi",
+        period_options,
+        index=period_options.index(period_default),
+        format_func=lambda value: f"{value} aylık",
+        key="pdf_period",
+    )
+    calculation_draft = draft.model_copy(
+        update={
+            "symbol": draft.symbol or "TEMP",
+            "company_name": draft.company_name or "Geçici şirket",
+            "period_months": period_months,
+        }
+    )
+    defaults = to_financial_metrics(calculation_draft)
+
+    st.caption(
+        "Otomatik bulunan değerleri resmi tablolardan kontrol edin; eksik veya yanlış "
+        "alanları kaydetmeden önce düzeltebilirsiniz."
+    )
+    with st.form("pdf_company_form", border=True):
+        st.subheader("Otomatik doldurulan şirket bilgileri")
+        symbol = st.text_input(
+            "Hisse kodu",
+            value=draft.symbol,
+            key="pdf_field_symbol",
+        )
+        company_name = st.text_input(
+            "Şirket adı",
+            value=draft.company_name,
+            key="pdf_field_company_name",
+        )
+
+        left, right = st.columns(2)
+        with left:
+            revenue_growth = st.number_input(
+                "Ciro büyümesi (%)",
+                value=float(defaults.revenue_growth),
+                key="pdf_field_revenue_growth",
+            )
+            net_profit_growth = st.number_input(
+                "Net kâr büyümesi (%)",
+                value=float(defaults.net_profit_growth),
+                key="pdf_field_profit_growth",
+            )
+            net_margin = st.number_input(
+                "Net kâr marjı (%)",
+                value=float(defaults.net_margin),
+                key="pdf_field_net_margin",
+            )
+            roe = st.number_input(
+                "ROE (%)",
+                value=float(defaults.roe),
+                key="pdf_field_roe",
+            )
+            debt_to_equity = st.number_input(
+                "Borç / özkaynak",
+                value=float(defaults.debt_to_equity),
+                min_value=0.0,
+                key="pdf_field_debt_to_equity",
+            )
+            current_ratio = st.number_input(
+                "Cari oran",
+                value=float(defaults.current_ratio),
+                min_value=0.0,
+                key="pdf_field_current_ratio",
+            )
+        with right:
+            operating_cash_flow = st.number_input(
+                "Operasyonel nakit akışı",
+                value=float(defaults.operating_cash_flow),
+                key="pdf_field_operating_cash_flow",
+            )
+            free_cash_flow = st.number_input(
+                "Serbest nakit akışı",
+                value=float(defaults.free_cash_flow),
+                key="pdf_field_free_cash_flow",
+            )
+            asset_turnover = st.number_input(
+                "Aktif devir hızı",
+                value=float(defaults.asset_turnover),
+                min_value=0.0,
+                key="pdf_field_asset_turnover",
+            )
+            valuation = st.slider(
+                "Değerleme girdisi", 0, 100, 50, key="pdf_field_valuation"
+            )
+            management = st.slider(
+                "Yönetim girdisi", 0, 100, 70, key="pdf_field_management"
+            )
+            risk = st.slider(
+                "Risk dayanıklılığı", 0, 100, 50, key="pdf_field_risk"
+            )
+        submitted = st.form_submit_button(
+            "Kontrol et ve kaydet",
+            type="primary",
+            icon=":material/save:",
+        )
+
+    if not submitted:
+        return
+    _validate_and_save_company(
+        symbol=symbol,
+        company_name=company_name,
+        revenue_growth=revenue_growth,
+        net_profit_growth=net_profit_growth,
+        net_margin=net_margin,
+        roe=roe,
+        debt_to_equity=debt_to_equity,
+        current_ratio=current_ratio,
+        operating_cash_flow=operating_cash_flow,
+        free_cash_flow=free_cash_flow,
+        asset_turnover=asset_turnover,
+        valuation=valuation,
+        management=management,
+        risk=risk,
+    )
+
+
+def _render_manual_company_form() -> None:
+    st.caption("Finansal oranları elle girin ve Alpha puanını hesaplayın.")
 
     with st.form("company_form"):
         symbol = st.text_input("Hisse kodu", "ASELS")
@@ -249,6 +463,41 @@ def render_company_form() -> None:
     if not submitted:
         return
 
+    _validate_and_save_company(
+        symbol=symbol,
+        company_name=company_name,
+        revenue_growth=revenue_growth,
+        net_profit_growth=net_profit_growth,
+        net_margin=net_margin,
+        roe=roe,
+        debt_to_equity=debt_to_equity,
+        current_ratio=current_ratio,
+        operating_cash_flow=operating_cash_flow,
+        free_cash_flow=free_cash_flow,
+        asset_turnover=asset_turnover,
+        valuation=valuation,
+        management=management,
+        risk=risk,
+    )
+
+
+def _validate_and_save_company(
+    *,
+    symbol: str,
+    company_name: str,
+    revenue_growth: float,
+    net_profit_growth: float,
+    net_margin: float,
+    roe: float,
+    debt_to_equity: float,
+    current_ratio: float,
+    operating_cash_flow: float,
+    free_cash_flow: float,
+    asset_turnover: float,
+    valuation: float,
+    management: float,
+    risk: float,
+) -> None:
     try:
         metrics = FinancialMetrics(
             symbol=symbol.upper().strip(),
@@ -295,7 +544,7 @@ def render_pdf_analysis() -> None:
     file_bytes = uploaded_file.getvalue()
     try:
         with st.spinner("Finansal kalemler aranıyor..."):
-            result = _parse_pdf(file_bytes)
+            result = _parse_pdf(file_bytes, uploaded_file.name)
     except PdfParsingError as exc:
         st.error(str(exc))
         return
@@ -309,11 +558,16 @@ def render_pdf_analysis() -> None:
     draft = result.draft
     with st.form("pdf_verification_form"):
         st.subheader("Şirket ve dönem")
-        symbol = st.text_input("Hisse kodu")
-        company_name = st.text_input("Şirket adı")
+        symbol = st.text_input("Hisse kodu", value=draft.symbol)
+        company_name = st.text_input("Şirket adı", value=draft.company_name)
+        period_options = [3, 6, 9, 12]
+        period_default = (
+            draft.period_months if draft.period_months in period_options else 3
+        )
         period_months = st.selectbox(
             "Rapor dönemi",
-            [3, 6, 9, 12],
+            period_options,
+            index=period_options.index(period_default),
             format_func=lambda value: f"{value} aylık",
         )
 

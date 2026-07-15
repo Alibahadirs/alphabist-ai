@@ -2,7 +2,11 @@ import pytest
 
 from app.core.exceptions import ValidationError
 from app.parser.converter import to_financial_metrics
-from app.parser.extractor import extract_financial_values, parse_turkish_number
+from app.parser.extractor import (
+    extract_company_metadata,
+    extract_financial_values,
+    parse_turkish_number,
+)
 from app.parser.models import FinancialReportDraft
 
 
@@ -71,3 +75,27 @@ def test_convert_quarterly_report_to_scoring_metrics():
 def test_converter_requires_symbol_and_company_name():
     with pytest.raises(ValidationError):
         to_financial_metrics(FinancialReportDraft())
+
+
+def test_extract_company_metadata_from_activity_report_text():
+    text = """
+    AKSA AKRİLİK KİMYA SANAYİİ A.Ş.
+    BIST: AKSA
+    01.01.2026 - 30.06.2026 FAALİYET RAPORU
+    """
+
+    metadata = extract_company_metadata(text)
+
+    assert metadata.symbol == "AKSA"
+    assert metadata.company_name == "AKSA AKRİLİK KİMYA SANAYİİ A.Ş."
+    assert metadata.period_months == 6
+
+
+def test_extract_symbol_from_pdf_filename_when_text_has_no_code():
+    metadata = extract_company_metadata(
+        "GÜBRE FABRİKALARI TÜRK A.Ş. FAALİYET RAPORU",
+        "GUBRF_2026_1C.pdf",
+    )
+
+    assert metadata.symbol == "GUBRF"
+    assert metadata.company_name == "GÜBRE FABRİKALARI TÜRK A.Ş."

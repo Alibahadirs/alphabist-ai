@@ -29,3 +29,15 @@ class PdfExtractionResult(BaseModel):
     page_count: int
     extracted_fields: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+
+
+class CompanyMetadata(BaseModel):
+    symbol: str = ""
+    company_name: str = ""
+    period_months: int | None = Field(default=None, ge=1, le=12)
+
+
+class ActivityReportExtractionResult(BaseModel):
+    metadata: CompanyMetadata
+    page_count: int
+    warnings: list[str] = Field(default_factory=list)
