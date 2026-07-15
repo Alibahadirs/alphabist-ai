@@ -21,7 +21,7 @@ from app.database.repository import (
     upsert_portfolio_position,
     upsert_watchlist_entry,
 )
-from app.data_quality.service import build_data_quality_summary
+from app.data_quality.service import FIELD_LABELS, build_data_quality_summary
 from app.market_data.provider import get_history, get_quote
 from app.parser.converter import to_financial_metrics
 from app.parser.extractor import (
@@ -45,7 +45,7 @@ from app.technical.engine import calculate_combined_score, calculate_technical_s
 from app.technical.models import TechnicalScoreBreakdown
 from app.watchlist.models import WatchlistEntry
 from app.watchlist.service import build_watchlist_summary
-from app.validation.service import validate_financial_metrics
+from app.validation.service import PROFILE_REQUIREMENTS, validate_financial_metrics
 
 
 CATEGORY_LABELS = {
@@ -142,10 +142,10 @@ def _format_turkish_amount(value: float) -> str:
     return f"{value:,.0f}".replace(",", ".")
 
 
-def _amount_input(label: str, value: float, key: str) -> str:
+def _amount_input(label: str, value: float | None, key: str) -> str:
     return st.text_input(
         f"{label} (TL)",
-        value=_format_turkish_amount(value),
+        value="" if value is None else _format_turkish_amount(value),
         key=key,
         help="Tutarı TL olarak girin. Binlik ayırıcı olarak nokta kullanabilirsiniz.",
     )
@@ -393,6 +393,90 @@ def render_dashboard() -> None:
         st.warning(f"Piyasa verisi alınamadı: {exc}")
 
 
+def _render_quality_correction_form() -> None:
+    companies = {company.symbol: company for company in list_companies()}
+    if not companies:
+        return
+    st.subheader("Eksik veya hatalı veriyi düzelt")
+    symbol = st.selectbox("Düzeltilecek şirket", list(companies), key="quality_symbol")
+    company = companies[symbol]
+    profile = _profile_select(
+        "Doğru sektör profili",
+        CompanyProfile(company.company_profile),
+        f"quality_profile_{symbol}",
+    )
+    required_fields = PROFILE_REQUIREMENTS[profile]
+    amount_fields = {"operating_cash_flow", "free_cash_flow"}
+    nonnegative_fields = {
+        "debt_to_equity", "current_ratio", "asset_turnover",
+        "capital_adequacy_ratio", "npl_ratio", "loan_to_deposit_ratio",
+        "cost_income_ratio", "combined_ratio", "solvency_ratio", "occupancy_rate",
+    }
+
+    with st.form(f"quality_correction_{symbol}_{profile.value}", border=True):
+        st.caption(
+            f"{PROFILE_LABELS[profile]} puanlamasında kullanılan göstergeler. "
+            "Değerleri resmi rapordan doğrulayarak girin."
+        )
+        columns = st.columns(2)
+        raw_values: dict[str, float | str | None] = {}
+        for index, field in enumerate(required_fields):
+            current = getattr(company, field)
+            label = FIELD_LABELS.get(field, field)
+            with columns[index % 2]:
+                if field in amount_fields:
+                    raw_values[field] = _amount_input(
+                        label, current, key=f"quality_{symbol}_{field}"
+                    )
+                else:
+                    kwargs = {
+                        "label": f"{label} ({'oran' if field in {'debt_to_equity', 'current_ratio', 'asset_turnover'} else '%'})",
+                        "value": float(current) if current is not None else None,
+                        "step": 0.1,
+                        "format": "%.2f",
+                        "key": f"quality_{symbol}_{field}",
+                    }
+                    if field in nonnegative_fields:
+                        kwargs["min_value"] = 0.0
+                    if field == "occupancy_rate":
+                        kwargs["max_value"] = 100.0
+                    raw_values[field] = st.number_input(**kwargs)
+        submitted = st.form_submit_button(
+            "Doğrula ve kaydet",
+            type="primary",
+            icon=":material/fact_check:",
+        )
+
+    if not submitted:
+        return
+    updates: dict[str, float | None | CompanyProfile] = {"company_profile": profile}
+    try:
+        for field, value in raw_values.items():
+            if field in amount_fields:
+                updates[field] = _parse_amount_input(FIELD_LABELS[field], str(value))
+            else:
+                updates[field] = value
+    except AppValidationError as exc:
+        st.error(str(exc))
+        return
+
+    corrected = company.model_copy(update=updates)
+    validation = validate_financial_metrics(corrected)
+    if validation.errors:
+        for error in validation.errors:
+            st.error(error)
+        return
+    upsert_company(corrected)
+    score = calculate_alpha_score(corrected)
+    add_score_history(corrected.symbol, score)
+    for warning in validation.warnings:
+        st.warning(warning)
+    st.success(
+        f"{corrected.symbol} doğrulandı ve kaydedildi. Veri yeterliliği "
+        f"%{validation.completeness:.1f}, Alpha Score {score.total:.1f}/100."
+    )
+
+
 def render_data_quality() -> None:
     st.title("Veri kalite merkezi")
     st.caption(
@@ -459,6 +543,8 @@ def render_data_quality() -> None:
                     ),
                 },
             )
+
+    _render_quality_correction_form()
 
 
 def render_scanner() -> None:
