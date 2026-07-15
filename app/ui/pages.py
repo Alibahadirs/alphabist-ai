@@ -5,13 +5,18 @@ import streamlit as st
 from pydantic import ValidationError
 
 from app.analysis.service import build_company_analysis
+from app.audit.models import CompanyDataAudit, DataSourceType, SOURCE_LABELS
 from app.comparison.service import build_comparison
 from app.core.constants import CATEGORY_MAX_POINTS
 from app.core.exceptions import PdfParsingError, ValidationError as AppValidationError
 from app.database.repository import (
+    add_company_data_audit,
     add_score_history,
     get_company,
+    get_latest_company_data_audit,
     list_companies,
+    list_company_data_audits,
+    list_latest_company_data_audits,
     list_portfolio_positions,
     list_score_history,
     list_watchlist_entries,
@@ -217,6 +222,44 @@ def _sector_inputs(profile: CompanyProfile, key_prefix: str, defaults: Financial
     return {}
 
 
+def _audit_source_label(audit: CompanyDataAudit | None) -> str:
+    if audit is None:
+        return SOURCE_LABELS[DataSourceType.LEGACY]
+    return SOURCE_LABELS[audit.source_type]
+
+
+def _audit_period_label(audit: CompanyDataAudit | None) -> str:
+    if audit is None or audit.period_months is None:
+        return "Belirtilmemiş"
+    return f"{audit.period_months} aylık"
+
+
+def _audit_date(audit: CompanyDataAudit | None):
+    return audit.created_at if audit else None
+
+
+def _render_data_source_caption(audit: CompanyDataAudit | None) -> None:
+    if audit is None:
+        st.caption("Veri kaynağı: belirtilmemiş (eski kayıt)")
+        return
+
+    details = [
+        f"Veri kaynağı: {SOURCE_LABELS[audit.source_type]}",
+        f"Rapor dönemi: {_audit_period_label(audit)}",
+    ]
+    if audit.created_at:
+        details.append(f"Kayıt: {audit.created_at:%d.%m.%Y %H:%M}")
+    st.caption(" | ".join(details))
+
+    reports = [
+        name
+        for name in (audit.financial_report_name, audit.activity_report_name)
+        if name
+    ]
+    if reports:
+        st.caption("Raporlar: " + " | ".join(reports))
+
+
 def render_dashboard() -> None:
     st.title("Genel bakış")
     st.caption("Finansal kalite puanı ve gecikmeli piyasa görünümü")
@@ -236,6 +279,8 @@ def render_dashboard() -> None:
         return
 
     score = calculate_alpha_score(company)
+    latest_audit = get_latest_company_data_audit(symbol)
+    audit_history = list_company_data_audits(symbol)
     score_history = list_score_history(symbol)
     score_delta = None
     if len(score_history) >= 2:
@@ -258,6 +303,7 @@ def render_dashboard() -> None:
         f"Profil: {PROFILE_LABELS[CompanyProfile(company.company_profile)]} | "
         f"Veri yeterliliği: %{score.data_completeness:.0f}"
     )
+    _render_data_source_caption(latest_audit)
     for warning in score.validation_warnings:
         st.warning(warning)
 
@@ -277,6 +323,36 @@ def render_dashboard() -> None:
                 "Maksimum": st.column_config.NumberColumn(format="%.0f"),
             },
         )
+
+    if audit_history:
+        with st.expander("Veri kaynağı ve puan geçmişi"):
+            st.dataframe(
+                pd.DataFrame(
+                    [
+                        {
+                            "Tarih": audit.created_at,
+                            "Kaynak": SOURCE_LABELS[audit.source_type],
+                            "Dönem": _audit_period_label(audit),
+                            "Finansal rapor": audit.financial_report_name or "-",
+                            "Faaliyet raporu": audit.activity_report_name or "-",
+                            "Yeterlilik (%)": audit.completeness,
+                            "Alpha Score": audit.alpha_score,
+                        }
+                        for audit in reversed(audit_history)
+                    ]
+                ),
+                hide_index=True,
+                width="stretch",
+                column_config={
+                    "Tarih": st.column_config.DatetimeColumn(
+                        "Tarih", format="DD.MM.YYYY HH:mm"
+                    ),
+                    "Yeterlilik (%)": st.column_config.ProgressColumn(
+                        "Yeterlilik (%)", min_value=0, max_value=100, format="%.1f"
+                    ),
+                    "Alpha Score": st.column_config.NumberColumn(format="%.1f"),
+                },
+            )
 
     analysis = build_company_analysis(company, score)
     with st.container(border=True):
@@ -469,6 +545,23 @@ def _render_quality_correction_form() -> None:
     upsert_company(corrected)
     score = calculate_alpha_score(corrected)
     add_score_history(corrected.symbol, score)
+    previous_audit = get_latest_company_data_audit(corrected.symbol)
+    add_company_data_audit(
+        CompanyDataAudit(
+            symbol=corrected.symbol,
+            source_type=DataSourceType.CORRECTION,
+            company_profile=profile,
+            period_months=previous_audit.period_months if previous_audit else None,
+            financial_report_name=(
+                previous_audit.financial_report_name if previous_audit else ""
+            ),
+            activity_report_name=(
+                previous_audit.activity_report_name if previous_audit else ""
+            ),
+            completeness=validation.completeness,
+            alpha_score=score.total,
+        )
+    )
     for warning in validation.warnings:
         st.warning(warning)
     st.success(
@@ -484,6 +577,9 @@ def render_data_quality() -> None:
         "ve doğrulama durumunu izleyin."
     )
     summary = build_data_quality_summary(list_companies())
+    latest_audits = {
+        audit.symbol: audit for audit in list_latest_company_data_audits()
+    }
     if not summary.rows:
         st.info("Kontrol edilecek şirket kaydı bulunmuyor.")
         return
@@ -519,6 +615,9 @@ def render_data_quality() -> None:
                 "Hisse": row.symbol,
                 "Şirket": row.company_name,
                 "Profil": PROFILE_LABELS[row.company_profile],
+                "Veri kaynağı": _audit_source_label(latest_audits.get(row.symbol)),
+                "Rapor dönemi": _audit_period_label(latest_audits.get(row.symbol)),
+                "Son doğrulama": _audit_date(latest_audits.get(row.symbol)),
                 "Yeterlilik (%)": row.completeness,
                 "Durum": row.status,
                 "Eksik göstergeler": ", ".join(row.missing_fields) or "Yok",
@@ -538,6 +637,9 @@ def render_data_quality() -> None:
                 width="stretch",
                 column_config={
                     "Hisse": st.column_config.TextColumn(pinned=True),
+                    "Son doğrulama": st.column_config.DatetimeColumn(
+                        "Son doğrulama", format="DD.MM.YYYY HH:mm"
+                    ),
                     "Yeterlilik (%)": st.column_config.ProgressColumn(
                         "Yeterlilik (%)", min_value=0, max_value=100, format="%.1f"
                     ),
@@ -949,6 +1051,10 @@ def _render_pdf_company_form() -> None:
         risk=risk,
         company_profile=company_profile,
         sector_metrics=sector_metrics,
+        source_type=DataSourceType.PDF,
+        period_months=period_months,
+        financial_report_name=financial_file.name,
+        activity_report_name=activity_file.name if activity_file else "",
     )
 
 
@@ -1083,6 +1189,10 @@ def _validate_and_save_company(
     risk: float,
     company_profile: CompanyProfile = CompanyProfile.STANDARD,
     sector_metrics: dict[str, float | None] | None = None,
+    source_type: DataSourceType = DataSourceType.MANUAL,
+    period_months: int | None = None,
+    financial_report_name: str = "",
+    activity_report_name: str = "",
 ) -> None:
     sector_metrics = sector_metrics or {}
     try:
@@ -1119,6 +1229,18 @@ def _validate_and_save_company(
     upsert_company(metrics)
     score = calculate_alpha_score(metrics)
     add_score_history(metrics.symbol, score)
+    add_company_data_audit(
+        CompanyDataAudit(
+            symbol=metrics.symbol,
+            source_type=source_type,
+            company_profile=CompanyProfile(metrics.company_profile),
+            period_months=period_months,
+            financial_report_name=financial_report_name,
+            activity_report_name=activity_report_name,
+            completeness=score.data_completeness,
+            alpha_score=score.total,
+        )
+    )
     st.success(
         f"{metrics.symbol} kaydedildi. Alpha Score: {score.total:.1f}/100"
     )

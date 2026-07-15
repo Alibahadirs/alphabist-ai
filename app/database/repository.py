@@ -1,6 +1,7 @@
 import sqlite3
 from pathlib import Path
 
+from app.audit.models import CompanyDataAudit
 from app.history.models import ScoreHistoryEntry
 from app.portfolio.models import PortfolioPosition
 from app.scoring.models import FinancialMetrics, ScoreBreakdown
@@ -87,6 +88,24 @@ def init_db():
             updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY(symbol) REFERENCES companies(symbol))"""
         )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS company_data_audit(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            symbol TEXT NOT NULL,
+            source_type TEXT NOT NULL,
+            company_profile TEXT NOT NULL,
+            period_months INTEGER,
+            financial_report_name TEXT NOT NULL DEFAULT '',
+            activity_report_name TEXT NOT NULL DEFAULT '',
+            completeness REAL NOT NULL,
+            alpha_score REAL NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(symbol) REFERENCES companies(symbol))"""
+        )
+        conn.execute(
+            """CREATE INDEX IF NOT EXISTS idx_company_data_audit_symbol_id
+            ON company_data_audit(symbol, id)"""
+        )
 
 def upsert_company(m):
     d = m.model_dump(mode="json")
@@ -137,6 +156,73 @@ def list_score_history(
             (symbol.upper().strip(), safe_limit),
         ).fetchall()
     return [ScoreHistoryEntry(**dict(row)) for row in reversed(rows)]
+
+
+def add_company_data_audit(audit: CompanyDataAudit) -> None:
+    with connect() as conn:
+        conn.execute(
+            """INSERT INTO company_data_audit(
+            symbol, source_type, company_profile, period_months,
+            financial_report_name, activity_report_name, completeness, alpha_score)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                audit.symbol.upper().strip(),
+                audit.source_type.value,
+                audit.company_profile.value,
+                audit.period_months,
+                audit.financial_report_name,
+                audit.activity_report_name,
+                audit.completeness,
+                audit.alpha_score,
+            ),
+        )
+
+
+def get_latest_company_data_audit(symbol: str) -> CompanyDataAudit | None:
+    with connect() as conn:
+        row = conn.execute(
+            """SELECT id, symbol, source_type, company_profile, period_months,
+            financial_report_name, activity_report_name, completeness,
+            alpha_score, created_at
+            FROM company_data_audit
+            WHERE symbol=? ORDER BY id DESC LIMIT 1""",
+            (symbol.upper().strip(),),
+        ).fetchone()
+    return CompanyDataAudit(**dict(row)) if row else None
+
+
+def list_company_data_audits(
+    symbol: str,
+    limit: int = 20,
+) -> list[CompanyDataAudit]:
+    safe_limit = max(1, min(limit, 100))
+    with connect() as conn:
+        rows = conn.execute(
+            """SELECT id, symbol, source_type, company_profile, period_months,
+            financial_report_name, activity_report_name, completeness,
+            alpha_score, created_at
+            FROM company_data_audit
+            WHERE symbol=? ORDER BY id DESC LIMIT ?""",
+            (symbol.upper().strip(), safe_limit),
+        ).fetchall()
+    return [CompanyDataAudit(**dict(row)) for row in reversed(rows)]
+
+
+def list_latest_company_data_audits() -> list[CompanyDataAudit]:
+    with connect() as conn:
+        rows = conn.execute(
+            """SELECT audit.id, audit.symbol, audit.source_type,
+            audit.company_profile, audit.period_months,
+            audit.financial_report_name, audit.activity_report_name,
+            audit.completeness, audit.alpha_score, audit.created_at
+            FROM company_data_audit AS audit
+            INNER JOIN (
+                SELECT symbol, MAX(id) AS latest_id
+                FROM company_data_audit GROUP BY symbol
+            ) AS latest ON latest.latest_id = audit.id
+            ORDER BY audit.symbol"""
+        ).fetchall()
+    return [CompanyDataAudit(**dict(row)) for row in rows]
 
 
 def upsert_portfolio_position(position: PortfolioPosition) -> None:
