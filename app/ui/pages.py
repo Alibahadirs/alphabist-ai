@@ -97,6 +97,10 @@ def _technical_score_table(score: TechnicalScoreBreakdown) -> pd.DataFrame:
     )
 
 
+def _format_turkish_amount(value: float) -> str:
+    return f"{value:,.0f}".replace(",", ".")
+
+
 def render_dashboard() -> None:
     st.title("Genel bakış")
     st.caption("Finansal kalite puanı ve gecikmeli piyasa görünümü")
@@ -285,6 +289,31 @@ def _render_pdf_company_form() -> None:
         for warning in activity_result.warnings:
             st.warning(warning)
 
+    with st.expander("PDF'den bulunan kaynak değerler"):
+        source_rows = [
+            ("Hasılat", draft.revenue),
+            ("Önceki dönem hasılat", draft.previous_revenue),
+            ("Net dönem kârı", draft.net_profit),
+            ("Önceki dönem net kârı", draft.previous_net_profit),
+            ("Özkaynak", draft.equity),
+            ("Finansal borç", draft.total_debt),
+            ("Dönen varlık", draft.current_assets),
+            ("Kısa vadeli yükümlülük", draft.current_liabilities),
+            ("Operasyonel nakit akışı", draft.operating_cash_flow),
+            ("Yatırım harcaması", draft.capital_expenditures),
+            ("Toplam varlık", draft.total_assets),
+        ]
+        st.dataframe(
+            pd.DataFrame(
+                [
+                    {"Finansal kalem": label, "Tutar (TL)": _format_turkish_amount(value)}
+                    for label, value in source_rows
+                ]
+            ),
+            hide_index=True,
+            width="stretch",
+        )
+
     period_options = [3, 6, 9, 12]
     period_default = draft.period_months if draft.period_months in period_options else 3
     period_months = st.selectbox(
@@ -302,6 +331,16 @@ def _render_pdf_company_form() -> None:
         }
     )
     defaults = to_financial_metrics(calculation_draft)
+    if abs(defaults.roe) > 100:
+        st.warning(
+            f"Yıllıklandırılmış ROE %{defaults.roe:,.1f}. Tek seferlik gelirler veya "
+            "düşük özkaynak nedeniyle yüksek olabilir; kaydetmeden önce kontrol edin."
+        )
+    if defaults.debt_to_equity > 10:
+        st.warning(
+            "Borç / özkaynak oranı olağan dışı yüksek. PDF kaynak değerlerini "
+            "kontrol edin."
+        )
 
     st.caption(
         "Otomatik bulunan değerleri resmi tablolardan kontrol edin; eksik veya yanlış "

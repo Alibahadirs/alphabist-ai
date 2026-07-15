@@ -17,6 +17,7 @@ NUMBER_PATTERN = re.compile(
     r"\(?-?\d{1,3}(?:\.\d{3})+(?:,\d+)?\)?"
     r"|\(?-?\d+(?:[.,]\d+)?\)?"
 )
+VALUE_TOKEN_PATTERN = re.compile(r"--|" + NUMBER_PATTERN.pattern)
 
 FIELD_LABELS = {
     ("revenue", "previous_revenue"): (
@@ -106,12 +107,36 @@ def _fold(value: str) -> str:
     return "".join(char for char in normalized if not unicodedata.combining(char)).casefold()
 
 
-def _line_values(line: str) -> list[float]:
-    values = [parse_turkish_number(item) for item in NUMBER_PATTERN.findall(line)]
+def _line_values(line: str, label: str) -> list[float]:
+    label_match = re.search(re.escape(label), line, re.IGNORECASE)
+    if label_match is None:
+        return []
 
-    if len(values) >= 3 and abs(values[0]) < 1_000:
-        values = values[1:]
-    return values
+    suffix = line[label_match.end() :].strip()
+    if not re.match(r"^(?:\(?-?\d|--)", suffix):
+        return []
+
+    tokens = VALUE_TOKEN_PATTERN.findall(suffix)
+    parsed: list[float | None] = [
+        None if token == "--" else parse_turkish_number(token)
+        for token in tokens
+    ]
+
+    # Financial statement rows often start with a small note reference.
+    if len(parsed) >= 3 and parsed[0] is not None and abs(parsed[0]) < 1_000:
+        parsed = parsed[1:]
+    elif (
+        len(parsed) == 2
+        and parsed[0] is not None
+        and parsed[1] is not None
+        and abs(parsed[0]) < 1_000
+        and abs(parsed[1]) >= 1_000
+    ):
+        parsed = parsed[1:]
+    elif len(parsed) == 1 and parsed[0] is not None and abs(parsed[0]) < 1_000:
+        return []
+
+    return [0.0 if value is None else value for value in parsed]
 
 
 def _read_pdf(file_bytes: bytes) -> tuple[str, int]:
@@ -197,7 +222,7 @@ def extract_financial_values(
                 if _fold(label) not in folded_line:
                     continue
 
-                values = _line_values(clean_line)
+                values = _line_values(clean_line, label)
                 if not values:
                     continue
 
@@ -227,6 +252,20 @@ def extract_financial_report(
     if len(extracted_fields) < 5:
         warnings.append(
             "Az sayıda kalem otomatik bulundu. Rakamları finansal tablodan kontrol edin."
+        )
+    if draft.revenue == 0 and draft.previous_revenue > 0:
+        warnings.append(
+            "Cari dönem hasılatı raporda boş veya sıfır; önceki döneme göre ciro "
+            "büyümesi -%100 hesaplandı."
+        )
+    if draft.previous_net_profit <= 0 < draft.net_profit:
+        warnings.append(
+            "Şirket zarardan kâra geçtiği için net kâr büyüme yüzdesi anlamlı "
+            "değildir ve puanlamada %0 kullanıldı."
+        )
+    if draft.equity <= 0:
+        warnings.append(
+            "Özkaynak tutarı bulunamadı veya geçersiz; ROE değerini kontrol edin."
         )
 
     return PdfExtractionResult(

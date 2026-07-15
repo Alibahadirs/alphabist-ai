@@ -4,7 +4,7 @@ from app.scoring.models import FinancialMetrics
 
 
 def _growth_rate(current: float, previous: float) -> float:
-    if previous == 0:
+    if previous <= 0:
         return 0
     return (current - previous) / abs(previous) * 100
 
