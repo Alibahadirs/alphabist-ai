@@ -5,7 +5,14 @@ import streamlit as st
 from pydantic import ValidationError
 
 from app.analysis.service import build_company_analysis
-from app.audit.models import CompanyDataAudit, DataSourceType, SOURCE_LABELS
+from app.audit.models import (
+    CompanyDataAudit,
+    DataSourceType,
+    METRIC_SOURCE_LABELS,
+    MetricSourceType,
+    SOURCE_LABELS,
+)
+from app.audit.service import build_pdf_field_sources
 from app.comparison.service import build_comparison
 from app.core.constants import CATEGORY_MAX_POINTS
 from app.core.exceptions import PdfParsingError, ValidationError as AppValidationError
@@ -72,6 +79,12 @@ TECHNICAL_LABELS = {
     "macd": ("MACD", 15),
     "volume": ("Hacim", 15),
     "support_resistance": ("Destek / direnç", 15),
+}
+
+SCORE_INPUT_LABELS = {
+    "valuation_score_input": "Değerleme girdisi",
+    "management_score_input": "Yönetim girdisi",
+    "risk_score_input": "Risk dayanıklılığı",
 }
 
 
@@ -258,6 +271,24 @@ def _render_data_source_caption(audit: CompanyDataAudit | None) -> None:
     ]
     if reports:
         st.caption("Raporlar: " + " | ".join(reports))
+
+    if audit.field_sources:
+        with st.expander("Son puanın gösterge kaynakları"):
+            st.dataframe(
+                pd.DataFrame(
+                    [
+                        {
+                            "Gösterge": FIELD_LABELS.get(
+                                field, SCORE_INPUT_LABELS.get(field, field)
+                            ),
+                            "Kaynak": METRIC_SOURCE_LABELS[source],
+                        }
+                        for field, source in audit.field_sources.items()
+                    ]
+                ),
+                hide_index=True,
+                width="stretch",
+            )
 
 
 def render_dashboard() -> None:
@@ -546,6 +577,10 @@ def _render_quality_correction_form() -> None:
     score = calculate_alpha_score(corrected)
     add_score_history(corrected.symbol, score)
     previous_audit = get_latest_company_data_audit(corrected.symbol)
+    corrected_sources = dict(previous_audit.field_sources) if previous_audit else {}
+    corrected_sources.update(
+        {field: MetricSourceType.CORRECTION for field in required_fields}
+    )
     add_company_data_audit(
         CompanyDataAudit(
             symbol=corrected.symbol,
@@ -560,6 +595,7 @@ def _render_quality_correction_form() -> None:
             ),
             completeness=validation.completeness,
             alpha_score=score.total,
+            field_sources=corrected_sources,
         )
     )
     for warning in validation.warnings:
@@ -1055,6 +1091,26 @@ def _render_pdf_company_form() -> None:
         period_months=period_months,
         financial_report_name=financial_file.name,
         activity_report_name=activity_file.name if activity_file else "",
+        field_sources=build_pdf_field_sources(
+            financial_result,
+            activity_result,
+            defaults,
+            {
+                "revenue_growth": revenue_growth,
+                "net_profit_growth": net_profit_growth,
+                "net_margin": net_margin,
+                "roe": roe,
+                "debt_to_equity": debt_to_equity,
+                "current_ratio": current_ratio,
+                "operating_cash_flow": operating_cash_flow,
+                "free_cash_flow": free_cash_flow,
+                "asset_turnover": asset_turnover,
+                "valuation_score_input": valuation,
+                "management_score_input": management,
+                "risk_score_input": risk,
+                **sector_metrics,
+            },
+        ),
     )
 
 
@@ -1193,6 +1249,7 @@ def _validate_and_save_company(
     period_months: int | None = None,
     financial_report_name: str = "",
     activity_report_name: str = "",
+    field_sources: dict[str, MetricSourceType] | None = None,
 ) -> None:
     sector_metrics = sector_metrics or {}
     try:
@@ -1229,6 +1286,13 @@ def _validate_and_save_company(
     upsert_company(metrics)
     score = calculate_alpha_score(metrics)
     add_score_history(metrics.symbol, score)
+    if field_sources is None:
+        excluded = {"symbol", "company_name", "company_profile"}
+        field_sources = {
+            field: MetricSourceType.MANUAL
+            for field, value in metrics.model_dump().items()
+            if field not in excluded and value is not None
+        }
     add_company_data_audit(
         CompanyDataAudit(
             symbol=metrics.symbol,
@@ -1239,6 +1303,7 @@ def _validate_and_save_company(
             activity_report_name=activity_report_name,
             completeness=score.data_completeness,
             alpha_score=score.total,
+            field_sources=field_sources,
         )
     )
     st.success(

@@ -4,6 +4,7 @@ from app.core.exceptions import ValidationError
 from app.parser.converter import to_financial_metrics
 from app.parser.extractor import (
     extract_company_metadata,
+    extract_financial_report,
     extract_financial_values,
     parse_turkish_number,
 )
@@ -163,3 +164,21 @@ def test_infers_kervansaray_symbol_from_company_name():
     )
 
     assert metadata.symbol == "KERVN"
+
+
+def test_financial_report_tracks_sector_metric_fields(monkeypatch):
+    text = """
+    ÖRNEK BANKASI ANONİM ŞİRKETİ
+    BIST: ORNK
+    Sermaye yeterliliği oranı 18,50
+    Takipteki krediler oranı 2,10
+    """
+    monkeypatch.setattr(
+        "app.parser.extractor._read_pdf",
+        lambda _file_bytes: (text, 1),
+    )
+
+    result = extract_financial_report(b"pdf", "ORNK_2026_1C.pdf")
+
+    assert "capital_adequacy_ratio" in result.extracted_fields
+    assert "npl_ratio" in result.extracted_fields

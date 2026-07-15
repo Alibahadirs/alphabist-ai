@@ -13,11 +13,25 @@ class DataSourceType(str, Enum):
     LEGACY = "legacy"
 
 
+class MetricSourceType(str, Enum):
+    FINANCIAL_REPORT = "financial_report"
+    ACTIVITY_REPORT = "activity_report"
+    MANUAL = "manual"
+    CORRECTION = "correction"
+
+
 SOURCE_LABELS = {
     DataSourceType.PDF: "PDF raporları",
     DataSourceType.MANUAL: "Manuel giriş",
     DataSourceType.CORRECTION: "Veri kalite düzeltmesi",
     DataSourceType.LEGACY: "Kaynak belirtilmemiş",
+}
+
+METRIC_SOURCE_LABELS = {
+    MetricSourceType.FINANCIAL_REPORT: "Finansal rapor",
+    MetricSourceType.ACTIVITY_REPORT: "Faaliyet raporu",
+    MetricSourceType.MANUAL: "Kullanıcı girişi",
+    MetricSourceType.CORRECTION: "Kullanıcı düzeltmesi",
 }
 
 
@@ -31,4 +45,5 @@ class CompanyDataAudit(BaseModel):
     activity_report_name: str = ""
     completeness: float = Field(ge=0, le=100)
     alpha_score: float = Field(ge=0, le=100)
+    field_sources: dict[str, MetricSourceType] = Field(default_factory=dict)
     created_at: datetime | None = None

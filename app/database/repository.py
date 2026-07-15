@@ -1,3 +1,4 @@
+import json
 import sqlite3
 from pathlib import Path
 
@@ -99,9 +100,21 @@ def init_db():
             activity_report_name TEXT NOT NULL DEFAULT '',
             completeness REAL NOT NULL,
             alpha_score REAL NOT NULL,
+            field_sources TEXT NOT NULL DEFAULT '{}',
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY(symbol) REFERENCES companies(symbol))"""
         )
+        audit_columns = {
+            row[1]
+            for row in conn.execute(
+                "PRAGMA table_info(company_data_audit)"
+            ).fetchall()
+        }
+        if "field_sources" not in audit_columns:
+            conn.execute(
+                "ALTER TABLE company_data_audit "
+                "ADD COLUMN field_sources TEXT NOT NULL DEFAULT '{}'"
+            )
         conn.execute(
             """CREATE INDEX IF NOT EXISTS idx_company_data_audit_symbol_id
             ON company_data_audit(symbol, id)"""
@@ -163,8 +176,9 @@ def add_company_data_audit(audit: CompanyDataAudit) -> None:
         conn.execute(
             """INSERT INTO company_data_audit(
             symbol, source_type, company_profile, period_months,
-            financial_report_name, activity_report_name, completeness, alpha_score)
-            VALUES(?, ?, ?, ?, ?, ?, ?, ?)""",
+            financial_report_name, activity_report_name, completeness,
+            alpha_score, field_sources)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 audit.symbol.upper().strip(),
                 audit.source_type.value,
@@ -174,8 +188,22 @@ def add_company_data_audit(audit: CompanyDataAudit) -> None:
                 audit.activity_report_name,
                 audit.completeness,
                 audit.alpha_score,
+                json.dumps(
+                    {
+                        field: source.value
+                        for field, source in audit.field_sources.items()
+                    },
+                    ensure_ascii=False,
+                    sort_keys=True,
+                ),
             ),
         )
+
+
+def _audit_from_row(row: sqlite3.Row) -> CompanyDataAudit:
+    values = dict(row)
+    values["field_sources"] = json.loads(values.get("field_sources") or "{}")
+    return CompanyDataAudit(**values)
 
 
 def get_latest_company_data_audit(symbol: str) -> CompanyDataAudit | None:
@@ -183,12 +211,12 @@ def get_latest_company_data_audit(symbol: str) -> CompanyDataAudit | None:
         row = conn.execute(
             """SELECT id, symbol, source_type, company_profile, period_months,
             financial_report_name, activity_report_name, completeness,
-            alpha_score, created_at
+            alpha_score, field_sources, created_at
             FROM company_data_audit
             WHERE symbol=? ORDER BY id DESC LIMIT 1""",
             (symbol.upper().strip(),),
         ).fetchone()
-    return CompanyDataAudit(**dict(row)) if row else None
+    return _audit_from_row(row) if row else None
 
 
 def list_company_data_audits(
@@ -200,12 +228,12 @@ def list_company_data_audits(
         rows = conn.execute(
             """SELECT id, symbol, source_type, company_profile, period_months,
             financial_report_name, activity_report_name, completeness,
-            alpha_score, created_at
+            alpha_score, field_sources, created_at
             FROM company_data_audit
             WHERE symbol=? ORDER BY id DESC LIMIT ?""",
             (symbol.upper().strip(), safe_limit),
         ).fetchall()
-    return [CompanyDataAudit(**dict(row)) for row in reversed(rows)]
+    return [_audit_from_row(row) for row in reversed(rows)]
 
 
 def list_latest_company_data_audits() -> list[CompanyDataAudit]:
@@ -214,7 +242,8 @@ def list_latest_company_data_audits() -> list[CompanyDataAudit]:
             """SELECT audit.id, audit.symbol, audit.source_type,
             audit.company_profile, audit.period_months,
             audit.financial_report_name, audit.activity_report_name,
-            audit.completeness, audit.alpha_score, audit.created_at
+            audit.completeness, audit.alpha_score, audit.field_sources,
+            audit.created_at
             FROM company_data_audit AS audit
             INNER JOIN (
                 SELECT symbol, MAX(id) AS latest_id
@@ -222,7 +251,7 @@ def list_latest_company_data_audits() -> list[CompanyDataAudit]:
             ) AS latest ON latest.latest_id = audit.id
             ORDER BY audit.symbol"""
         ).fetchall()
-    return [CompanyDataAudit(**dict(row)) for row in rows]
+    return [_audit_from_row(row) for row in rows]
 
 
 def upsert_portfolio_position(position: PortfolioPosition) -> None:

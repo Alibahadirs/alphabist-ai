@@ -15,6 +15,9 @@ yerel Streamlit uygulaması.
 - Finansal ölçütlerle çalışan şirket tarayıcı ve otomatik sıralama
 - Lot, maliyet, güncel değer ve kâr/zarar hesaplayan portföy ekranı
 - Alpha Score geçmişi ve önceki analize göre puan değişimi
+- PDF, faaliyet raporu, manuel giriş ve kullanıcı düzeltmesi için veri kaynağı geçmişi
+- Her finansal göstergenin kaynağını alan bazında izleme
+- Banka, sigorta, GYO ve finansal hizmet şirketleri için sektöre özgü doğrulama
 - SQLite ile yerel veri saklama
 
 ## Çalıştırma

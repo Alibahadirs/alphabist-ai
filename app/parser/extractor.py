@@ -131,7 +131,12 @@ def _fold(value: str) -> str:
     return "".join(char for char in normalized if not unicodedata.combining(char)).casefold()
 
 
-def _line_values(line: str, label: str) -> list[float]:
+def _line_values(
+    line: str,
+    label: str,
+    *,
+    allow_small_values: bool = False,
+) -> list[float]:
     label_match = re.search(re.escape(label), line, re.IGNORECASE)
     if label_match is None:
         return []
@@ -157,7 +162,12 @@ def _line_values(line: str, label: str) -> list[float]:
         and abs(parsed[1]) >= 1_000
     ):
         parsed = parsed[1:]
-    elif len(parsed) == 1 and parsed[0] is not None and abs(parsed[0]) < 1_000:
+    elif (
+        not allow_small_values
+        and len(parsed) == 1
+        and parsed[0] is not None
+        and abs(parsed[0]) < 1_000
+    ):
         return []
 
     return [0.0 if value is None else value for value in parsed]
@@ -253,7 +263,7 @@ def extract_sector_metrics(text: str) -> dict[str, float]:
             for label in labels:
                 if _fold(label) not in folded:
                     continue
-                values = _line_values(line, label)
+                values = _line_values(line, label, allow_small_values=True)
                 if values:
                     value = values[0]
                     if 0 <= abs(value) <= 1 and ("%" in line or "oran" in folded):
@@ -308,6 +318,7 @@ def extract_financial_report(
     }
     sector_metrics = extract_sector_metrics(text)
     metadata_updates.update(sector_metrics)
+    extracted_fields = sorted(set(extracted_fields) | set(sector_metrics))
     if metadata.period_months is not None:
         metadata_updates["period_months"] = metadata.period_months
     draft = draft.model_copy(update=metadata_updates)
