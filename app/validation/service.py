@@ -32,7 +32,7 @@ PROFILE_REQUIREMENTS = {
     ),
     CompanyProfile.REIT: (
         "revenue_growth", "net_profit_growth", "net_margin", "roe",
-        "debt_to_equity", "operating_cash_flow", "nav_discount",
+        "debt_to_equity", "current_ratio", "operating_cash_flow", "nav_discount",
         "occupancy_rate",
     ),
     CompanyProfile.FINANCIAL_SERVICES: (
@@ -64,6 +64,17 @@ def validate_financial_metrics(metrics: FinancialMetrics) -> ValidationReport:
         warnings.append("Net kâr marjı %100 sınırını aşıyor; tek seferlik gelirleri kontrol edin.")
     if abs(metrics.revenue_growth or 0) > 500:
         warnings.append("Gelir büyümesi olağan aralığın dışında; karşılaştırma dönemini kontrol edin.")
+    if metrics.revenue_growth is not None and metrics.revenue_growth <= -99.9:
+        warnings.append("Gelir büyümesi -%100; cari dönem gelirinin sıfır veya eksik olmadığını kontrol edin.")
+    if abs(metrics.net_profit_growth or 0) > 1_000:
+        warnings.append("Net kâr büyümesi olağan aralığın dışında; baz dönem değerini kontrol edin.")
+    if profile in (CompanyProfile.STANDARD, CompanyProfile.REIT):
+        if (metrics.current_ratio or 0) > 20:
+            warnings.append("Cari oran olağan aralığın dışında; dönen varlık ve kısa vadeli yükümlülükleri kontrol edin.")
+        if (metrics.debt_to_equity or 0) > 20:
+            warnings.append("Borç / özkaynak oranı olağan aralığın dışında; tutar ve oran alanlarını kontrol edin.")
+        if (metrics.asset_turnover or 0) > 10:
+            warnings.append("Aktif devir hızı olağan aralığın dışında; gelir ve toplam aktif değerlerini kontrol edin.")
     if profile == CompanyProfile.BANK and metrics.capital_adequacy_ratio is not None:
         if not 5 <= metrics.capital_adequacy_ratio <= 50:
             warnings.append("Sermaye yeterliliği oranı olağan banka aralığının dışında.")

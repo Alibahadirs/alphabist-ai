@@ -21,6 +21,7 @@ from app.database.repository import (
     upsert_portfolio_position,
     upsert_watchlist_entry,
 )
+from app.data_quality.service import build_data_quality_summary
 from app.market_data.provider import get_history, get_quote
 from app.parser.converter import to_financial_metrics
 from app.parser.extractor import (
@@ -390,6 +391,74 @@ def render_dashboard() -> None:
             )
     except Exception as exc:
         st.warning(f"Piyasa verisi alınamadı: {exc}")
+
+
+def render_data_quality() -> None:
+    st.title("Veri kalite merkezi")
+    st.caption(
+        "Puanların dayandığı finansal göstergelerin sektör bazında yeterliliğini "
+        "ve doğrulama durumunu izleyin."
+    )
+    summary = build_data_quality_summary(list_companies())
+    if not summary.rows:
+        st.info("Kontrol edilecek şirket kaydı bulunmuyor.")
+        return
+
+    with st.container(horizontal=True):
+        st.metric("Toplam şirket", summary.total_companies, border=True)
+        st.metric("Doğrulandı", summary.verified_count, border=True)
+        st.metric("Kontrol gerekli", summary.review_count, border=True)
+        st.metric("Kritik / eksik", summary.critical_count, border=True)
+        st.metric("Ortalama yeterlilik", f"%{summary.average_completeness:.1f}", border=True)
+
+    profile_options = ["Tümü"] + [PROFILE_LABELS[item] for item in CompanyProfile]
+    status_options = ["Doğrulandı", "Kontrol gerekli", "Eksik veri", "Hatalı"]
+    filter_left, filter_right = st.columns(2)
+    with filter_left:
+        selected_profile = st.selectbox("Sektör profili", profile_options)
+    with filter_right:
+        selected_statuses = st.multiselect(
+            "Doğrulama durumu", status_options, default=status_options
+        )
+
+    filtered = [
+        row for row in summary.rows
+        if row.status in selected_statuses
+        and (
+            selected_profile == "Tümü"
+            or PROFILE_LABELS[row.company_profile] == selected_profile
+        )
+    ]
+    table = pd.DataFrame(
+        [
+            {
+                "Hisse": row.symbol,
+                "Şirket": row.company_name,
+                "Profil": PROFILE_LABELS[row.company_profile],
+                "Yeterlilik (%)": row.completeness,
+                "Durum": row.status,
+                "Eksik göstergeler": ", ".join(row.missing_fields) or "Yok",
+                "Uyarı / hata": " | ".join(row.errors + row.warnings) or "Yok",
+            }
+            for row in filtered
+        ]
+    )
+    with st.container(border=True):
+        st.subheader("Doğrulama listesi")
+        if table.empty:
+            st.info("Seçilen filtrelere uyan şirket bulunamadı.")
+        else:
+            st.dataframe(
+                table,
+                hide_index=True,
+                width="stretch",
+                column_config={
+                    "Hisse": st.column_config.TextColumn(pinned=True),
+                    "Yeterlilik (%)": st.column_config.ProgressColumn(
+                        "Yeterlilik (%)", min_value=0, max_value=100, format="%.1f"
+                    ),
+                },
+            )
 
 
 def render_scanner() -> None:
