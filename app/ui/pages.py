@@ -5,7 +5,14 @@ from pydantic import ValidationError
 from app.comparison.service import build_comparison
 from app.core.constants import CATEGORY_MAX_POINTS
 from app.core.exceptions import PdfParsingError, ValidationError as AppValidationError
-from app.database.repository import get_company, list_companies, upsert_company
+from app.database.repository import (
+    get_company,
+    list_companies,
+    list_watchlist_entries,
+    remove_watchlist_entry,
+    upsert_company,
+    upsert_watchlist_entry,
+)
 from app.market_data.provider import get_history, get_quote
 from app.parser.converter import to_financial_metrics
 from app.parser.extractor import extract_financial_report
@@ -14,6 +21,8 @@ from app.scoring.engine import calculate_alpha_score
 from app.scoring.models import FinancialMetrics, ScoreBreakdown
 from app.technical.engine import calculate_combined_score, calculate_technical_score
 from app.technical.models import TechnicalScoreBreakdown
+from app.watchlist.models import WatchlistEntry
+from app.watchlist.service import build_watchlist_summary
 
 
 CATEGORY_LABELS = {
@@ -557,3 +566,95 @@ def render_comparison() -> None:
     with st.container(border=True):
         st.subheader("Puan görünümü")
         st.bar_chart(chart_frame)
+
+
+def render_watchlist() -> None:
+    st.title("Takip listesi")
+    st.caption("Önem verdiğiniz şirketleri hedef Alpha puanlarıyla izleyin.")
+
+    companies = list_companies()
+    if not companies:
+        st.info("Takip listesine eklemek için önce bir şirket kaydedin.")
+        return
+
+    company_by_symbol = {company.symbol: company for company in companies}
+    with st.form("watchlist_add_form", border=True):
+        st.subheader("Şirket ekle veya güncelle")
+        symbol = st.selectbox("Hisse", list(company_by_symbol))
+        target = st.slider("Hedef Alpha puanı", 0, 100, 80)
+        note = st.text_input(
+            "Kısa not",
+            max_chars=200,
+            placeholder="Örnek: Yeni bilanço sonrası yeniden değerlendir",
+        )
+        submitted = st.form_submit_button(
+            "Takip listesine kaydet",
+            type="primary",
+            icon=":material/bookmark_add:",
+        )
+
+    if submitted:
+        upsert_watchlist_entry(
+            WatchlistEntry(
+                symbol=symbol,
+                note=note.strip(),
+                target_alpha_score=target,
+            )
+        )
+        st.success(f"{symbol} takip listesine kaydedildi.")
+
+    entries = list_watchlist_entries()
+    summary = build_watchlist_summary(entries, company_by_symbol)
+    if not summary.rows:
+        st.info("Takip listeniz henüz boş.")
+        return
+
+    with st.container(horizontal=True):
+        st.metric("Takip edilen", len(summary.rows), border=True)
+        st.metric(
+            "Ortalama Alpha",
+            f"{summary.average_alpha_score:.1f}/100",
+            border=True,
+        )
+        st.metric("Hedefe ulaşan", summary.targets_reached, border=True)
+
+    rows = [
+        {
+            "Hisse": row.symbol,
+            "Şirket": row.company_name,
+            "Alpha": row.alpha_score,
+            "Hedef": row.target_alpha_score,
+            "Durum": "Hedefte" if row.target_reached else "Hedef altında",
+            "Not": row.grade,
+            "Karar": row.decision,
+            "Kullanıcı notu": row.note,
+        }
+        for row in summary.rows
+    ]
+    with st.container(border=True):
+        st.subheader("İzlenen şirketler")
+        st.dataframe(
+            pd.DataFrame(rows),
+            hide_index=True,
+            width="stretch",
+            column_config={
+                "Alpha": st.column_config.ProgressColumn(
+                    "Alpha", min_value=0, max_value=100, format="%.1f"
+                ),
+                "Hedef": st.column_config.NumberColumn(format="%.0f"),
+            },
+        )
+
+    with st.form("watchlist_remove_form"):
+        remove_symbol = st.selectbox(
+            "Listeden çıkarılacak hisse",
+            [row.symbol for row in summary.rows],
+        )
+        remove_submitted = st.form_submit_button(
+            "Listeden çıkar",
+            icon=":material/bookmark_remove:",
+        )
+    if remove_submitted:
+        remove_watchlist_entry(remove_symbol)
+        st.success(f"{remove_symbol} takip listesinden çıkarıldı.")
+        st.rerun()

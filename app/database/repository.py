@@ -1,6 +1,8 @@
 import sqlite3
 from pathlib import Path
+
 from app.scoring.models import FinancialMetrics
+from app.watchlist.models import WatchlistEntry
 
 DB_PATH = Path(__file__).resolve().parents[2] / 'data' / 'alphabist.db'
 
@@ -19,6 +21,14 @@ def init_db():
     management_score_input REAL, risk_score_input REAL)"""
     with connect() as conn:
         conn.execute(sql)
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS watchlist(
+            symbol TEXT PRIMARY KEY,
+            note TEXT NOT NULL DEFAULT '',
+            target_alpha_score REAL NOT NULL DEFAULT 80,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(symbol) REFERENCES companies(symbol))"""
+        )
 
 def upsert_company(m):
     d = m.model_dump()
@@ -38,6 +48,33 @@ def get_company(symbol):
     with connect() as conn:
         row = conn.execute('SELECT * FROM companies WHERE symbol=?', (symbol.upper(),)).fetchone()
     return FinancialMetrics(**dict(row)) if row else None
+
+
+def upsert_watchlist_entry(entry: WatchlistEntry) -> None:
+    sql = """INSERT INTO watchlist(symbol, note, target_alpha_score)
+    VALUES(?, ?, ?)
+    ON CONFLICT(symbol) DO UPDATE SET
+    note=excluded.note,
+    target_alpha_score=excluded.target_alpha_score"""
+    with connect() as conn:
+        conn.execute(sql, (entry.symbol, entry.note, entry.target_alpha_score))
+
+
+def remove_watchlist_entry(symbol: str) -> None:
+    with connect() as conn:
+        conn.execute(
+            "DELETE FROM watchlist WHERE symbol=?",
+            (symbol.upper().strip(),),
+        )
+
+
+def list_watchlist_entries() -> list[WatchlistEntry]:
+    with connect() as conn:
+        rows = conn.execute(
+            """SELECT symbol, note, target_alpha_score
+            FROM watchlist ORDER BY created_at, symbol"""
+        ).fetchall()
+    return [WatchlistEntry(**dict(row)) for row in rows]
 
 def seed_demo_data():
     if list_companies():
