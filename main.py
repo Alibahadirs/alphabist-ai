@@ -3,6 +3,7 @@ import streamlit as st
 from app.core.settings import settings
 from app.database.repository import init_db, seed_demo_data
 from app.ui.pages import (
+    render_comparison,
     render_company_form,
     render_company_list,
     render_dashboard,
@@ -26,6 +27,7 @@ page = st.sidebar.radio(
     "Menü",
     [
         "Genel bakış",
+        "Şirket karşılaştırma",
         "PDF analizi",
         "Şirket ekle veya güncelle",
         "Kayıtlı şirketler",
@@ -34,6 +36,8 @@ page = st.sidebar.radio(
 
 if page == "Genel bakış":
     render_dashboard()
+elif page == "Şirket karşılaştırma":
+    render_comparison()
 elif page == "PDF analizi":
     render_pdf_analysis()
 elif page == "Şirket ekle veya güncelle":

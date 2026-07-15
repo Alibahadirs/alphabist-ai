@@ -2,6 +2,7 @@ import pandas as pd
 import streamlit as st
 from pydantic import ValidationError
 
+from app.comparison.service import build_comparison
 from app.core.constants import CATEGORY_MAX_POINTS
 from app.core.exceptions import PdfParsingError, ValidationError as AppValidationError
 from app.database.repository import get_company, list_companies, upsert_company
@@ -441,3 +442,118 @@ def render_company_list() -> None:
             )
         },
     )
+
+
+def render_comparison() -> None:
+    st.title("Şirket karşılaştırma")
+    st.caption("Temel kaliteyi ve isteğe bağlı teknik zamanlamayı yan yana inceleyin.")
+
+    companies = list_companies()
+    if len(companies) < 2:
+        st.info("Karşılaştırma için en az iki kayıtlı şirket gerekir.")
+        return
+
+    company_by_symbol = {company.symbol: company for company in companies}
+    symbols = list(company_by_symbol)
+    with st.form("comparison_form"):
+        selected_symbols = st.multiselect(
+            "Karşılaştırılacak şirketler",
+            symbols,
+            default=symbols[: min(2, len(symbols))],
+            max_selections=5,
+            help="En az 2, en fazla 5 şirket seçin.",
+        )
+        include_technical = st.toggle(
+            "Teknik zamanlama puanlarını dahil et",
+            value=False,
+            help="Gecikmeli piyasa verisi alınacağı için ilk hesaplama biraz sürebilir.",
+        )
+        submitted = st.form_submit_button(
+            "Karşılaştır",
+            type="primary",
+            icon=":material/compare_arrows:",
+        )
+
+    if not submitted:
+        st.info("Şirketleri seçip karşılaştırmayı başlatın.")
+        return
+    if len(selected_symbols) < 2:
+        st.warning("En az iki şirket seçin.")
+        return
+
+    selected_companies = [company_by_symbol[symbol] for symbol in selected_symbols]
+    technical_scores = {}
+    failed_symbols = []
+    if include_technical:
+        with st.spinner("Teknik puanlar hesaplanıyor..."):
+            for symbol in selected_symbols:
+                try:
+                    _, history = _load_market_data(symbol)
+                    technical_scores[symbol] = calculate_technical_score(history)
+                except Exception:
+                    failed_symbols.append(symbol)
+
+        if failed_symbols:
+            technical_scores = {}
+            st.warning(
+                "Bazı piyasa verileri alınamadığı için karşılaştırma yalnızca "
+                f"temel puanlarla hazırlandı: {', '.join(failed_symbols)}"
+            )
+
+    summary = build_comparison(selected_companies, technical_scores)
+    with st.container(horizontal=True):
+        st.metric("Lider", summary.leader_symbol, border=True)
+        st.metric(
+            "Ortalama Alpha",
+            f"{summary.average_alpha_score:.1f}/100",
+            border=True,
+        )
+        if summary.average_combined_score is not None:
+            st.metric(
+                "Ortalama birleşik",
+                f"{summary.average_combined_score:.1f}/100",
+                border=True,
+            )
+        st.metric("Karşılaştırılan", len(summary.rows), border=True)
+
+    rows = []
+    for rank, row in enumerate(summary.rows, start=1):
+        rows.append(
+            {
+                "Sıra": rank,
+                "Hisse": row.symbol,
+                "Şirket": row.company_name,
+                "Alpha": row.alpha_score,
+                "Teknik": row.technical_score,
+                "Birleşik": row.combined_score,
+                "Not": row.grade,
+                "Temel karar": row.decision,
+                "Teknik sinyal": row.technical_signal,
+                "ATR (%)": row.atr_percent,
+            }
+        )
+
+    comparison_frame = pd.DataFrame(rows)
+    with st.container(border=True):
+        st.subheader("Puan sıralaması")
+        st.dataframe(
+            comparison_frame,
+            hide_index=True,
+            width="stretch",
+            column_config={
+                "Alpha": st.column_config.ProgressColumn(
+                    "Alpha", min_value=0, max_value=100, format="%.1f"
+                ),
+                "Teknik": st.column_config.NumberColumn(format="%.1f"),
+                "Birleşik": st.column_config.NumberColumn(format="%.1f"),
+                "ATR (%)": st.column_config.NumberColumn(format="%.2f"),
+            },
+        )
+
+    chart_columns = ["Alpha"]
+    if technical_scores:
+        chart_columns.extend(["Teknik", "Birleşik"])
+    chart_frame = comparison_frame.set_index("Hisse")[chart_columns]
+    with st.container(border=True):
+        st.subheader("Puan görünümü")
+        st.bar_chart(chart_frame)
