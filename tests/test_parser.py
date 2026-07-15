@@ -1,0 +1,73 @@
+import pytest
+
+from app.core.exceptions import ValidationError
+from app.parser.converter import to_financial_metrics
+from app.parser.extractor import extract_financial_values, parse_turkish_number
+from app.parser.models import FinancialReportDraft
+
+
+@pytest.mark.parametrize(
+    ("raw_value", "expected"),
+    [
+        ("22.393.593.959", 22_393_593_959),
+        ("1.250,50", 1_250.50),
+        ("(812.000.000)", -812_000_000),
+        ("-42,5", -42.5),
+    ],
+)
+def test_parse_turkish_number(raw_value, expected):
+    assert parse_turkish_number(raw_value) == expected
+
+
+def test_extract_financial_values_from_statement_text():
+    text = """
+    Hasılat 22.393.593.959 18.161.075.758
+    Dönem kârı 3.070.000.000 812.000.000
+    Nakit ve nakit benzerleri 12.970.000.000 8.200.000.000
+    Dönen varlıklar 44.700.000.000 39.000.000.000
+    Kısa vadeli yükümlülükler 27.500.000.000 25.000.000.000
+    Toplam özkaynaklar 42.100.000.000 38.000.000.000
+    Toplam varlıklar 71.700.000.000 65.000.000.000
+    İşletme faaliyetlerinden nakit akışı 3.040.000.000 900.000.000
+    """
+
+    draft, fields = extract_financial_values(text)
+
+    assert draft.revenue == 22_393_593_959
+    assert draft.previous_revenue == 18_161_075_758
+    assert draft.net_profit == 3_070_000_000
+    assert draft.equity == 42_100_000_000
+    assert "operating_cash_flow" in fields
+
+
+def test_convert_quarterly_report_to_scoring_metrics():
+    draft = FinancialReportDraft(
+        symbol="TEST",
+        company_name="Test Şirketi",
+        period_months=3,
+        revenue=120,
+        previous_revenue=100,
+        net_profit=12,
+        previous_net_profit=10,
+        equity=240,
+        total_debt=120,
+        current_assets=200,
+        current_liabilities=100,
+        operating_cash_flow=20,
+        capital_expenditures=5,
+        total_assets=480,
+    )
+
+    metrics = to_financial_metrics(draft)
+
+    assert metrics.revenue_growth == pytest.approx(20)
+    assert metrics.net_margin == pytest.approx(10)
+    assert metrics.roe == pytest.approx(20)
+    assert metrics.current_ratio == pytest.approx(2)
+    assert metrics.free_cash_flow == pytest.approx(15)
+    assert metrics.asset_turnover == pytest.approx(1)
+
+
+def test_converter_requires_symbol_and_company_name():
+    with pytest.raises(ValidationError):
+        to_financial_metrics(FinancialReportDraft())

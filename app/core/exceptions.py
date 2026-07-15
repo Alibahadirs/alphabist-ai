@@ -16,3 +16,7 @@ class DataProviderError(AlphaBistError):
 
 class ScoringError(AlphaBistError):
     """Raised when Alpha Score calculation fails."""
+
+
+class PdfParsingError(AlphaBistError):
+    """Raised when a financial report PDF cannot be parsed."""

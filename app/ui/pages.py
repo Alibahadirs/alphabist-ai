@@ -3,8 +3,12 @@ import streamlit as st
 from pydantic import ValidationError
 
 from app.core.constants import CATEGORY_MAX_POINTS
+from app.core.exceptions import PdfParsingError, ValidationError as AppValidationError
 from app.database.repository import get_company, list_companies, upsert_company
 from app.market_data.provider import get_history, get_quote
+from app.parser.converter import to_financial_metrics
+from app.parser.extractor import extract_financial_report
+from app.parser.models import FinancialReportDraft, PdfExtractionResult
 from app.scoring.engine import calculate_alpha_score
 from app.scoring.models import FinancialMetrics, ScoreBreakdown
 
@@ -20,6 +24,11 @@ CATEGORY_LABELS = {
     "risk": "Risk dayanıklılığı",
     "management": "Yönetim",
 }
+
+
+@st.cache_data(show_spinner=False, max_entries=10)
+def _parse_pdf(file_bytes: bytes) -> PdfExtractionResult:
+    return extract_financial_report(file_bytes)
 
 
 def _score_table(score: ScoreBreakdown) -> pd.DataFrame:
@@ -189,6 +198,147 @@ def render_company_form() -> None:
     st.success(
         f"{metrics.symbol} kaydedildi. Alpha Score: {score.total:.1f}/100"
     )
+
+
+def render_pdf_analysis() -> None:
+    st.title("PDF analizi")
+    st.caption(
+        "Finansal raporu yükleyin, bulunan rakamları doğrulayın ve puanı kaydedin."
+    )
+
+    uploaded_file = st.file_uploader(
+        "Finansal rapor",
+        type=["pdf"],
+        help="Metin katmanı bulunan SPK veya KAP finansal raporlarını kullanın.",
+    )
+    if uploaded_file is None:
+        st.info("Başlamak için bir finansal rapor PDF'i yükleyin.")
+        return
+
+    file_bytes = uploaded_file.getvalue()
+    try:
+        with st.spinner("Finansal kalemler aranıyor..."):
+            result = _parse_pdf(file_bytes)
+    except PdfParsingError as exc:
+        st.error(str(exc))
+        return
+
+    detected_col, page_col = st.columns(2)
+    detected_col.metric("Bulunan kalem", len(result.extracted_fields))
+    page_col.metric("PDF sayfası", result.page_count)
+    for warning in result.warnings:
+        st.warning(warning)
+
+    draft = result.draft
+    with st.form("pdf_verification_form"):
+        st.subheader("Şirket ve dönem")
+        symbol = st.text_input("Hisse kodu")
+        company_name = st.text_input("Şirket adı")
+        period_months = st.selectbox(
+            "Rapor dönemi",
+            [3, 6, 9, 12],
+            format_func=lambda value: f"{value} aylık",
+        )
+
+        st.subheader("Gelir ve kârlılık")
+        left, right = st.columns(2)
+        with left:
+            revenue = st.number_input("Hasılat", value=float(draft.revenue))
+            net_profit = st.number_input(
+                "Net dönem kârı",
+                value=float(draft.net_profit),
+            )
+        with right:
+            previous_revenue = st.number_input(
+                "Önceki dönem hasılat",
+                value=float(draft.previous_revenue),
+            )
+            previous_net_profit = st.number_input(
+                "Önceki dönem net kâr",
+                value=float(draft.previous_net_profit),
+            )
+
+        st.subheader("Bilanço")
+        left, right = st.columns(2)
+        with left:
+            equity = st.number_input("Özkaynak", value=float(draft.equity))
+            total_debt = st.number_input(
+                "Finansal borç",
+                value=float(draft.total_debt),
+            )
+            cash = st.number_input("Nakit", value=float(draft.cash))
+            total_assets = st.number_input(
+                "Toplam varlık",
+                value=float(draft.total_assets),
+            )
+        with right:
+            current_assets = st.number_input(
+                "Dönen varlık",
+                value=float(draft.current_assets),
+            )
+            current_liabilities = st.number_input(
+                "Kısa vadeli yükümlülük",
+                value=float(draft.current_liabilities),
+            )
+            operating_cash_flow = st.number_input(
+                "Operasyonel nakit akışı",
+                value=float(draft.operating_cash_flow),
+            )
+            capital_expenditures = st.number_input(
+                "Yatırım harcaması",
+                value=float(draft.capital_expenditures),
+            )
+
+        st.subheader("Nitel değerlendirme")
+        valuation = st.slider("Değerleme girdisi", 0, 100, 50)
+        management = st.slider("Yönetim girdisi", 0, 100, 70)
+        risk = st.slider("Risk dayanıklılığı", 0, 100, 50)
+
+        submitted = st.form_submit_button(
+            "Doğrula, hesapla ve kaydet",
+            type="primary",
+            icon=":material/document_scanner:",
+        )
+
+    if not submitted:
+        return
+
+    try:
+        verified_draft = FinancialReportDraft(
+            symbol=symbol,
+            company_name=company_name,
+            period_months=period_months,
+            revenue=revenue,
+            previous_revenue=previous_revenue,
+            net_profit=net_profit,
+            previous_net_profit=previous_net_profit,
+            equity=equity,
+            total_debt=total_debt,
+            cash=cash,
+            current_assets=current_assets,
+            current_liabilities=current_liabilities,
+            operating_cash_flow=operating_cash_flow,
+            capital_expenditures=capital_expenditures,
+            total_assets=total_assets,
+            valuation_score_input=valuation,
+            management_score_input=management,
+            risk_score_input=risk,
+        )
+        metrics = to_financial_metrics(verified_draft)
+    except (ValidationError, AppValidationError) as exc:
+        st.error(f"Doğrulanan bilgiler geçerli değil: {exc}")
+        return
+
+    upsert_company(metrics)
+    score = calculate_alpha_score(metrics)
+    st.success(
+        f"{metrics.symbol} kaydedildi. Alpha Score: {score.total:.1f}/100"
+    )
+
+    with st.container(border=True):
+        st.metric("Alpha Score", f"{score.total:.1f}/100")
+        st.caption(f"Not: {score.grade} | Karar: {score.decision}")
+        st.dataframe(_score_table(score), hide_index=True, width="stretch")
 
 
 def render_company_list() -> None:
