@@ -18,6 +18,7 @@ from app.audit.service import (
     attach_analysis_snapshot,
     build_pdf_field_sources,
     compare_analysis_snapshots,
+    is_duplicate_analysis,
 )
 from app.comparison.service import build_comparison
 from app.confidence.service import calculate_analysis_confidence
@@ -520,6 +521,11 @@ def render_dashboard() -> None:
                             "Analiz güveni (%)": audit.confidence_score,
                             "Güven durumu": audit.confidence_status or "-",
                             "Metodoloji": audit.methodology_version,
+                            "Analiz kimliği": (
+                                audit.input_fingerprint[:10]
+                                if audit.input_fingerprint
+                                else "-"
+                            ),
                             **{
                                 CATEGORY_LABELS[category]: audit.score_breakdown.get(
                                     category
@@ -737,10 +743,19 @@ def _render_quality_correction_form() -> None:
         for error in validation.errors:
             st.error(error)
         return
+    previous_audit = get_latest_company_data_audit(corrected.symbol)
+    previous_period_end = (
+        previous_audit.report_period_end if previous_audit else None
+    )
+    if is_duplicate_analysis(previous_audit, corrected, previous_period_end):
+        st.info(
+            "Bu dönem ve finansal girdiler son analizle aynı. Puan geçmişine "
+            "yinelenen kayıt eklenmedi."
+        )
+        return
     upsert_company(corrected)
     score = calculate_alpha_score(corrected)
     add_score_history(corrected.symbol, score)
-    previous_audit = get_latest_company_data_audit(corrected.symbol)
     corrected_sources = dict(previous_audit.field_sources) if previous_audit else {}
     corrected_sources.update(
         {field: MetricSourceType.CORRECTION for field in required_fields}
@@ -764,7 +779,9 @@ def _render_quality_correction_form() -> None:
         field_sources=corrected_sources,
     )
     confidence = calculate_analysis_confidence(corrected, score, audit)
-    add_company_data_audit(attach_analysis_snapshot(audit, score, confidence))
+    add_company_data_audit(
+        attach_analysis_snapshot(audit, corrected, score, confidence)
+    )
     for warning in validation.warnings:
         st.warning(warning)
     st.success(
@@ -1578,6 +1595,12 @@ def _validate_and_save_company(
             "yanlışlıkla güncel analiz üzerine yazmamak için kayıt durduruldu."
         )
         return
+    if is_duplicate_analysis(latest_audit, metrics, report_period_end):
+        st.info(
+            "Bu dönem ve finansal girdiler son analizle aynı. Puan geçmişine "
+            "yinelenen kayıt eklenmedi."
+        )
+        return
 
     validation = validate_financial_metrics(metrics)
     if validation.errors:
@@ -1610,7 +1633,9 @@ def _validate_and_save_company(
         field_sources=field_sources,
     )
     confidence = calculate_analysis_confidence(metrics, score, audit)
-    add_company_data_audit(attach_analysis_snapshot(audit, score, confidence))
+    add_company_data_audit(
+        attach_analysis_snapshot(audit, metrics, score, confidence)
+    )
     st.success(
         f"{metrics.symbol} kaydedildi. Alpha Score: {score.total:.1f}/100"
     )

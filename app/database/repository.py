@@ -106,6 +106,7 @@ def init_db():
             confidence_score REAL,
             confidence_status TEXT NOT NULL DEFAULT '',
             methodology_version TEXT NOT NULL DEFAULT 'legacy',
+            input_fingerprint TEXT NOT NULL DEFAULT '',
             score_breakdown TEXT NOT NULL DEFAULT '{}',
             field_sources TEXT NOT NULL DEFAULT '{}',
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -125,6 +126,7 @@ def init_db():
             "confidence_score": "REAL",
             "confidence_status": "TEXT NOT NULL DEFAULT ''",
             "methodology_version": "TEXT NOT NULL DEFAULT 'legacy'",
+            "input_fingerprint": "TEXT NOT NULL DEFAULT ''",
             "score_breakdown": "TEXT NOT NULL DEFAULT '{}'",
         }
         for column, definition in audit_migrations.items():
@@ -195,8 +197,8 @@ def add_company_data_audit(audit: CompanyDataAudit) -> None:
             symbol, source_type, company_profile, period_months, report_period_end,
             financial_report_name, activity_report_name, completeness,
             alpha_score, grade, decision, confidence_score, confidence_status,
-            methodology_version, score_breakdown, field_sources)
-            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            methodology_version, input_fingerprint, score_breakdown, field_sources)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 audit.symbol.upper().strip(),
                 audit.source_type.value,
@@ -216,6 +218,7 @@ def add_company_data_audit(audit: CompanyDataAudit) -> None:
                 audit.confidence_score,
                 audit.confidence_status,
                 audit.methodology_version,
+                audit.input_fingerprint,
                 json.dumps(audit.score_breakdown, sort_keys=True),
                 json.dumps(
                     {
@@ -245,7 +248,8 @@ def get_latest_company_data_audit(symbol: str) -> CompanyDataAudit | None:
             report_period_end,
             financial_report_name, activity_report_name, completeness,
             alpha_score, grade, decision, confidence_score,
-            confidence_status, methodology_version, score_breakdown,
+            confidence_status, methodology_version, input_fingerprint,
+            score_breakdown,
             field_sources, created_at
             FROM company_data_audit
             WHERE symbol=? ORDER BY id DESC LIMIT 1""",
@@ -265,7 +269,8 @@ def list_company_data_audits(
             report_period_end,
             financial_report_name, activity_report_name, completeness,
             alpha_score, grade, decision, confidence_score,
-            confidence_status, methodology_version, score_breakdown,
+            confidence_status, methodology_version, input_fingerprint,
+            score_breakdown,
             field_sources, created_at
             FROM company_data_audit
             WHERE symbol=? ORDER BY id DESC LIMIT ?""",
@@ -283,7 +288,8 @@ def list_latest_company_data_audits() -> list[CompanyDataAudit]:
             audit.financial_report_name, audit.activity_report_name,
             audit.completeness, audit.alpha_score, audit.grade,
             audit.decision, audit.confidence_score, audit.confidence_status,
-            audit.methodology_version, audit.score_breakdown,
+            audit.methodology_version, audit.input_fingerprint,
+            audit.score_breakdown,
             audit.field_sources, audit.created_at
             FROM company_data_audit AS audit
             INNER JOIN (

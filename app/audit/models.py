@@ -51,6 +51,7 @@ class CompanyDataAudit(BaseModel):
     confidence_score: float | None = Field(default=None, ge=0, le=100)
     confidence_status: str = ""
     methodology_version: str = "legacy"
+    input_fingerprint: str = Field(default="", max_length=64)
     score_breakdown: dict[str, float] = Field(default_factory=dict)
     field_sources: dict[str, MetricSourceType] = Field(default_factory=dict)
     created_at: datetime | None = None

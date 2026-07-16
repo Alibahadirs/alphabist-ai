@@ -1,4 +1,8 @@
+import hashlib
+import json
+from datetime import date
 from math import isclose
+from typing import Any
 
 from app.audit.models import (
     AnalysisSnapshotComparison,
@@ -26,6 +30,43 @@ FINANCIAL_METRIC_DEPENDENCIES = {
     "free_cash_flow": {"operating_cash_flow", "capital_expenditures"},
     "asset_turnover": {"revenue", "total_assets"},
 }
+
+
+def _normalize_fingerprint_value(value: Any) -> Any:
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        number = round(float(value), 8)
+        return 0.0 if number == 0 else number
+    return value
+
+
+def analysis_input_fingerprint(metrics: FinancialMetrics) -> str:
+    payload = {
+        key: _normalize_fingerprint_value(value)
+        for key, value in metrics.model_dump(mode="json").items()
+        if key != "company_name"
+    }
+    payload["methodology_version"] = settings.scoring_methodology_version
+    serialized = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def is_duplicate_analysis(
+    latest_audit: CompanyDataAudit | None,
+    metrics: FinancialMetrics,
+    report_period_end: date | None,
+) -> bool:
+    if latest_audit is None or not latest_audit.input_fingerprint:
+        return False
+    return (
+        latest_audit.report_period_end == report_period_end
+        and latest_audit.input_fingerprint
+        == analysis_input_fingerprint(metrics)
+    )
 
 
 def compare_analysis_snapshots(
@@ -75,6 +116,7 @@ def compare_analysis_snapshots(
 
 def attach_analysis_snapshot(
     audit: CompanyDataAudit,
+    metrics: FinancialMetrics,
     score: ScoreBreakdown,
     confidence: AnalysisConfidence,
 ) -> CompanyDataAudit:
@@ -86,6 +128,7 @@ def attach_analysis_snapshot(
             "confidence_score": confidence.total,
             "confidence_status": confidence.status,
             "methodology_version": settings.scoring_methodology_version,
+            "input_fingerprint": analysis_input_fingerprint(metrics),
             "score_breakdown": {
                 category: getattr(score, category)
                 for category in CATEGORY_MAX_POINTS

@@ -5,9 +5,11 @@ from pydantic import ValidationError
 
 from app.audit.models import CompanyDataAudit, DataSourceType, MetricSourceType
 from app.audit.service import (
+    analysis_input_fingerprint,
     attach_analysis_snapshot,
     build_pdf_field_sources,
     compare_analysis_snapshots,
+    is_duplicate_analysis,
 )
 from app.confidence.models import AnalysisConfidence
 from app.core.settings import settings
@@ -38,6 +40,7 @@ def _audit(symbol: str, score: float, source: DataSourceType) -> CompanyDataAudi
         confidence_score=90,
         confidence_status="Yüksek",
         methodology_version="test-methodology",
+        input_fingerprint="a" * 64,
         score_breakdown={"profitability": 12.5},
         field_sources={
             "revenue_growth": MetricSourceType.FINANCIAL_REPORT,
@@ -73,6 +76,7 @@ def test_audit_repository_returns_latest_record(tmp_path, monkeypatch):
     assert latest.field_sources["risk_score_input"] == MetricSourceType.MANUAL
     assert latest.confidence_score == 90
     assert latest.methodology_version == "test-methodology"
+    assert latest.input_fingerprint == "a" * 64
     assert latest.score_breakdown["profitability"] == 12.5
 
     audits = repository.list_latest_company_data_audits()
@@ -129,6 +133,7 @@ def test_init_db_migrates_existing_audit_table(tmp_path, monkeypatch):
         "confidence_score",
         "confidence_status",
         "methodology_version",
+        "input_fingerprint",
         "score_breakdown",
     }.issubset(columns)
 
@@ -206,6 +211,7 @@ def test_analysis_snapshot_freezes_methodology_and_breakdown():
 
     snapshot = attach_analysis_snapshot(
         _audit("TEST", 0, DataSourceType.PDF),
+        FinancialMetrics(symbol="TEST", company_name="Test"),
         score,
         confidence,
     )
@@ -214,6 +220,7 @@ def test_analysis_snapshot_freezes_methodology_and_breakdown():
     assert snapshot.grade == "B+"
     assert snapshot.confidence_score == 88
     assert snapshot.methodology_version == settings.scoring_methodology_version
+    assert len(snapshot.input_fingerprint) == 64
     assert snapshot.score_breakdown["profitability"] == 12
 
 
@@ -272,3 +279,43 @@ def test_snapshot_comparison_rejects_different_companies():
             _audit("AKSA", 80, DataSourceType.PDF),
             _audit("GUBRF", 82, DataSourceType.PDF),
         )
+
+
+def test_analysis_fingerprint_is_stable_and_ignores_company_name():
+    first = FinancialMetrics(
+        symbol="AKSA",
+        company_name="Aksa Akrilik",
+        revenue_growth=12.5,
+        free_cash_flow=0,
+    )
+    renamed = first.model_copy(update={"company_name": "AKSA AKRİLİK A.Ş."})
+    equivalent = first.model_copy(update={"free_cash_flow": -0.0})
+    changed = first.model_copy(update={"revenue_growth": 13})
+
+    assert analysis_input_fingerprint(first) == analysis_input_fingerprint(renamed)
+    assert analysis_input_fingerprint(first) == analysis_input_fingerprint(equivalent)
+    assert analysis_input_fingerprint(first) != analysis_input_fingerprint(changed)
+
+
+def test_duplicate_analysis_requires_same_period_and_fingerprint():
+    metrics = FinancialMetrics(
+        symbol="AKSA",
+        company_name="Aksa Akrilik",
+        revenue_growth=12.5,
+    )
+    latest = _audit("AKSA", 80, DataSourceType.PDF).model_copy(
+        update={"input_fingerprint": analysis_input_fingerprint(metrics)}
+    )
+
+    assert is_duplicate_analysis(
+        latest, metrics, date(2026, 3, 31)
+    ) is True
+    assert is_duplicate_analysis(
+        latest, metrics, date(2026, 6, 30)
+    ) is False
+    assert is_duplicate_analysis(
+        latest,
+        metrics.model_copy(update={"revenue_growth": 13}),
+        date(2026, 3, 31),
+    ) is False
+    assert is_duplicate_analysis(None, metrics, date(2026, 3, 31)) is False

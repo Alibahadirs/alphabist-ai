@@ -24,6 +24,7 @@ yerel Streamlit uygulaması.
 - Son iki analiz arasında toplam puan, güven ve kategori değişimi karşılaştırması
 - Tam rapor dönem sonu, güncellik ve finansal/faaliyet raporu dönem uyumu kontrolü
 - Veri kalite merkezinde toplu rapor güncelliği özeti, yaşı ve durum filtresi
+- Metodolojiye duyarlı analiz parmak izi ve yinelenen kayıt engelleme
 - SQLite ile yerel veri saklama
 
 ## Çalıştırma
