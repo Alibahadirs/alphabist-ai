@@ -1,3 +1,5 @@
+from datetime import date
+
 from pydantic import BaseModel, Field
 
 from app.sector.profiles import CompanyProfile
@@ -7,6 +9,7 @@ class FinancialReportDraft(BaseModel):
     symbol: str = ""
     company_name: str = ""
     period_months: int = Field(default=3, ge=1, le=12)
+    report_period_end: date | None = None
     company_profile: CompanyProfile = CompanyProfile.STANDARD
 
     revenue: float = 0
@@ -49,6 +52,7 @@ class CompanyMetadata(BaseModel):
     symbol: str = ""
     company_name: str = ""
     period_months: int | None = Field(default=None, ge=1, le=12)
+    report_period_end: date | None = None
     company_profile: CompanyProfile = CompanyProfile.STANDARD
 
 

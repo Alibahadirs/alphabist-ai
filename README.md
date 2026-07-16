@@ -22,6 +22,7 @@ yerel Streamlit uygulaması.
 - Düşük güvenli kayıtlarda yatırım kararını otomatik doğrulama seviyesine çekme
 - Her analiz için metodoloji, kategori puanları, güven ve karar anlık görüntüsü
 - Son iki analiz arasında toplam puan, güven ve kategori değişimi karşılaştırması
+- Tam rapor dönem sonu, güncellik ve finansal/faaliyet raporu dönem uyumu kontrolü
 - SQLite ile yerel veri saklama
 
 ## Çalıştırma

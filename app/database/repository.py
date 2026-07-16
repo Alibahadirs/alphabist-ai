@@ -96,6 +96,7 @@ def init_db():
             source_type TEXT NOT NULL,
             company_profile TEXT NOT NULL,
             period_months INTEGER,
+            report_period_end TEXT,
             financial_report_name TEXT NOT NULL DEFAULT '',
             activity_report_name TEXT NOT NULL DEFAULT '',
             completeness REAL NOT NULL,
@@ -117,6 +118,7 @@ def init_db():
             ).fetchall()
         }
         audit_migrations = {
+            "report_period_end": "TEXT",
             "field_sources": "TEXT NOT NULL DEFAULT '{}'",
             "grade": "TEXT NOT NULL DEFAULT ''",
             "decision": "TEXT NOT NULL DEFAULT ''",
@@ -190,16 +192,21 @@ def add_company_data_audit(audit: CompanyDataAudit) -> None:
     with connect() as conn:
         conn.execute(
             """INSERT INTO company_data_audit(
-            symbol, source_type, company_profile, period_months,
+            symbol, source_type, company_profile, period_months, report_period_end,
             financial_report_name, activity_report_name, completeness,
             alpha_score, grade, decision, confidence_score, confidence_status,
             methodology_version, score_breakdown, field_sources)
-            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 audit.symbol.upper().strip(),
                 audit.source_type.value,
                 audit.company_profile.value,
                 audit.period_months,
+                (
+                    audit.report_period_end.isoformat()
+                    if audit.report_period_end
+                    else None
+                ),
                 audit.financial_report_name,
                 audit.activity_report_name,
                 audit.completeness,
@@ -235,6 +242,7 @@ def get_latest_company_data_audit(symbol: str) -> CompanyDataAudit | None:
     with connect() as conn:
         row = conn.execute(
             """SELECT id, symbol, source_type, company_profile, period_months,
+            report_period_end,
             financial_report_name, activity_report_name, completeness,
             alpha_score, grade, decision, confidence_score,
             confidence_status, methodology_version, score_breakdown,
@@ -254,6 +262,7 @@ def list_company_data_audits(
     with connect() as conn:
         rows = conn.execute(
             """SELECT id, symbol, source_type, company_profile, period_months,
+            report_period_end,
             financial_report_name, activity_report_name, completeness,
             alpha_score, grade, decision, confidence_score,
             confidence_status, methodology_version, score_breakdown,
@@ -270,6 +279,7 @@ def list_latest_company_data_audits() -> list[CompanyDataAudit]:
         rows = conn.execute(
             """SELECT audit.id, audit.symbol, audit.source_type,
             audit.company_profile, audit.period_months,
+            audit.report_period_end,
             audit.financial_report_name, audit.activity_report_name,
             audit.completeness, audit.alpha_score, audit.grade,
             audit.decision, audit.confidence_score, audit.confidence_status,

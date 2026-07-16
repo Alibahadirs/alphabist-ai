@@ -1,3 +1,5 @@
+from datetime import date
+
 import pytest
 
 from app.core.exceptions import ValidationError
@@ -137,6 +139,16 @@ def test_extract_company_metadata_from_activity_report_text():
     assert metadata.symbol == "AKSA"
     assert metadata.company_name == "AKSA AKRİLİK KİMYA SANAYİİ A.Ş."
     assert metadata.period_months == 6
+    assert metadata.report_period_end == date(2026, 6, 30)
+
+
+def test_extracts_latest_period_end_from_report_header():
+    metadata = extract_company_metadata(
+        "Rapor dönemi 01.01.2026 - 31.03.2026 Karşılaştırma 31.12.2025"
+    )
+
+    assert metadata.period_months == 3
+    assert metadata.report_period_end == date(2026, 3, 31)
 
 
 def test_extract_symbol_from_pdf_filename_when_text_has_no_code():

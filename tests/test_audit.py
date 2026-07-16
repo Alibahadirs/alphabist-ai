@@ -1,3 +1,5 @@
+from datetime import date
+
 import pytest
 from pydantic import ValidationError
 
@@ -26,6 +28,7 @@ def _audit(symbol: str, score: float, source: DataSourceType) -> CompanyDataAudi
         source_type=source,
         company_profile=CompanyProfile.STANDARD,
         period_months=3,
+        report_period_end=date(2026, 3, 31),
         financial_report_name="financial.pdf",
         activity_report_name="activity.pdf",
         completeness=92.5,
@@ -62,6 +65,7 @@ def test_audit_repository_returns_latest_record(tmp_path, monkeypatch):
     assert latest.alpha_score == 84.0
     assert latest.source_type == DataSourceType.CORRECTION
     assert latest.financial_report_name == "financial.pdf"
+    assert latest.report_period_end == date(2026, 3, 31)
     assert (
         latest.field_sources["revenue_growth"]
         == MetricSourceType.FINANCIAL_REPORT
@@ -119,6 +123,7 @@ def test_init_db_migrates_existing_audit_table(tmp_path, monkeypatch):
         }
     assert {
         "field_sources",
+        "report_period_end",
         "grade",
         "decision",
         "confidence_score",

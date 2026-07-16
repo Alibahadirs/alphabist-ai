@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from enum import Enum
 
 from pydantic import BaseModel, Field
@@ -41,6 +41,7 @@ class CompanyDataAudit(BaseModel):
     source_type: DataSourceType
     company_profile: CompanyProfile
     period_months: int | None = Field(default=None, ge=1, le=12)
+    report_period_end: date | None = None
     financial_report_name: str = ""
     activity_report_name: str = ""
     completeness: float = Field(ge=0, le=100)

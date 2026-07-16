@@ -1,3 +1,6 @@
+from calendar import monthrange
+from datetime import date
+
 from app.audit.models import (
     CompanyDataAudit,
     DataSourceType,
@@ -31,11 +34,21 @@ def _strong_metrics() -> FinancialMetrics:
 
 def _audit(source: MetricSourceType) -> CompanyDataAudit:
     required = PROFILE_REQUIREMENTS[CompanyProfile.STANDARD]
+    today = date.today()
+    quarter_ends = [
+        date(today.year - 1, 12, 31),
+        *[
+            date(today.year, month, monthrange(today.year, month)[1])
+            for month in (3, 6, 9, 12)
+        ],
+    ]
+    report_period_end = max(value for value in quarter_ends if value <= today)
     return CompanyDataAudit(
         symbol="TEST",
         source_type=DataSourceType.PDF,
         company_profile=CompanyProfile.STANDARD,
-        period_months=3,
+        period_months=report_period_end.month,
+        report_period_end=report_period_end,
         financial_report_name="financial.pdf",
         completeness=100,
         alpha_score=100,
@@ -76,6 +89,7 @@ def test_manual_sources_gate_strong_buy_decision():
         update={
             "source_type": DataSourceType.MANUAL,
             "period_months": None,
+            "report_period_end": None,
             "financial_report_name": "",
         }
     )
@@ -85,3 +99,21 @@ def test_manual_sources_gate_strong_buy_decision():
     assert confidence.total == 82.5
     assert confidence.status == "Orta"
     assert confidence.decision == "İzle / Doğrula"
+
+
+def test_stale_report_caps_confidence_and_blocks_decision():
+    metrics = _strong_metrics()
+    score = calculate_alpha_score(metrics)
+    audit = _audit(MetricSourceType.FINANCIAL_REPORT).model_copy(
+        update={
+            "period_months": 12,
+            "report_period_end": date(2020, 12, 31),
+        }
+    )
+
+    confidence = calculate_analysis_confidence(metrics, score, audit)
+
+    assert confidence.total == 69
+    assert confidence.status == "Düşük"
+    assert confidence.decision == "Doğrula / Karar verme"
+    assert any("güncel değil" in reason for reason in confidence.reasons)

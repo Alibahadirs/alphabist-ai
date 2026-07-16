@@ -1,5 +1,7 @@
 from app.audit.models import CompanyDataAudit, MetricSourceType
 from app.confidence.models import AnalysisConfidence
+from app.reporting.models import ReportFreshnessStatus
+from app.reporting.service import assess_report_period
 from app.scoring.models import FinancialMetrics, ScoreBreakdown
 from app.sector.profiles import CompanyProfile
 from app.validation.service import PROFILE_REQUIREMENTS, validate_financial_metrics
@@ -65,9 +67,11 @@ def calculate_analysis_confidence(
         report_component += 5
         if audit.financial_report_name or audit.activity_report_name:
             report_component += 5
-    period_component = (
-        5.0 if audit and audit.period_months in (3, 6, 9, 12) else 0.0
+    period_assessment = assess_report_period(
+        audit.report_period_end if audit else None,
+        audit.period_months if audit else None,
     )
+    period_component = period_assessment.confidence_points
     validation_penalty = min(
         5.0,
         len(validation.errors) * 5 + len(validation.warnings) * 1.5,
@@ -81,6 +85,8 @@ def calculate_analysis_confidence(
         + validation_component,
         2,
     )
+    if period_assessment.blocks_decision:
+        total = min(total, 69.0)
 
     reasons: list[str] = []
     if audit is None:
@@ -90,8 +96,8 @@ def calculate_analysis_confidence(
             f"Sektör için gerekli {len(required_fields)} göstergenin "
             f"{sourced_required} tanesinin kaynağı izlenebiliyor."
         )
-    if audit and audit.period_months not in (3, 6, 9, 12):
-        reasons.append("Finansal rapor dönemi doğrulanmamış.")
+    if audit and period_assessment.status != ReportFreshnessStatus.CURRENT:
+        reasons.append(period_assessment.message)
     if validation.missing_fields:
         reasons.append(
             f"{len(validation.missing_fields)} zorunlu sektör göstergesi eksik."
@@ -108,7 +114,11 @@ def calculate_analysis_confidence(
     return AnalysisConfidence(
         total=total,
         status=_status(total),
-        decision=_gated_decision(score, total, bool(validation.errors)),
+        decision=_gated_decision(
+            score,
+            total,
+            bool(validation.errors) or period_assessment.blocks_decision,
+        ),
         completeness_component=completeness_component,
         source_component=source_component,
         report_component=report_component,

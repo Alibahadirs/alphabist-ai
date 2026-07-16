@@ -1,5 +1,6 @@
 import re
 import unicodedata
+from datetime import date
 from io import BytesIO
 
 from pypdf import PdfReader
@@ -212,6 +213,19 @@ def _canonical_symbol(symbol: str, company_name: str = "") -> str:
     return normalized_symbol
 
 
+def _extract_report_period_end(text: str) -> date | None:
+    candidates: list[date] = []
+    for day, month, year in re.findall(
+        r"\b(30|31)[./-](0?3|0?6|0?9|12)[./-](20\d{2})\b",
+        text[:12000],
+    ):
+        try:
+            candidates.append(date(int(year), int(month), int(day)))
+        except ValueError:
+            continue
+    return max(candidates) if candidates else None
+
+
 def extract_company_metadata(text: str, file_name: str = "") -> CompanyMetadata:
     symbol = ""
     for pattern in SYMBOL_PATTERNS:
@@ -239,15 +253,14 @@ def extract_company_metadata(text: str, file_name: str = "") -> CompanyMetadata:
 
     symbol = _canonical_symbol(symbol, company_name)
 
-    period_months = None
-    date_match = re.search(r"(?:30|31)[./-](0[369]|12)[./-]\d{4}", text)
-    if date_match:
-        period_months = int(date_match.group(1))
+    report_period_end = _extract_report_period_end(text)
+    period_months = report_period_end.month if report_period_end else None
 
     return CompanyMetadata(
         symbol=symbol,
         company_name=company_name,
         period_months=period_months,
+        report_period_end=report_period_end,
         company_profile=detect_company_profile(company_name, text[:20000]),
     )
 
@@ -314,6 +327,7 @@ def extract_financial_report(
     metadata_updates = {
         "symbol": metadata.symbol,
         "company_name": metadata.company_name,
+        "report_period_end": metadata.report_period_end,
         "company_profile": metadata.company_profile,
     }
     sector_metrics = extract_sector_metrics(text)
@@ -326,6 +340,11 @@ def extract_financial_report(
     if len(extracted_fields) < 5:
         warnings.append(
             "Az sayıda kalem otomatik bulundu. Rakamları finansal tablodan kontrol edin."
+        )
+    if metadata.report_period_end is None:
+        warnings.append(
+            "Rapor dönem sonu tarihi otomatik bulunamadı. Tarihi rapor kapağından "
+            "doğrulayın."
         )
     if draft.revenue == 0 and draft.previous_revenue > 0:
         warnings.append(
@@ -362,6 +381,8 @@ def extract_activity_report(
         warnings.append("Faaliyet raporunda hisse kodu bulunamadı.")
     if not metadata.company_name:
         warnings.append("Faaliyet raporunda şirket adı bulunamadı.")
+    if metadata.report_period_end is None:
+        warnings.append("Faaliyet raporunda dönem sonu tarihi bulunamadı.")
     return ActivityReportExtractionResult(
         metadata=metadata,
         page_count=page_count,

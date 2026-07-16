@@ -1,4 +1,5 @@
 import hashlib
+from datetime import date
 
 import pandas as pd
 import streamlit as st
@@ -54,6 +55,8 @@ from app.parser.models import (
 )
 from app.portfolio.models import PortfolioPosition
 from app.portfolio.service import build_portfolio_summary
+from app.reporting.models import ReportFreshnessStatus
+from app.reporting.service import assess_report_period, report_period_regresses
 from app.scoring.engine import calculate_alpha_score
 from app.scoring.models import FinancialMetrics, ScoreBreakdown
 from app.sector.profiles import CompanyProfile, PROFILE_LABELS
@@ -250,7 +253,10 @@ def _audit_source_label(audit: CompanyDataAudit | None) -> str:
 def _audit_period_label(audit: CompanyDataAudit | None) -> str:
     if audit is None or audit.period_months is None:
         return "Belirtilmemiş"
-    return f"{audit.period_months} aylık"
+    label = f"{audit.period_months} aylık"
+    if audit.report_period_end:
+        label = f"{audit.report_period_end:%d.%m.%Y} · {label}"
+    return label
 
 
 def _audit_date(audit: CompanyDataAudit | None):
@@ -505,6 +511,7 @@ def render_dashboard() -> None:
                             "Tarih": audit.created_at,
                             "Kaynak": SOURCE_LABELS[audit.source_type],
                             "Dönem": _audit_period_label(audit),
+                            "Dönem sonu": audit.report_period_end,
                             "Finansal rapor": audit.financial_report_name or "-",
                             "Faaliyet raporu": audit.activity_report_name or "-",
                             "Yeterlilik (%)": audit.completeness,
@@ -529,6 +536,9 @@ def render_dashboard() -> None:
                 column_config={
                     "Tarih": st.column_config.DatetimeColumn(
                         "Tarih", format="DD.MM.YYYY HH:mm"
+                    ),
+                    "Dönem sonu": st.column_config.DateColumn(
+                        "Dönem sonu", format="DD.MM.YYYY"
                     ),
                     "Yeterlilik (%)": st.column_config.ProgressColumn(
                         "Yeterlilik (%)", min_value=0, max_value=100, format="%.1f"
@@ -741,6 +751,9 @@ def _render_quality_correction_form() -> None:
         source_type=DataSourceType.CORRECTION,
         company_profile=profile,
         period_months=previous_audit.period_months if previous_audit else None,
+        report_period_end=(
+            previous_audit.report_period_end if previous_audit else None
+        ),
         financial_report_name=(
             previous_audit.financial_report_name if previous_audit else ""
         ),
@@ -1011,7 +1024,10 @@ def _render_pdf_company_form() -> None:
     document_token = hashlib.sha256(financial_bytes + activity_bytes).hexdigest()
     if st.session_state.get("company_pdf_token") != document_token:
         for key in list(st.session_state):
-            if key.startswith("pdf_field_") or key == "pdf_period":
+            if key.startswith("pdf_field_") or key in {
+                "pdf_period",
+                "pdf_period_end",
+            }:
                 del st.session_state[key]
         st.session_state["company_pdf_token"] = document_token
 
@@ -1030,12 +1046,25 @@ def _render_pdf_company_form() -> None:
     draft = financial_result.draft
     if activity_result:
         metadata = activity_result.metadata
+        period_conflict = (
+            draft.report_period_end is not None
+            and metadata.report_period_end is not None
+            and draft.report_period_end != metadata.report_period_end
+        )
+        effective_period_end = (
+            draft.report_period_end or metadata.report_period_end
+        )
         activity_updates = dict(activity_result.sector_metrics)
         activity_updates.update(
             {
                 "symbol": metadata.symbol or draft.symbol,
                 "company_name": metadata.company_name or draft.company_name,
-                "period_months": metadata.period_months or draft.period_months,
+                "period_months": (
+                    effective_period_end.month
+                    if effective_period_end
+                    else metadata.period_months or draft.period_months
+                ),
+                "report_period_end": effective_period_end,
                 "company_profile": (
                     metadata.company_profile
                     if metadata.company_profile != CompanyProfile.STANDARD
@@ -1046,6 +1075,12 @@ def _render_pdf_company_form() -> None:
         draft = draft.model_copy(
             update=activity_updates
         )
+        if period_conflict:
+            st.warning(
+                "Finansal rapor ile faaliyet raporunun dönem sonları farklı. "
+                f"Finansal rapordaki {financial_result.draft.report_period_end:%d.%m.%Y} "
+                "tarihi kullanıldı; kaydetmeden önce doğrulayın."
+            )
 
     with st.container(horizontal=True):
         st.metric(
@@ -1097,6 +1132,13 @@ def _render_pdf_company_form() -> None:
         format_func=lambda value: f"{value} aylık",
         key="pdf_period",
     )
+    report_period_end = st.date_input(
+        "Rapor dönem sonu",
+        value=draft.report_period_end,
+        format="DD.MM.YYYY",
+        key="pdf_period_end",
+        help="PDF'den bulunan tarihi resmi rapor kapağıyla doğrulayın.",
+    )
     company_profile = _profile_select(
         "Şirket türü / sektör profili",
         draft.company_profile,
@@ -1107,6 +1149,7 @@ def _render_pdf_company_form() -> None:
             "symbol": draft.symbol or "TEMP",
             "company_name": draft.company_name or "Geçici şirket",
             "period_months": period_months,
+            "report_period_end": report_period_end,
             "company_profile": company_profile,
         }
     )
@@ -1258,6 +1301,7 @@ def _render_pdf_company_form() -> None:
         sector_metrics=sector_metrics,
         source_type=DataSourceType.PDF,
         period_months=period_months,
+        report_period_end=report_period_end,
         financial_report_name=financial_file.name,
         activity_report_name=activity_file.name if activity_file else "",
         field_sources=build_pdf_field_sources(
@@ -1297,6 +1341,21 @@ def _render_manual_company_form() -> None:
             "Şirket adı",
             "Aselsan Elektronik Sanayi ve Ticaret A.Ş.",
         )
+        period_left, period_right = st.columns(2)
+        with period_left:
+            period_months = st.selectbox(
+                "Rapor dönemi",
+                [3, 6, 9, 12],
+                format_func=lambda value: f"{value} aylık",
+                key="manual_period",
+            )
+        with period_right:
+            report_period_end = st.date_input(
+                "Rapor dönem sonu",
+                value=None,
+                format="DD.MM.YYYY",
+                key="manual_period_end",
+            )
 
         left, right = st.columns(2)
         with left:
@@ -1393,6 +1452,8 @@ def _render_manual_company_form() -> None:
         risk=risk,
         company_profile=company_profile,
         sector_metrics=sector_metrics,
+        period_months=period_months,
+        report_period_end=report_period_end,
     )
 
 
@@ -1416,11 +1477,18 @@ def _validate_and_save_company(
     sector_metrics: dict[str, float | None] | None = None,
     source_type: DataSourceType = DataSourceType.MANUAL,
     period_months: int | None = None,
+    report_period_end: date | None = None,
     financial_report_name: str = "",
     activity_report_name: str = "",
     field_sources: dict[str, MetricSourceType] | None = None,
 ) -> None:
     sector_metrics = sector_metrics or {}
+    period_assessment = assess_report_period(report_period_end, period_months)
+    if period_assessment.blocks_decision:
+        st.error(period_assessment.message)
+        return
+    if period_assessment.status != ReportFreshnessStatus.CURRENT:
+        st.warning(period_assessment.message)
     try:
         metrics = FinancialMetrics(
             symbol=symbol.upper().strip(),
@@ -1442,6 +1510,17 @@ def _validate_and_save_company(
         )
     except ValidationError as exc:
         st.error(f"Girilen bilgiler geçerli değil: {exc}")
+        return
+
+    latest_audit = get_latest_company_data_audit(metrics.symbol)
+    if report_period_regresses(
+        report_period_end,
+        latest_audit.report_period_end if latest_audit else None,
+    ):
+        st.error(
+            "Rapor dönemi mevcut son kayıttan daha eski. Önceki dönemleri "
+            "yanlışlıkla güncel analiz üzerine yazmamak için kayıt durduruldu."
+        )
         return
 
     validation = validate_financial_metrics(metrics)
@@ -1467,6 +1546,7 @@ def _validate_and_save_company(
         source_type=source_type,
         company_profile=CompanyProfile(metrics.company_profile),
         period_months=period_months,
+        report_period_end=report_period_end,
         financial_report_name=financial_report_name,
         activity_report_name=activity_report_name,
         completeness=score.data_completeness,
