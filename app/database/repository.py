@@ -100,6 +100,12 @@ def init_db():
             activity_report_name TEXT NOT NULL DEFAULT '',
             completeness REAL NOT NULL,
             alpha_score REAL NOT NULL,
+            grade TEXT NOT NULL DEFAULT '',
+            decision TEXT NOT NULL DEFAULT '',
+            confidence_score REAL,
+            confidence_status TEXT NOT NULL DEFAULT '',
+            methodology_version TEXT NOT NULL DEFAULT 'legacy',
+            score_breakdown TEXT NOT NULL DEFAULT '{}',
             field_sources TEXT NOT NULL DEFAULT '{}',
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY(symbol) REFERENCES companies(symbol))"""
@@ -110,11 +116,20 @@ def init_db():
                 "PRAGMA table_info(company_data_audit)"
             ).fetchall()
         }
-        if "field_sources" not in audit_columns:
-            conn.execute(
-                "ALTER TABLE company_data_audit "
-                "ADD COLUMN field_sources TEXT NOT NULL DEFAULT '{}'"
-            )
+        audit_migrations = {
+            "field_sources": "TEXT NOT NULL DEFAULT '{}'",
+            "grade": "TEXT NOT NULL DEFAULT ''",
+            "decision": "TEXT NOT NULL DEFAULT ''",
+            "confidence_score": "REAL",
+            "confidence_status": "TEXT NOT NULL DEFAULT ''",
+            "methodology_version": "TEXT NOT NULL DEFAULT 'legacy'",
+            "score_breakdown": "TEXT NOT NULL DEFAULT '{}'",
+        }
+        for column, definition in audit_migrations.items():
+            if column not in audit_columns:
+                conn.execute(
+                    f"ALTER TABLE company_data_audit ADD COLUMN {column} {definition}"
+                )
         conn.execute(
             """CREATE INDEX IF NOT EXISTS idx_company_data_audit_symbol_id
             ON company_data_audit(symbol, id)"""
@@ -177,8 +192,9 @@ def add_company_data_audit(audit: CompanyDataAudit) -> None:
             """INSERT INTO company_data_audit(
             symbol, source_type, company_profile, period_months,
             financial_report_name, activity_report_name, completeness,
-            alpha_score, field_sources)
-            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            alpha_score, grade, decision, confidence_score, confidence_status,
+            methodology_version, score_breakdown, field_sources)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 audit.symbol.upper().strip(),
                 audit.source_type.value,
@@ -188,6 +204,12 @@ def add_company_data_audit(audit: CompanyDataAudit) -> None:
                 audit.activity_report_name,
                 audit.completeness,
                 audit.alpha_score,
+                audit.grade,
+                audit.decision,
+                audit.confidence_score,
+                audit.confidence_status,
+                audit.methodology_version,
+                json.dumps(audit.score_breakdown, sort_keys=True),
                 json.dumps(
                     {
                         field: source.value
@@ -203,6 +225,9 @@ def add_company_data_audit(audit: CompanyDataAudit) -> None:
 def _audit_from_row(row: sqlite3.Row) -> CompanyDataAudit:
     values = dict(row)
     values["field_sources"] = json.loads(values.get("field_sources") or "{}")
+    values["score_breakdown"] = json.loads(
+        values.get("score_breakdown") or "{}"
+    )
     return CompanyDataAudit(**values)
 
 
@@ -211,7 +236,9 @@ def get_latest_company_data_audit(symbol: str) -> CompanyDataAudit | None:
         row = conn.execute(
             """SELECT id, symbol, source_type, company_profile, period_months,
             financial_report_name, activity_report_name, completeness,
-            alpha_score, field_sources, created_at
+            alpha_score, grade, decision, confidence_score,
+            confidence_status, methodology_version, score_breakdown,
+            field_sources, created_at
             FROM company_data_audit
             WHERE symbol=? ORDER BY id DESC LIMIT 1""",
             (symbol.upper().strip(),),
@@ -228,7 +255,9 @@ def list_company_data_audits(
         rows = conn.execute(
             """SELECT id, symbol, source_type, company_profile, period_months,
             financial_report_name, activity_report_name, completeness,
-            alpha_score, field_sources, created_at
+            alpha_score, grade, decision, confidence_score,
+            confidence_status, methodology_version, score_breakdown,
+            field_sources, created_at
             FROM company_data_audit
             WHERE symbol=? ORDER BY id DESC LIMIT ?""",
             (symbol.upper().strip(), safe_limit),
@@ -242,8 +271,10 @@ def list_latest_company_data_audits() -> list[CompanyDataAudit]:
             """SELECT audit.id, audit.symbol, audit.source_type,
             audit.company_profile, audit.period_months,
             audit.financial_report_name, audit.activity_report_name,
-            audit.completeness, audit.alpha_score, audit.field_sources,
-            audit.created_at
+            audit.completeness, audit.alpha_score, audit.grade,
+            audit.decision, audit.confidence_score, audit.confidence_status,
+            audit.methodology_version, audit.score_breakdown,
+            audit.field_sources, audit.created_at
             FROM company_data_audit AS audit
             INNER JOIN (
                 SELECT symbol, MAX(id) AS latest_id

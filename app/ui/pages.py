@@ -12,7 +12,7 @@ from app.audit.models import (
     MetricSourceType,
     SOURCE_LABELS,
 )
-from app.audit.service import build_pdf_field_sources
+from app.audit.service import attach_analysis_snapshot, build_pdf_field_sources
 from app.comparison.service import build_comparison
 from app.confidence.service import calculate_analysis_confidence
 from app.core.constants import CATEGORY_MAX_POINTS
@@ -395,6 +395,17 @@ def render_dashboard() -> None:
                             "Faaliyet raporu": audit.activity_report_name or "-",
                             "Yeterlilik (%)": audit.completeness,
                             "Alpha Score": audit.alpha_score,
+                            "Not": audit.grade or "-",
+                            "Karar": audit.decision or "-",
+                            "Analiz güveni (%)": audit.confidence_score,
+                            "Güven durumu": audit.confidence_status or "-",
+                            "Metodoloji": audit.methodology_version,
+                            **{
+                                CATEGORY_LABELS[category]: audit.score_breakdown.get(
+                                    category
+                                )
+                                for category in CATEGORY_MAX_POINTS
+                            },
                         }
                         for audit in reversed(audit_history)
                     ]
@@ -409,6 +420,9 @@ def render_dashboard() -> None:
                         "Yeterlilik (%)", min_value=0, max_value=100, format="%.1f"
                     ),
                     "Alpha Score": st.column_config.NumberColumn(format="%.1f"),
+                    "Analiz güveni (%)": st.column_config.ProgressColumn(
+                        "Analiz güveni (%)", min_value=0, max_value=100, format="%.1f"
+                    ),
                 },
             )
 
@@ -608,23 +622,23 @@ def _render_quality_correction_form() -> None:
     corrected_sources.update(
         {field: MetricSourceType.CORRECTION for field in required_fields}
     )
-    add_company_data_audit(
-        CompanyDataAudit(
-            symbol=corrected.symbol,
-            source_type=DataSourceType.CORRECTION,
-            company_profile=profile,
-            period_months=previous_audit.period_months if previous_audit else None,
-            financial_report_name=(
-                previous_audit.financial_report_name if previous_audit else ""
-            ),
-            activity_report_name=(
-                previous_audit.activity_report_name if previous_audit else ""
-            ),
-            completeness=validation.completeness,
-            alpha_score=score.total,
-            field_sources=corrected_sources,
-        )
+    audit = CompanyDataAudit(
+        symbol=corrected.symbol,
+        source_type=DataSourceType.CORRECTION,
+        company_profile=profile,
+        period_months=previous_audit.period_months if previous_audit else None,
+        financial_report_name=(
+            previous_audit.financial_report_name if previous_audit else ""
+        ),
+        activity_report_name=(
+            previous_audit.activity_report_name if previous_audit else ""
+        ),
+        completeness=validation.completeness,
+        alpha_score=score.total,
+        field_sources=corrected_sources,
     )
+    confidence = calculate_analysis_confidence(corrected, score, audit)
+    add_company_data_audit(attach_analysis_snapshot(audit, score, confidence))
     for warning in validation.warnings:
         st.warning(warning)
     st.success(
@@ -1334,19 +1348,19 @@ def _validate_and_save_company(
             for field, value in metrics.model_dump().items()
             if field not in excluded and value is not None
         }
-    add_company_data_audit(
-        CompanyDataAudit(
-            symbol=metrics.symbol,
-            source_type=source_type,
-            company_profile=CompanyProfile(metrics.company_profile),
-            period_months=period_months,
-            financial_report_name=financial_report_name,
-            activity_report_name=activity_report_name,
-            completeness=score.data_completeness,
-            alpha_score=score.total,
-            field_sources=field_sources,
-        )
+    audit = CompanyDataAudit(
+        symbol=metrics.symbol,
+        source_type=source_type,
+        company_profile=CompanyProfile(metrics.company_profile),
+        period_months=period_months,
+        financial_report_name=financial_report_name,
+        activity_report_name=activity_report_name,
+        completeness=score.data_completeness,
+        alpha_score=score.total,
+        field_sources=field_sources,
     )
+    confidence = calculate_analysis_confidence(metrics, score, audit)
+    add_company_data_audit(attach_analysis_snapshot(audit, score, confidence))
     st.success(
         f"{metrics.symbol} kaydedildi. Alpha Score: {score.total:.1f}/100"
     )

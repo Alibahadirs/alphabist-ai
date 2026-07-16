@@ -2,7 +2,9 @@ import pytest
 from pydantic import ValidationError
 
 from app.audit.models import CompanyDataAudit, DataSourceType, MetricSourceType
-from app.audit.service import build_pdf_field_sources
+from app.audit.service import attach_analysis_snapshot, build_pdf_field_sources
+from app.confidence.models import AnalysisConfidence
+from app.core.settings import settings
 from app.database import repository
 from app.parser.models import (
     ActivityReportExtractionResult,
@@ -10,7 +12,7 @@ from app.parser.models import (
     FinancialReportDraft,
     PdfExtractionResult,
 )
-from app.scoring.models import FinancialMetrics
+from app.scoring.models import FinancialMetrics, ScoreBreakdown
 from app.sector.profiles import CompanyProfile
 
 
@@ -24,6 +26,12 @@ def _audit(symbol: str, score: float, source: DataSourceType) -> CompanyDataAudi
         activity_report_name="activity.pdf",
         completeness=92.5,
         alpha_score=score,
+        grade="A",
+        decision="Al",
+        confidence_score=90,
+        confidence_status="Yüksek",
+        methodology_version="test-methodology",
+        score_breakdown={"profitability": 12.5},
         field_sources={
             "revenue_growth": MetricSourceType.FINANCIAL_REPORT,
             "risk_score_input": MetricSourceType.MANUAL,
@@ -55,6 +63,9 @@ def test_audit_repository_returns_latest_record(tmp_path, monkeypatch):
         == MetricSourceType.FINANCIAL_REPORT
     )
     assert latest.field_sources["risk_score_input"] == MetricSourceType.MANUAL
+    assert latest.confidence_score == 90
+    assert latest.methodology_version == "test-methodology"
+    assert latest.score_breakdown["profitability"] == 12.5
 
     audits = repository.list_latest_company_data_audits()
     assert len(audits) == 1
@@ -102,7 +113,15 @@ def test_init_db_migrates_existing_audit_table(tmp_path, monkeypatch):
                 "PRAGMA table_info(company_data_audit)"
             ).fetchall()
         }
-    assert "field_sources" in columns
+    assert {
+        "field_sources",
+        "grade",
+        "decision",
+        "confidence_score",
+        "confidence_status",
+        "methodology_version",
+        "score_breakdown",
+    }.issubset(columns)
 
 
 def test_pdf_field_sources_distinguish_reports_and_user_changes():
@@ -148,3 +167,42 @@ def test_pdf_field_sources_distinguish_reports_and_user_changes():
     )
     assert sources["risk_score_input"] == MetricSourceType.MANUAL
     assert changed_sources["revenue_growth"] == MetricSourceType.MANUAL
+
+
+def test_analysis_snapshot_freezes_methodology_and_breakdown():
+    score = ScoreBreakdown(
+        profitability=12,
+        growth=11,
+        leverage=10,
+        liquidity=8,
+        cash_flow=12,
+        efficiency=8,
+        valuation=7,
+        risk=4,
+        management=4,
+        total=76,
+        grade="B+",
+        decision="İzle / Kademeli Al",
+    )
+    confidence = AnalysisConfidence(
+        total=88,
+        status="Yüksek",
+        decision="İzle / Kademeli Al",
+        completeness_component=55,
+        source_component=20,
+        report_component=5,
+        period_component=5,
+        validation_component=3,
+    )
+
+    snapshot = attach_analysis_snapshot(
+        _audit("TEST", 0, DataSourceType.PDF),
+        score,
+        confidence,
+    )
+
+    assert snapshot.alpha_score == 76
+    assert snapshot.grade == "B+"
+    assert snapshot.confidence_score == 88
+    assert snapshot.methodology_version == settings.scoring_methodology_version
+    assert snapshot.score_breakdown["profitability"] == 12

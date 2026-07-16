@@ -20,6 +20,7 @@ yerel Streamlit uygulaması.
 - Banka, sigorta, GYO ve finansal hizmet şirketleri için sektöre özgü doğrulama
 - Veri yeterliliği ve kaynak kanıtına göre bağımsız analiz güveni puanı
 - Düşük güvenli kayıtlarda yatırım kararını otomatik doğrulama seviyesine çekme
+- Her analiz için metodoloji, kategori puanları, güven ve karar anlık görüntüsü
 - SQLite ile yerel veri saklama
 
 ## Çalıştırma

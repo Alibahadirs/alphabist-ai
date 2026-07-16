@@ -45,5 +45,11 @@ class CompanyDataAudit(BaseModel):
     activity_report_name: str = ""
     completeness: float = Field(ge=0, le=100)
     alpha_score: float = Field(ge=0, le=100)
+    grade: str = ""
+    decision: str = ""
+    confidence_score: float | None = Field(default=None, ge=0, le=100)
+    confidence_status: str = ""
+    methodology_version: str = "legacy"
+    score_breakdown: dict[str, float] = Field(default_factory=dict)
     field_sources: dict[str, MetricSourceType] = Field(default_factory=dict)
     created_at: datetime | None = None

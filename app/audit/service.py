@@ -1,11 +1,14 @@
 from math import isclose
 
-from app.audit.models import MetricSourceType
+from app.audit.models import CompanyDataAudit, MetricSourceType
+from app.confidence.models import AnalysisConfidence
+from app.core.constants import CATEGORY_MAX_POINTS
+from app.core.settings import settings
 from app.parser.models import (
     ActivityReportExtractionResult,
     PdfExtractionResult,
 )
-from app.scoring.models import FinancialMetrics
+from app.scoring.models import FinancialMetrics, ScoreBreakdown
 
 
 FINANCIAL_METRIC_DEPENDENCIES = {
@@ -19,6 +22,27 @@ FINANCIAL_METRIC_DEPENDENCIES = {
     "free_cash_flow": {"operating_cash_flow", "capital_expenditures"},
     "asset_turnover": {"revenue", "total_assets"},
 }
+
+
+def attach_analysis_snapshot(
+    audit: CompanyDataAudit,
+    score: ScoreBreakdown,
+    confidence: AnalysisConfidence,
+) -> CompanyDataAudit:
+    return audit.model_copy(
+        update={
+            "alpha_score": score.total,
+            "grade": score.grade,
+            "decision": confidence.decision,
+            "confidence_score": confidence.total,
+            "confidence_status": confidence.status,
+            "methodology_version": settings.scoring_methodology_version,
+            "score_breakdown": {
+                category: getattr(score, category)
+                for category in CATEGORY_MAX_POINTS
+            },
+        }
+    )
 
 
 def build_pdf_field_sources(

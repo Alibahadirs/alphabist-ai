@@ -5,6 +5,7 @@ from app.audit.models import (
     MetricSourceType,
     SOURCE_LABELS,
 )
+from app.audit.service import attach_analysis_snapshot, build_pdf_field_sources
 
 __all__ = [
     "CompanyDataAudit",
@@ -12,4 +13,6 @@ __all__ = [
     "METRIC_SOURCE_LABELS",
     "MetricSourceType",
     "SOURCE_LABELS",
+    "attach_analysis_snapshot",
+    "build_pdf_field_sources",
 ]
