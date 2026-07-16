@@ -52,6 +52,7 @@ from app.parser.extractor import (
     extract_financial_report,
     parse_turkish_number,
 )
+from app.parser.identity import company_names_match, validate_report_identity
 from app.parser.models import (
     ActivityReportExtractionResult,
     PdfExtractionResult,
@@ -1152,6 +1153,22 @@ def _render_pdf_company_form() -> None:
     draft = financial_result.draft
     if activity_result:
         metadata = activity_result.metadata
+        report_identity_errors = validate_report_identity(
+            submitted_symbol=draft.symbol or metadata.symbol,
+            submitted_company_name=draft.company_name or metadata.company_name,
+            financial_symbol=draft.symbol,
+            financial_company_name=draft.company_name,
+            activity_symbol=metadata.symbol,
+            activity_company_name=metadata.company_name,
+        )
+        if report_identity_errors:
+            st.error(
+                "Yüklenen finansal rapor ile faaliyet raporu aynı şirkete ait "
+                "görünmüyor. Kayıt formu güvenlik amacıyla açılmadı."
+            )
+            for identity_error in report_identity_errors:
+                st.warning(identity_error)
+            return
         period_conflict = (
             draft.report_period_end is not None
             and metadata.report_period_end is not None
@@ -1375,6 +1392,26 @@ def _render_pdf_company_form() -> None:
         )
 
     if not submitted:
+        return
+    identity_errors = validate_report_identity(
+        submitted_symbol=symbol,
+        submitted_company_name=company_name,
+        financial_symbol=financial_result.draft.symbol,
+        financial_company_name=financial_result.draft.company_name,
+        activity_symbol=(
+            activity_result.metadata.symbol if activity_result else ""
+        ),
+        activity_company_name=(
+            activity_result.metadata.company_name if activity_result else ""
+        ),
+    )
+    if identity_errors:
+        st.error(
+            "Hisse kodu veya şirket unvanı yüklenen raporlarla uyuşmuyor. "
+            "Kayıt yapılmadı."
+        )
+        for identity_error in identity_errors:
+            st.warning(identity_error)
         return
     try:
         operating_cash_flow = _parse_amount_input(
@@ -1623,6 +1660,17 @@ def _validate_and_save_company(
         return
 
     latest_audit = get_latest_company_data_audit(metrics.symbol)
+    existing_company = get_company(metrics.symbol)
+    if existing_company and not company_names_match(
+        existing_company.company_name,
+        metrics.company_name,
+    ):
+        st.error(
+            f"{metrics.symbol} kodu veritabanında "
+            f"'{existing_company.company_name}' unvanıyla kayıtlı. Farklı bir "
+            "şirket unvanıyla üzerine yazma işlemi durduruldu."
+        )
+        return
     if report_period_regresses(
         report_period_end,
         latest_audit.report_period_end if latest_audit else None,

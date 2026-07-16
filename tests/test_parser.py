@@ -10,6 +10,7 @@ from app.parser.extractor import (
     extract_financial_values,
     parse_turkish_number,
 )
+from app.parser.identity import company_names_match, validate_report_identity
 from app.sector.profiles import CompanyProfile
 from app.parser.models import FinancialReportDraft
 
@@ -176,6 +177,73 @@ def test_infers_kervansaray_symbol_from_company_name():
     )
 
     assert metadata.symbol == "KERVN"
+
+
+def test_company_name_matching_allows_legal_and_short_names():
+    assert company_names_match(
+        "AKSA AKRİLİK KİMYA SANAYİİ A.Ş.",
+        "Aksa Akrilik",
+    )
+    assert not company_names_match(
+        "AKSA AKRİLİK KİMYA SANAYİİ A.Ş.",
+        "Gübre Fabrikaları Türk A.Ş.",
+    )
+    assert not company_names_match(
+        "TÜRKİYE İŞ BANKASI A.Ş.",
+        "TÜRKİYE GARANTİ BANKASI A.Ş.",
+    )
+    assert company_names_match(
+        "TÜRKİYE SİGORTA A.Ş.",
+        "Türkiye Sigorta",
+    )
+
+
+def test_report_identity_rejects_symbol_and_company_mismatch():
+    errors = validate_report_identity(
+        submitted_symbol="GUBRF",
+        submitted_company_name="Gübre Fabrikaları Türk A.Ş.",
+        financial_symbol="AKSA",
+        financial_company_name="AKSA AKRİLİK KİMYA SANAYİİ A.Ş.",
+        activity_symbol="AKSA",
+        activity_company_name="AKSA AKRİLİK KİMYA SANAYİİ A.Ş.",
+    )
+
+    assert any("Girilen hisse kodu" in error for error in errors)
+    assert any("şirket unvanı" in error for error in errors)
+
+    report_conflicts = validate_report_identity(
+        submitted_symbol="AKSA",
+        submitted_company_name="AKSA AKRİLİK KİMYA SANAYİİ A.Ş.",
+        financial_symbol="AKSA",
+        financial_company_name="AKSA AKRİLİK KİMYA SANAYİİ A.Ş.",
+        activity_symbol="GUBRF",
+        activity_company_name="GÜBRE FABRİKALARI TÜRK A.Ş.",
+    )
+    assert any("hisse kodları farklı" in error for error in report_conflicts)
+    assert any("farklı şirket unvanları" in error for error in report_conflicts)
+
+
+def test_report_identity_accepts_consistent_short_name():
+    assert validate_report_identity(
+        submitted_symbol="aksa",
+        submitted_company_name="Aksa Akrilik",
+        financial_symbol="AKSA",
+        financial_company_name="AKSA AKRİLİK KİMYA SANAYİİ A.Ş.",
+        activity_symbol="AKSA",
+        activity_company_name="AKSA AKRİLİK KİMYA SANAYİİ ANONİM ŞİRKETİ",
+    ) == []
+
+
+def test_financial_report_warns_when_identity_is_missing(monkeypatch):
+    monkeypatch.setattr(
+        "app.parser.extractor._read_pdf",
+        lambda _file_bytes: ("Hasılat 1.000.000 900.000", 1),
+    )
+
+    result = extract_financial_report(b"pdf", "finansal_rapor.pdf")
+
+    assert "Finansal raporda hisse kodu bulunamadı." in result.warnings
+    assert "Finansal raporda şirket unvanı bulunamadı." in result.warnings
 
 
 def test_financial_report_tracks_sector_metric_fields(monkeypatch):

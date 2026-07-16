@@ -27,6 +27,7 @@ yerel Streamlit uygulaması.
 - Metodolojiye duyarlı analiz parmak izi ve yinelenen kayıt engelleme
 - Kaynak PDF'ler için ayrı SHA-256 belge kimliği ve geçmiş doğrulaması
 - Aynı PDF'nin farklı şirket veya rapor döneminde kullanılmasını engelleme
+- Finansal/faaliyet raporu, hisse kodu ve şirket unvanı çapraz doğrulaması
 - SQLite ile yerel veri saklama
 
 ## Çalıştırma

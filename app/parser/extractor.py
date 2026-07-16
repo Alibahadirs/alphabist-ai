@@ -346,6 +346,10 @@ def extract_financial_report(
             "Rapor dönem sonu tarihi otomatik bulunamadı. Tarihi rapor kapağından "
             "doğrulayın."
         )
+    if not metadata.symbol:
+        warnings.append("Finansal raporda hisse kodu bulunamadı.")
+    if not metadata.company_name:
+        warnings.append("Finansal raporda şirket unvanı bulunamadı.")
     if draft.revenue == 0 and draft.previous_revenue > 0:
         warnings.append(
             "Cari dönem hasılatı raporda boş veya sıfır; önceki döneme göre ciro "
