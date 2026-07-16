@@ -7,4 +7,4 @@ Set-ExecutionPolicy -Scope Process Bypass -Force
 
 py -m pip install --upgrade pip
 py -m pip install -r requirements.txt
-py -m streamlit run main.py
+py -m streamlit run main.py --server.headless true
