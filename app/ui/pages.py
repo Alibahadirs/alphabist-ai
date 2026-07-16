@@ -19,6 +19,7 @@ from app.audit.service import (
     build_pdf_field_sources,
     compare_analysis_snapshots,
     document_fingerprint,
+    document_identity_conflicts,
     is_duplicate_analysis,
 )
 from app.comparison.service import build_comparison
@@ -32,6 +33,7 @@ from app.database.repository import (
     get_latest_company_data_audit,
     list_companies,
     list_company_data_audits,
+    list_document_usages,
     list_latest_company_data_audits,
     list_portfolio_positions,
     list_score_history,
@@ -1629,6 +1631,30 @@ def _validate_and_save_company(
             "Rapor dönemi mevcut son kayıttan daha eski. Önceki dönemleri "
             "yanlışlıkla güncel analiz üzerine yazmamak için kayıt durduruldu."
         )
+        return
+    document_usages = {
+        audit.id: audit
+        for document_hash in (
+            financial_report_hash,
+            activity_report_hash,
+        )
+        if document_hash
+        for audit in list_document_usages(document_hash)
+    }
+    document_conflicts = document_identity_conflicts(
+        list(document_usages.values()),
+        symbol=metrics.symbol,
+        report_period_end=report_period_end,
+        financial_report_hash=financial_report_hash,
+        activity_report_hash=activity_report_hash,
+    )
+    if document_conflicts:
+        st.error(
+            "Kaynak belge başka bir şirket veya dönemle eşleşiyor. "
+            "Yanlış raporla kayıt yapılmasını önlemek için işlem durduruldu."
+        )
+        for conflict in document_conflicts:
+            st.warning(conflict)
         return
     if is_duplicate_analysis(latest_audit, metrics, report_period_end):
         st.info(

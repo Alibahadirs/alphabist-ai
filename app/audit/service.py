@@ -37,6 +37,52 @@ def document_fingerprint(file_bytes: bytes) -> str:
     return hashlib.sha256(file_bytes).hexdigest() if file_bytes else ""
 
 
+def document_identity_conflicts(
+    existing_audits: list[CompanyDataAudit],
+    *,
+    symbol: str,
+    report_period_end: date | None,
+    financial_report_hash: str = "",
+    activity_report_hash: str = "",
+) -> list[str]:
+    """Detect source documents previously assigned to another company or period."""
+    normalized_symbol = symbol.upper().strip()
+    submitted_hashes = {
+        value
+        for value in (financial_report_hash, activity_report_hash)
+        if value
+    }
+    conflicts: set[str] = set()
+
+    for audit in existing_audits:
+        existing_hashes = {
+            value
+            for value in (
+                audit.financial_report_hash,
+                audit.activity_report_hash,
+            )
+            if value
+        }
+        if not submitted_hashes.intersection(existing_hashes):
+            continue
+        if audit.symbol.upper().strip() != normalized_symbol:
+            conflicts.add(
+                f"Belge daha önce {audit.symbol} şirketi için kullanılmış."
+            )
+        elif audit.report_period_end != report_period_end:
+            previous_period = (
+                f"{audit.report_period_end:%d.%m.%Y}"
+                if audit.report_period_end
+                else "belirtilmemiş dönem"
+            )
+            conflicts.add(
+                f"Belge daha önce {audit.symbol} için {previous_period} "
+                "dönemiyle kaydedilmiş."
+            )
+
+    return sorted(conflicts)
+
+
 def _normalize_fingerprint_value(value: Any) -> Any:
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         number = round(float(value), 8)

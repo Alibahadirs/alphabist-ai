@@ -10,6 +10,7 @@ from app.audit.service import (
     build_pdf_field_sources,
     compare_analysis_snapshots,
     document_fingerprint,
+    document_identity_conflicts,
     is_duplicate_analysis,
 )
 from app.confidence.models import AnalysisConfidence
@@ -90,6 +91,8 @@ def test_audit_repository_returns_latest_record(tmp_path, monkeypatch):
 
     history = repository.list_company_data_audits("AKSA")
     assert [item.alpha_score for item in history] == [78.0, 84.0]
+    usages = repository.list_document_usages("b" * 64)
+    assert [item.alpha_score for item in usages] == [84.0, 78.0]
 
 
 def test_audit_period_must_be_valid():
@@ -137,6 +140,12 @@ def test_init_db_migrates_existing_audit_table(tmp_path, monkeypatch):
                 "PRAGMA table_info(company_data_audit)"
             ).fetchall()
         }
+        indexes = {
+            row[1]
+            for row in conn.execute(
+                "PRAGMA index_list(company_data_audit)"
+            ).fetchall()
+        }
     assert {
         "field_sources",
         "report_period_end",
@@ -150,6 +159,10 @@ def test_init_db_migrates_existing_audit_table(tmp_path, monkeypatch):
         "financial_report_hash",
         "activity_report_hash",
     }.issubset(columns)
+    assert {
+        "idx_company_data_audit_financial_hash",
+        "idx_company_data_audit_activity_hash",
+    }.issubset(indexes)
 
 
 def test_document_fingerprint_identifies_file_content():
@@ -161,6 +174,42 @@ def test_document_fingerprint_identifies_file_content():
     assert first == second
     assert first != changed
     assert document_fingerprint(b"") == ""
+
+
+def test_document_identity_rejects_cross_company_and_period_reuse():
+    existing = _audit("AKSA", 80, DataSourceType.PDF)
+
+    company_conflicts = document_identity_conflicts(
+        [existing],
+        symbol="GUBRF",
+        report_period_end=date(2026, 3, 31),
+        financial_report_hash="b" * 64,
+    )
+    period_conflicts = document_identity_conflicts(
+        [existing],
+        symbol="AKSA",
+        report_period_end=date(2026, 6, 30),
+        financial_report_hash="b" * 64,
+    )
+    same_source = document_identity_conflicts(
+        [existing],
+        symbol="aksa",
+        report_period_end=date(2026, 3, 31),
+        financial_report_hash="b" * 64,
+    )
+
+    assert company_conflicts == [
+        "Belge daha önce AKSA şirketi için kullanılmış."
+    ]
+    assert "31.03.2026" in period_conflicts[0]
+    assert same_source == []
+
+
+def test_document_usage_empty_hash_returns_no_records(tmp_path, monkeypatch):
+    monkeypatch.setattr(repository, "DB_PATH", tmp_path / "test.db")
+    repository.init_db()
+
+    assert repository.list_document_usages("") == []
 
 
 def test_pdf_field_sources_distinguish_reports_and_user_changes():

@@ -142,6 +142,14 @@ def init_db():
             """CREATE INDEX IF NOT EXISTS idx_company_data_audit_symbol_id
             ON company_data_audit(symbol, id)"""
         )
+        conn.execute(
+            """CREATE INDEX IF NOT EXISTS idx_company_data_audit_financial_hash
+            ON company_data_audit(financial_report_hash)"""
+        )
+        conn.execute(
+            """CREATE INDEX IF NOT EXISTS idx_company_data_audit_activity_hash
+            ON company_data_audit(activity_report_hash)"""
+        )
 
 def upsert_company(m):
     d = m.model_dump(mode="json")
@@ -307,6 +315,30 @@ def list_latest_company_data_audits() -> list[CompanyDataAudit]:
                 FROM company_data_audit GROUP BY symbol
             ) AS latest ON latest.latest_id = audit.id
             ORDER BY audit.symbol"""
+        ).fetchall()
+    return [_audit_from_row(row) for row in rows]
+
+
+def list_document_usages(
+    document_hash: str,
+    limit: int = 100,
+) -> list[CompanyDataAudit]:
+    if not document_hash:
+        return []
+    safe_limit = max(1, min(limit, 500))
+    with connect() as conn:
+        rows = conn.execute(
+            """SELECT id, symbol, source_type, company_profile, period_months,
+            report_period_end,
+            financial_report_name, activity_report_name,
+            financial_report_hash, activity_report_hash, completeness,
+            alpha_score, grade, decision, confidence_score,
+            confidence_status, methodology_version, input_fingerprint,
+            score_breakdown, field_sources, created_at
+            FROM company_data_audit
+            WHERE financial_report_hash=? OR activity_report_hash=?
+            ORDER BY id DESC LIMIT ?""",
+            (document_hash, document_hash, safe_limit),
         ).fetchall()
     return [_audit_from_row(row) for row in rows]
 
