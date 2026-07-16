@@ -1,6 +1,10 @@
 from math import isclose
 
-from app.audit.models import CompanyDataAudit, MetricSourceType
+from app.audit.models import (
+    AnalysisSnapshotComparison,
+    CompanyDataAudit,
+    MetricSourceType,
+)
 from app.confidence.models import AnalysisConfidence
 from app.core.constants import CATEGORY_MAX_POINTS
 from app.core.settings import settings
@@ -22,6 +26,51 @@ FINANCIAL_METRIC_DEPENDENCIES = {
     "free_cash_flow": {"operating_cash_flow", "capital_expenditures"},
     "asset_turnover": {"revenue", "total_assets"},
 }
+
+
+def compare_analysis_snapshots(
+    previous: CompanyDataAudit,
+    current: CompanyDataAudit,
+) -> AnalysisSnapshotComparison:
+    if previous.symbol.upper().strip() != current.symbol.upper().strip():
+        raise ValueError("Yalnızca aynı şirkete ait analizler karşılaştırılabilir.")
+
+    confidence_delta = None
+    if previous.confidence_score is not None and current.confidence_score is not None:
+        confidence_delta = round(
+            current.confidence_score - previous.confidence_score,
+            2,
+        )
+
+    category_deltas = {
+        category: round(
+            current.score_breakdown[category]
+            - previous.score_breakdown[category],
+            2,
+        )
+        for category in CATEGORY_MAX_POINTS
+        if category in previous.score_breakdown
+        and category in current.score_breakdown
+    }
+
+    return AnalysisSnapshotComparison(
+        previous_score=previous.alpha_score,
+        current_score=current.alpha_score,
+        score_delta=round(current.alpha_score - previous.alpha_score, 2),
+        previous_confidence=previous.confidence_score,
+        current_confidence=current.confidence_score,
+        confidence_delta=confidence_delta,
+        previous_grade=previous.grade,
+        current_grade=current.grade,
+        previous_decision=previous.decision,
+        current_decision=current.decision,
+        previous_methodology=previous.methodology_version,
+        current_methodology=current.methodology_version,
+        methodology_changed=(
+            previous.methodology_version != current.methodology_version
+        ),
+        category_deltas=category_deltas,
+    )
 
 
 def attach_analysis_snapshot(

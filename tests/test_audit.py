@@ -2,7 +2,11 @@ import pytest
 from pydantic import ValidationError
 
 from app.audit.models import CompanyDataAudit, DataSourceType, MetricSourceType
-from app.audit.service import attach_analysis_snapshot, build_pdf_field_sources
+from app.audit.service import (
+    attach_analysis_snapshot,
+    build_pdf_field_sources,
+    compare_analysis_snapshots,
+)
 from app.confidence.models import AnalysisConfidence
 from app.core.settings import settings
 from app.database import repository
@@ -206,3 +210,60 @@ def test_analysis_snapshot_freezes_methodology_and_breakdown():
     assert snapshot.confidence_score == 88
     assert snapshot.methodology_version == settings.scoring_methodology_version
     assert snapshot.score_breakdown["profitability"] == 12
+
+
+def test_analysis_snapshot_comparison_calculates_category_changes():
+    previous = _audit("AKSA", 78, DataSourceType.PDF).model_copy(
+        update={
+            "confidence_score": 80,
+            "grade": "B+",
+            "decision": "İzle",
+            "score_breakdown": {"profitability": 10, "growth": 9},
+        }
+    )
+    current = _audit("aksa", 84, DataSourceType.CORRECTION).model_copy(
+        update={
+            "confidence_score": 90,
+            "grade": "A",
+            "decision": "Al",
+            "score_breakdown": {"profitability": 12.5, "growth": 8},
+        }
+    )
+
+    comparison = compare_analysis_snapshots(previous, current)
+
+    assert comparison.score_delta == 6
+    assert comparison.confidence_delta == 10
+    assert comparison.category_deltas == {
+        "profitability": 2.5,
+        "growth": -1,
+    }
+    assert comparison.previous_grade == "B+"
+    assert comparison.current_grade == "A"
+    assert comparison.methodology_changed is False
+
+
+def test_snapshot_comparison_handles_legacy_missing_fields():
+    previous = _audit("TEST", 70, DataSourceType.LEGACY).model_copy(
+        update={
+            "confidence_score": None,
+            "methodology_version": "legacy",
+            "score_breakdown": {},
+        }
+    )
+    current = _audit("TEST", 75, DataSourceType.PDF)
+
+    comparison = compare_analysis_snapshots(previous, current)
+
+    assert comparison.score_delta == 5
+    assert comparison.confidence_delta is None
+    assert comparison.category_deltas == {}
+    assert comparison.methodology_changed is True
+
+
+def test_snapshot_comparison_rejects_different_companies():
+    with pytest.raises(ValueError, match="aynı şirkete"):
+        compare_analysis_snapshots(
+            _audit("AKSA", 80, DataSourceType.PDF),
+            _audit("GUBRF", 82, DataSourceType.PDF),
+        )

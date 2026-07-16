@@ -53,3 +53,20 @@ class CompanyDataAudit(BaseModel):
     score_breakdown: dict[str, float] = Field(default_factory=dict)
     field_sources: dict[str, MetricSourceType] = Field(default_factory=dict)
     created_at: datetime | None = None
+
+
+class AnalysisSnapshotComparison(BaseModel):
+    previous_score: float = Field(ge=0, le=100)
+    current_score: float = Field(ge=0, le=100)
+    score_delta: float
+    previous_confidence: float | None = Field(default=None, ge=0, le=100)
+    current_confidence: float | None = Field(default=None, ge=0, le=100)
+    confidence_delta: float | None = None
+    previous_grade: str = ""
+    current_grade: str = ""
+    previous_decision: str = ""
+    current_decision: str = ""
+    previous_methodology: str = "legacy"
+    current_methodology: str = "legacy"
+    methodology_changed: bool = False
+    category_deltas: dict[str, float] = Field(default_factory=dict)

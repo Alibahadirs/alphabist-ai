@@ -21,6 +21,7 @@ yerel Streamlit uygulaması.
 - Veri yeterliliği ve kaynak kanıtına göre bağımsız analiz güveni puanı
 - Düşük güvenli kayıtlarda yatırım kararını otomatik doğrulama seviyesine çekme
 - Her analiz için metodoloji, kategori puanları, güven ve karar anlık görüntüsü
+- Son iki analiz arasında toplam puan, güven ve kategori değişimi karşılaştırması
 - SQLite ile yerel veri saklama
 
 ## Çalıştırma

@@ -6,13 +6,18 @@ from pydantic import ValidationError
 
 from app.analysis.service import build_company_analysis
 from app.audit.models import (
+    AnalysisSnapshotComparison,
     CompanyDataAudit,
     DataSourceType,
     METRIC_SOURCE_LABELS,
     MetricSourceType,
     SOURCE_LABELS,
 )
-from app.audit.service import attach_analysis_snapshot, build_pdf_field_sources
+from app.audit.service import (
+    attach_analysis_snapshot,
+    build_pdf_field_sources,
+    compare_analysis_snapshots,
+)
 from app.comparison.service import build_comparison
 from app.confidence.service import calculate_analysis_confidence
 from app.core.constants import CATEGORY_MAX_POINTS
@@ -292,6 +297,101 @@ def _render_data_source_caption(audit: CompanyDataAudit | None) -> None:
             )
 
 
+def _render_snapshot_comparison(
+    comparison: AnalysisSnapshotComparison,
+    previous: CompanyDataAudit,
+    current: CompanyDataAudit,
+) -> None:
+    with st.container(border=True):
+        st.subheader("Son analize göre değişim")
+        with st.container(horizontal=True):
+            st.metric(
+                "Alpha Score",
+                f"{comparison.current_score:.1f}/100",
+                f"{comparison.score_delta:+.1f}",
+                border=True,
+            )
+            st.metric(
+                "Analiz güveni",
+                (
+                    f"{comparison.current_confidence:.1f}/100"
+                    if comparison.current_confidence is not None
+                    else "-"
+                ),
+                (
+                    f"{comparison.confidence_delta:+.1f}"
+                    if comparison.confidence_delta is not None
+                    else None
+                ),
+                border=True,
+            )
+            st.metric(
+                "Not",
+                comparison.current_grade or "-",
+                (
+                    f"Önceki: {comparison.previous_grade or '-'}"
+                    if comparison.current_grade != comparison.previous_grade
+                    else "Değişmedi"
+                ),
+                delta_color="off",
+                border=True,
+            )
+            st.metric(
+                "Karar",
+                comparison.current_decision or "-",
+                (
+                    f"Önceki: {comparison.previous_decision or '-'}"
+                    if comparison.current_decision != comparison.previous_decision
+                    else "Değişmedi"
+                ),
+                delta_color="off",
+                border=True,
+            )
+
+        if comparison.methodology_changed:
+            st.warning(
+                "Puanlama metodolojisi değişmiş: "
+                f"{comparison.previous_methodology} → "
+                f"{comparison.current_methodology}. Puan farkının bir bölümü "
+                "metodoloji değişikliğinden kaynaklanabilir."
+            )
+
+        if comparison.category_deltas:
+            rows = []
+            for category in CATEGORY_MAX_POINTS:
+                if category not in comparison.category_deltas:
+                    continue
+                delta = comparison.category_deltas[category]
+                rows.append(
+                    {
+                        "Kategori": CATEGORY_LABELS[category],
+                        "Önceki": previous.score_breakdown[category],
+                        "Güncel": current.score_breakdown[category],
+                        "Değişim": delta,
+                        "Yön": (
+                            "Arttı"
+                            if delta > 0
+                            else "Azaldı" if delta < 0 else "Değişmedi"
+                        ),
+                    }
+                )
+            st.dataframe(
+                pd.DataFrame(rows),
+                hide_index=True,
+                width="stretch",
+                column_config={
+                    "Önceki": st.column_config.NumberColumn(format="%.2f"),
+                    "Güncel": st.column_config.NumberColumn(format="%.2f"),
+                    "Değişim": st.column_config.NumberColumn(format="%+.2f"),
+                },
+            )
+        else:
+            st.caption(
+                "Eski analizde kategori kırılımı bulunmadığı için yalnız toplam "
+                "puan ve güven değişimi karşılaştırıldı."
+            )
+
+
 def render_dashboard() -> None:
     st.title("Genel bakış")
     st.caption("Finansal kalite puanı ve gecikmeli piyasa görünümü")
@@ -315,8 +415,16 @@ def render_dashboard() -> None:
     confidence = calculate_analysis_confidence(company, score, latest_audit)
     audit_history = list_company_data_audits(symbol)
     score_history = list_score_history(symbol)
+    snapshot_comparison = None
+    if len(audit_history) >= 2:
+        snapshot_comparison = compare_analysis_snapshots(
+            audit_history[-2],
+            audit_history[-1],
+        )
     score_delta = None
-    if len(score_history) >= 2:
+    if snapshot_comparison is not None:
+        score_delta = snapshot_comparison.score_delta
+    elif len(score_history) >= 2:
         score_delta = score_history[-1].total_score - score_history[-2].total_score
 
     with st.container(horizontal=True):
@@ -362,6 +470,12 @@ def render_dashboard() -> None:
         )
         for reason in confidence.reasons:
             st.markdown(f"- {reason}")
+    if snapshot_comparison is not None:
+        _render_snapshot_comparison(
+            snapshot_comparison,
+            audit_history[-2],
+            audit_history[-1],
+        )
     for warning in score.validation_warnings:
         st.warning(warning)
 
