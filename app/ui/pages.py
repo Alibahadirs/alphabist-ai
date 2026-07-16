@@ -50,12 +50,11 @@ from app.parser.extractor import (
 )
 from app.parser.models import (
     ActivityReportExtractionResult,
-    FinancialReportDraft,
     PdfExtractionResult,
 )
 from app.portfolio.models import PortfolioPosition
 from app.portfolio.service import build_portfolio_summary
-from app.reporting.models import ReportFreshnessStatus
+from app.reporting.models import REPORT_FRESHNESS_LABELS, ReportFreshnessStatus
 from app.reporting.service import assess_report_period, report_period_regresses
 from app.scoring.engine import calculate_alpha_score
 from app.scoring.models import FinancialMetrics, ScoreBreakdown
@@ -793,6 +792,15 @@ def render_data_quality() -> None:
         )
         for company in companies
     }
+    freshness = {
+        company.symbol: assess_report_period(
+            latest_audits[company.symbol].report_period_end,
+            latest_audits[company.symbol].period_months,
+        )
+        if company.symbol in latest_audits
+        else assess_report_period(None, None)
+        for company in companies
+    }
     if not summary.rows:
         st.info("Kontrol edilecek şirket kaydı bulunmuyor.")
         return
@@ -804,19 +812,59 @@ def render_data_quality() -> None:
         st.metric("Kritik / eksik", summary.critical_count, border=True)
         st.metric("Ortalama yeterlilik", f"%{summary.average_completeness:.1f}", border=True)
 
+    with st.container(horizontal=True):
+        st.metric(
+            "Güncel rapor",
+            sum(
+                item.status == ReportFreshnessStatus.CURRENT
+                for item in freshness.values()
+            ),
+            border=True,
+        )
+        st.metric(
+            "Eskimekte",
+            sum(
+                item.status == ReportFreshnessStatus.AGING
+                for item in freshness.values()
+            ),
+            border=True,
+        )
+        st.metric(
+            "Güncelleme gerekli",
+            sum(item.blocks_decision for item in freshness.values()),
+            border=True,
+        )
+        st.metric(
+            "Tarih eksik",
+            sum(
+                item.status == ReportFreshnessStatus.UNKNOWN
+                for item in freshness.values()
+            ),
+            border=True,
+        )
+
     profile_options = ["Tümü"] + [PROFILE_LABELS[item] for item in CompanyProfile]
     status_options = ["Doğrulandı", "Kontrol gerekli", "Eksik veri", "Hatalı"]
-    filter_left, filter_right = st.columns(2)
+    freshness_options = list(REPORT_FRESHNESS_LABELS.values())
+    filter_left, filter_middle, filter_right = st.columns(3)
     with filter_left:
         selected_profile = st.selectbox("Sektör profili", profile_options)
-    with filter_right:
+    with filter_middle:
         selected_statuses = st.multiselect(
             "Doğrulama durumu", status_options, default=status_options
+        )
+    with filter_right:
+        selected_freshness = st.multiselect(
+            "Rapor güncelliği",
+            freshness_options,
+            default=freshness_options,
         )
 
     filtered = [
         row for row in summary.rows
         if row.status in selected_statuses
+        and REPORT_FRESHNESS_LABELS[freshness[row.symbol].status]
+        in selected_freshness
         and (
             selected_profile == "Tümü"
             or PROFILE_LABELS[row.company_profile] == selected_profile
@@ -830,6 +878,11 @@ def render_data_quality() -> None:
                 "Profil": PROFILE_LABELS[row.company_profile],
                 "Veri kaynağı": _audit_source_label(latest_audits.get(row.symbol)),
                 "Rapor dönemi": _audit_period_label(latest_audits.get(row.symbol)),
+                "Rapor güncelliği": REPORT_FRESHNESS_LABELS[
+                    freshness[row.symbol].status
+                ],
+                "Rapor yaşı (gün)": freshness[row.symbol].age_days,
+                "Dönem kontrolü": freshness[row.symbol].message,
                 "Son doğrulama": _audit_date(latest_audits.get(row.symbol)),
                 "Analiz güveni (%)": confidences[row.symbol].total,
                 "Güven durumu": confidences[row.symbol].status,
@@ -854,6 +907,9 @@ def render_data_quality() -> None:
                     "Hisse": st.column_config.TextColumn(pinned=True),
                     "Son doğrulama": st.column_config.DatetimeColumn(
                         "Son doğrulama", format="DD.MM.YYYY HH:mm"
+                    ),
+                    "Rapor yaşı (gün)": st.column_config.NumberColumn(
+                        "Rapor yaşı (gün)", format="%d"
                     ),
                     "Analiz güveni (%)": st.column_config.ProgressColumn(
                         "Analiz güveni (%)", min_value=0, max_value=100, format="%.1f"
@@ -1562,192 +1618,6 @@ def _validate_and_save_company(
         f"Profil: {PROFILE_LABELS[CompanyProfile(metrics.company_profile)]} | "
         f"Veri yeterliliği: %{score.data_completeness:.0f}"
     )
-
-
-def render_pdf_analysis() -> None:
-    st.title("PDF analizi")
-    st.caption(
-        "Finansal raporu yükleyin, bulunan rakamları doğrulayın ve puanı kaydedin."
-    )
-
-    uploaded_file = st.file_uploader(
-        "Finansal rapor",
-        type=["pdf"],
-        help="Metin katmanı bulunan SPK veya KAP finansal raporlarını kullanın.",
-    )
-    if uploaded_file is None:
-        st.info("Başlamak için bir finansal rapor PDF'i yükleyin.")
-        return
-
-    file_bytes = uploaded_file.getvalue()
-    try:
-        with st.spinner("Finansal kalemler aranıyor..."):
-            result = _parse_pdf(file_bytes, uploaded_file.name)
-    except PdfParsingError as exc:
-        st.error(str(exc))
-        return
-
-    detected_col, page_col = st.columns(2)
-    detected_col.metric("Bulunan kalem", len(result.extracted_fields))
-    page_col.metric("PDF sayfası", result.page_count)
-    for warning in result.warnings:
-        st.warning(warning)
-
-    draft = result.draft
-    with st.form("pdf_verification_form"):
-        st.subheader("Şirket ve dönem")
-        symbol = st.text_input("Hisse kodu", value=draft.symbol)
-        company_name = st.text_input("Şirket adı", value=draft.company_name)
-        period_options = [3, 6, 9, 12]
-        period_default = (
-            draft.period_months if draft.period_months in period_options else 3
-        )
-        period_months = st.selectbox(
-            "Rapor dönemi",
-            period_options,
-            index=period_options.index(period_default),
-            format_func=lambda value: f"{value} aylık",
-        )
-
-        st.subheader("Gelir ve kârlılık")
-        left, right = st.columns(2)
-        with left:
-            revenue_input = _amount_input(
-                "Hasılat",
-                draft.revenue,
-                key="verification_revenue",
-            )
-            net_profit_input = _amount_input(
-                "Net dönem kârı",
-                draft.net_profit,
-                key="verification_net_profit",
-            )
-        with right:
-            previous_revenue_input = _amount_input(
-                "Önceki dönem hasılat",
-                draft.previous_revenue,
-                key="verification_previous_revenue",
-            )
-            previous_net_profit_input = _amount_input(
-                "Önceki dönem net kâr",
-                draft.previous_net_profit,
-                key="verification_previous_net_profit",
-            )
-
-        st.subheader("Bilanço")
-        left, right = st.columns(2)
-        with left:
-            equity_input = _amount_input(
-                "Özkaynak", draft.equity, key="verification_equity"
-            )
-            total_debt_input = _amount_input(
-                "Finansal borç",
-                draft.total_debt,
-                key="verification_total_debt",
-            )
-            cash_input = _amount_input(
-                "Nakit", draft.cash, key="verification_cash"
-            )
-            total_assets_input = _amount_input(
-                "Toplam varlık",
-                draft.total_assets,
-                key="verification_total_assets",
-            )
-        with right:
-            current_assets_input = _amount_input(
-                "Dönen varlık",
-                draft.current_assets,
-                key="verification_current_assets",
-            )
-            current_liabilities_input = _amount_input(
-                "Kısa vadeli yükümlülük",
-                draft.current_liabilities,
-                key="verification_current_liabilities",
-            )
-            operating_cash_flow_input = _amount_input(
-                "Operasyonel nakit akışı",
-                draft.operating_cash_flow,
-                key="verification_operating_cash_flow",
-            )
-            capital_expenditures_input = _amount_input(
-                "Yatırım harcaması",
-                draft.capital_expenditures,
-                key="verification_capital_expenditures",
-            )
-
-        st.subheader("Nitel değerlendirme")
-        valuation = st.slider("Değerleme girdisi", 0, 100, 50)
-        management = st.slider("Yönetim girdisi", 0, 100, 70)
-        risk = st.slider("Risk dayanıklılığı", 0, 100, 50)
-
-        submitted = st.form_submit_button(
-            "Doğrula, hesapla ve kaydet",
-            type="primary",
-            icon=":material/document_scanner:",
-        )
-
-    if not submitted:
-        return
-
-    try:
-        revenue = _parse_amount_input("Hasılat", revenue_input)
-        previous_revenue = _parse_amount_input(
-            "Önceki dönem hasılat", previous_revenue_input
-        )
-        net_profit = _parse_amount_input("Net dönem kârı", net_profit_input)
-        previous_net_profit = _parse_amount_input(
-            "Önceki dönem net kâr", previous_net_profit_input
-        )
-        equity = _parse_amount_input("Özkaynak", equity_input)
-        total_debt = _parse_amount_input("Finansal borç", total_debt_input)
-        cash = _parse_amount_input("Nakit", cash_input)
-        total_assets = _parse_amount_input("Toplam varlık", total_assets_input)
-        current_assets = _parse_amount_input("Dönen varlık", current_assets_input)
-        current_liabilities = _parse_amount_input(
-            "Kısa vadeli yükümlülük", current_liabilities_input
-        )
-        operating_cash_flow = _parse_amount_input(
-            "Operasyonel nakit akışı", operating_cash_flow_input
-        )
-        capital_expenditures = _parse_amount_input(
-            "Yatırım harcaması", capital_expenditures_input
-        )
-        verified_draft = FinancialReportDraft(
-            symbol=symbol,
-            company_name=company_name,
-            period_months=period_months,
-            revenue=revenue,
-            previous_revenue=previous_revenue,
-            net_profit=net_profit,
-            previous_net_profit=previous_net_profit,
-            equity=equity,
-            total_debt=total_debt,
-            cash=cash,
-            current_assets=current_assets,
-            current_liabilities=current_liabilities,
-            operating_cash_flow=operating_cash_flow,
-            capital_expenditures=capital_expenditures,
-            total_assets=total_assets,
-            valuation_score_input=valuation,
-            management_score_input=management,
-            risk_score_input=risk,
-        )
-        metrics = to_financial_metrics(verified_draft)
-    except (ValidationError, AppValidationError) as exc:
-        st.error(f"Doğrulanan bilgiler geçerli değil: {exc}")
-        return
-
-    upsert_company(metrics)
-    score = calculate_alpha_score(metrics)
-    add_score_history(metrics.symbol, score)
-    st.success(
-        f"{metrics.symbol} kaydedildi. Alpha Score: {score.total:.1f}/100"
-    )
-
-    with st.container(border=True):
-        st.metric("Alpha Score", f"{score.total:.1f}/100")
-        st.caption(f"Not: {score.grade} | Karar: {score.decision}")
-        st.dataframe(_score_table(score), hide_index=True, width="stretch")
 
 
 def render_pdf_analysis() -> None:

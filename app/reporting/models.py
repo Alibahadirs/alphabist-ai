@@ -12,6 +12,16 @@ class ReportFreshnessStatus(str, Enum):
     UNKNOWN = "unknown"
 
 
+REPORT_FRESHNESS_LABELS = {
+    ReportFreshnessStatus.CURRENT: "Güncel",
+    ReportFreshnessStatus.AGING: "Eskimekte",
+    ReportFreshnessStatus.STALE: "Güncel değil",
+    ReportFreshnessStatus.FUTURE: "İleri tarihli",
+    ReportFreshnessStatus.INVALID: "Dönem hatalı",
+    ReportFreshnessStatus.UNKNOWN: "Tarih eksik",
+}
+
+
 class ReportPeriodAssessment(BaseModel):
     status: ReportFreshnessStatus
     age_days: int | None = None
