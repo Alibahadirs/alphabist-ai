@@ -50,6 +50,7 @@ def _audit(source: MetricSourceType) -> CompanyDataAudit:
         period_months=report_period_end.month,
         report_period_end=report_period_end,
         financial_report_name="financial.pdf",
+        financial_report_hash="a" * 64,
         completeness=100,
         alpha_score=100,
         field_sources={field: source for field in required},
@@ -91,6 +92,7 @@ def test_manual_sources_gate_strong_buy_decision():
             "period_months": None,
             "report_period_end": None,
             "financial_report_name": "",
+            "financial_report_hash": "",
         }
     )
 
@@ -99,6 +101,19 @@ def test_manual_sources_gate_strong_buy_decision():
     assert confidence.total == 82.5
     assert confidence.status == "Orta"
     assert confidence.decision == "İzle / Doğrula"
+
+
+def test_legacy_pdf_without_document_hash_loses_proof_points():
+    metrics = _strong_metrics()
+    score = calculate_alpha_score(metrics)
+    audit = _audit(MetricSourceType.FINANCIAL_REPORT).model_copy(
+        update={"financial_report_hash": ""}
+    )
+
+    confidence = calculate_analysis_confidence(metrics, score, audit)
+
+    assert confidence.total == 98
+    assert any("belge kimliği yok" in reason for reason in confidence.reasons)
 
 
 def test_stale_report_caps_confidence_and_blocks_decision():

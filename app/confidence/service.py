@@ -66,7 +66,9 @@ def calculate_analysis_confidence(
     if audit:
         report_component += 5
         if audit.financial_report_name or audit.activity_report_name:
-            report_component += 5
+            report_component += 3
+        if audit.financial_report_hash or audit.activity_report_hash:
+            report_component += 2
     period_assessment = assess_report_period(
         audit.report_period_end if audit else None,
         audit.period_months if audit else None,
@@ -98,6 +100,14 @@ def calculate_analysis_confidence(
         )
     if audit and period_assessment.status != ReportFreshnessStatus.CURRENT:
         reasons.append(period_assessment.message)
+    if (
+        audit
+        and (audit.financial_report_name or audit.activity_report_name)
+        and not (audit.financial_report_hash or audit.activity_report_hash)
+    ):
+        reasons.append(
+            "Rapor adı kayıtlı ancak dosya içeriğini doğrulayan belge kimliği yok."
+        )
     if validation.missing_fields:
         reasons.append(
             f"{len(validation.missing_fields)} zorunlu sektör göstergesi eksik."

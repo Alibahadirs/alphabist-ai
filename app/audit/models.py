@@ -44,6 +44,12 @@ class CompanyDataAudit(BaseModel):
     report_period_end: date | None = None
     financial_report_name: str = ""
     activity_report_name: str = ""
+    financial_report_hash: str = Field(
+        default="", pattern=r"^(?:[0-9a-f]{64})?$"
+    )
+    activity_report_hash: str = Field(
+        default="", pattern=r"^(?:[0-9a-f]{64})?$"
+    )
     completeness: float = Field(ge=0, le=100)
     alpha_score: float = Field(ge=0, le=100)
     grade: str = ""

@@ -99,6 +99,8 @@ def init_db():
             report_period_end TEXT,
             financial_report_name TEXT NOT NULL DEFAULT '',
             activity_report_name TEXT NOT NULL DEFAULT '',
+            financial_report_hash TEXT NOT NULL DEFAULT '',
+            activity_report_hash TEXT NOT NULL DEFAULT '',
             completeness REAL NOT NULL,
             alpha_score REAL NOT NULL,
             grade TEXT NOT NULL DEFAULT '',
@@ -128,6 +130,8 @@ def init_db():
             "methodology_version": "TEXT NOT NULL DEFAULT 'legacy'",
             "input_fingerprint": "TEXT NOT NULL DEFAULT ''",
             "score_breakdown": "TEXT NOT NULL DEFAULT '{}'",
+            "financial_report_hash": "TEXT NOT NULL DEFAULT ''",
+            "activity_report_hash": "TEXT NOT NULL DEFAULT ''",
         }
         for column, definition in audit_migrations.items():
             if column not in audit_columns:
@@ -195,10 +199,11 @@ def add_company_data_audit(audit: CompanyDataAudit) -> None:
         conn.execute(
             """INSERT INTO company_data_audit(
             symbol, source_type, company_profile, period_months, report_period_end,
-            financial_report_name, activity_report_name, completeness,
+            financial_report_name, activity_report_name,
+            financial_report_hash, activity_report_hash, completeness,
             alpha_score, grade, decision, confidence_score, confidence_status,
             methodology_version, input_fingerprint, score_breakdown, field_sources)
-            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 audit.symbol.upper().strip(),
                 audit.source_type.value,
@@ -211,6 +216,8 @@ def add_company_data_audit(audit: CompanyDataAudit) -> None:
                 ),
                 audit.financial_report_name,
                 audit.activity_report_name,
+                audit.financial_report_hash,
+                audit.activity_report_hash,
                 audit.completeness,
                 audit.alpha_score,
                 audit.grade,
@@ -246,7 +253,8 @@ def get_latest_company_data_audit(symbol: str) -> CompanyDataAudit | None:
         row = conn.execute(
             """SELECT id, symbol, source_type, company_profile, period_months,
             report_period_end,
-            financial_report_name, activity_report_name, completeness,
+            financial_report_name, activity_report_name,
+            financial_report_hash, activity_report_hash, completeness,
             alpha_score, grade, decision, confidence_score,
             confidence_status, methodology_version, input_fingerprint,
             score_breakdown,
@@ -267,7 +275,8 @@ def list_company_data_audits(
         rows = conn.execute(
             """SELECT id, symbol, source_type, company_profile, period_months,
             report_period_end,
-            financial_report_name, activity_report_name, completeness,
+            financial_report_name, activity_report_name,
+            financial_report_hash, activity_report_hash, completeness,
             alpha_score, grade, decision, confidence_score,
             confidence_status, methodology_version, input_fingerprint,
             score_breakdown,
@@ -286,6 +295,7 @@ def list_latest_company_data_audits() -> list[CompanyDataAudit]:
             audit.company_profile, audit.period_months,
             audit.report_period_end,
             audit.financial_report_name, audit.activity_report_name,
+            audit.financial_report_hash, audit.activity_report_hash,
             audit.completeness, audit.alpha_score, audit.grade,
             audit.decision, audit.confidence_score, audit.confidence_status,
             audit.methodology_version, audit.input_fingerprint,

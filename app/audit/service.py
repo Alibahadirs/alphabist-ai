@@ -32,6 +32,11 @@ FINANCIAL_METRIC_DEPENDENCIES = {
 }
 
 
+def document_fingerprint(file_bytes: bytes) -> str:
+    """Return a stable identity for an uploaded source document."""
+    return hashlib.sha256(file_bytes).hexdigest() if file_bytes else ""
+
+
 def _normalize_fingerprint_value(value: Any) -> Any:
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         number = round(float(value), 8)

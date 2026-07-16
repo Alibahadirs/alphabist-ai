@@ -25,6 +25,7 @@ yerel Streamlit uygulaması.
 - Tam rapor dönem sonu, güncellik ve finansal/faaliyet raporu dönem uyumu kontrolü
 - Veri kalite merkezinde toplu rapor güncelliği özeti, yaşı ve durum filtresi
 - Metodolojiye duyarlı analiz parmak izi ve yinelenen kayıt engelleme
+- Kaynak PDF'ler için ayrı SHA-256 belge kimliği ve geçmiş doğrulaması
 - SQLite ile yerel veri saklama
 
 ## Çalıştırma

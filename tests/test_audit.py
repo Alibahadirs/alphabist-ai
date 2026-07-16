@@ -9,6 +9,7 @@ from app.audit.service import (
     attach_analysis_snapshot,
     build_pdf_field_sources,
     compare_analysis_snapshots,
+    document_fingerprint,
     is_duplicate_analysis,
 )
 from app.confidence.models import AnalysisConfidence
@@ -33,6 +34,8 @@ def _audit(symbol: str, score: float, source: DataSourceType) -> CompanyDataAudi
         report_period_end=date(2026, 3, 31),
         financial_report_name="financial.pdf",
         activity_report_name="activity.pdf",
+        financial_report_hash="b" * 64,
+        activity_report_hash="c" * 64,
         completeness=92.5,
         alpha_score=score,
         grade="A",
@@ -68,6 +71,8 @@ def test_audit_repository_returns_latest_record(tmp_path, monkeypatch):
     assert latest.alpha_score == 84.0
     assert latest.source_type == DataSourceType.CORRECTION
     assert latest.financial_report_name == "financial.pdf"
+    assert latest.financial_report_hash == "b" * 64
+    assert latest.activity_report_hash == "c" * 64
     assert latest.report_period_end == date(2026, 3, 31)
     assert (
         latest.field_sources["revenue_growth"]
@@ -97,6 +102,13 @@ def test_audit_period_must_be_valid():
             completeness=100,
             alpha_score=80,
         )
+
+
+def test_audit_rejects_invalid_document_fingerprint():
+    values = _audit("AKSA", 80, DataSourceType.PDF).model_dump()
+    values["financial_report_hash"] = "not-a-sha256"
+    with pytest.raises(ValidationError):
+        CompanyDataAudit.model_validate(values)
 
 
 def test_init_db_migrates_existing_audit_table(tmp_path, monkeypatch):
@@ -135,7 +147,20 @@ def test_init_db_migrates_existing_audit_table(tmp_path, monkeypatch):
         "methodology_version",
         "input_fingerprint",
         "score_breakdown",
+        "financial_report_hash",
+        "activity_report_hash",
     }.issubset(columns)
+
+
+def test_document_fingerprint_identifies_file_content():
+    first = document_fingerprint(b"financial report")
+    second = document_fingerprint(b"financial report")
+    changed = document_fingerprint(b"financial report changed")
+
+    assert len(first) == 64
+    assert first == second
+    assert first != changed
+    assert document_fingerprint(b"") == ""
 
 
 def test_pdf_field_sources_distinguish_reports_and_user_changes():

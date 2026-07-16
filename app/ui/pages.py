@@ -18,6 +18,7 @@ from app.audit.service import (
     attach_analysis_snapshot,
     build_pdf_field_sources,
     compare_analysis_snapshots,
+    document_fingerprint,
     is_duplicate_analysis,
 )
 from app.comparison.service import build_comparison
@@ -284,6 +285,18 @@ def _render_data_source_caption(audit: CompanyDataAudit | None) -> None:
     if reports:
         st.caption("Raporlar: " + " | ".join(reports))
 
+    document_ids = []
+    if audit.financial_report_hash:
+        document_ids.append(
+            f"Finansal belge: {audit.financial_report_hash[:10]}"
+        )
+    if audit.activity_report_hash:
+        document_ids.append(
+            f"Faaliyet belgesi: {audit.activity_report_hash[:10]}"
+        )
+    if document_ids:
+        st.caption("Belge kimlikleri: " + " | ".join(document_ids))
+
     if audit.field_sources:
         with st.expander("Son puanın gösterge kaynakları"):
             st.dataframe(
@@ -514,6 +527,16 @@ def render_dashboard() -> None:
                             "Dönem sonu": audit.report_period_end,
                             "Finansal rapor": audit.financial_report_name or "-",
                             "Faaliyet raporu": audit.activity_report_name or "-",
+                            "Finansal belge kimliği": (
+                                audit.financial_report_hash[:10]
+                                if audit.financial_report_hash
+                                else "-"
+                            ),
+                            "Faaliyet belge kimliği": (
+                                audit.activity_report_hash[:10]
+                                if audit.activity_report_hash
+                                else "-"
+                            ),
                             "Yeterlilik (%)": audit.completeness,
                             "Alpha Score": audit.alpha_score,
                             "Not": audit.grade or "-",
@@ -773,6 +796,12 @@ def _render_quality_correction_form() -> None:
         ),
         activity_report_name=(
             previous_audit.activity_report_name if previous_audit else ""
+        ),
+        financial_report_hash=(
+            previous_audit.financial_report_hash if previous_audit else ""
+        ),
+        activity_report_hash=(
+            previous_audit.activity_report_hash if previous_audit else ""
         ),
         completeness=validation.completeness,
         alpha_score=score.total,
@@ -1094,6 +1123,8 @@ def _render_pdf_company_form() -> None:
 
     financial_bytes = financial_file.getvalue()
     activity_bytes = activity_file.getvalue() if activity_file else b""
+    financial_report_hash = document_fingerprint(financial_bytes)
+    activity_report_hash = document_fingerprint(activity_bytes)
     document_token = hashlib.sha256(financial_bytes + activity_bytes).hexdigest()
     if st.session_state.get("company_pdf_token") != document_token:
         for key in list(st.session_state):
@@ -1377,6 +1408,8 @@ def _render_pdf_company_form() -> None:
         report_period_end=report_period_end,
         financial_report_name=financial_file.name,
         activity_report_name=activity_file.name if activity_file else "",
+        financial_report_hash=financial_report_hash,
+        activity_report_hash=activity_report_hash,
         field_sources=build_pdf_field_sources(
             financial_result,
             activity_result,
@@ -1553,6 +1586,8 @@ def _validate_and_save_company(
     report_period_end: date | None = None,
     financial_report_name: str = "",
     activity_report_name: str = "",
+    financial_report_hash: str = "",
+    activity_report_hash: str = "",
     field_sources: dict[str, MetricSourceType] | None = None,
 ) -> None:
     sector_metrics = sector_metrics or {}
@@ -1628,6 +1663,8 @@ def _validate_and_save_company(
         report_period_end=report_period_end,
         financial_report_name=financial_report_name,
         activity_report_name=activity_report_name,
+        financial_report_hash=financial_report_hash,
+        activity_report_hash=activity_report_hash,
         completeness=score.data_completeness,
         alpha_score=score.total,
         field_sources=field_sources,
