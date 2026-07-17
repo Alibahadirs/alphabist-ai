@@ -38,6 +38,7 @@ yerel Streamlit uygulaması.
 - Her analiz için ham finansal tutar anlık görüntüsü ve hesap izi
 - Dönem bazlı gösterge değeri, birim ve kaynak anlık görüntüsü
 - Ham tutarlardan yeniden hesaplama ve metodolojiye duyarlı tutarlılık kontrolü
+- Formül uyuşmazlıklarını veri kalite merkezinde kritik kayıt olarak gösterme
 - SQLite ile yerel veri saklama
 
 ## Çalıştırma

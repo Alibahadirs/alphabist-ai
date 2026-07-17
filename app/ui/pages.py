@@ -1101,10 +1101,10 @@ def render_data_quality() -> None:
         "ve doğrulama durumunu izleyin."
     )
     companies = list_companies()
-    summary = build_data_quality_summary(companies)
     latest_audits = {
         audit.symbol: audit for audit in list_latest_company_data_audits()
     }
+    summary = build_data_quality_summary(companies, latest_audits)
     confidences = {
         company.symbol: calculate_analysis_confidence(
             company,
@@ -1163,6 +1163,11 @@ def render_data_quality() -> None:
             ),
             border=True,
         )
+        st.metric(
+            "Hesap uyuşmazlığı",
+            sum(bool(row.calculation_mismatch_fields) for row in summary.rows),
+            border=True,
+        )
 
     profile_options = ["Tümü"] + [PROFILE_LABELS[item] for item in CompanyProfile]
     status_options = ["Doğrulandı", "Kontrol gerekli", "Eksik veri", "Hatalı"]
@@ -1209,6 +1214,10 @@ def render_data_quality() -> None:
                 "Güven durumu": confidences[row.symbol].status,
                 "Yeterlilik (%)": row.completeness,
                 "Durum": row.status,
+                "Hesap kontrolü": row.calculation_check_status,
+                "Uyuşmayan göstergeler": (
+                    ", ".join(row.calculation_mismatch_fields) or "Yok"
+                ),
                 "Eksik göstergeler": ", ".join(row.missing_fields) or "Yok",
                 "Uyarı / hata": " | ".join(row.errors + row.warnings) or "Yok",
             }

@@ -1,5 +1,8 @@
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
+from app.audit.models import CompanyDataAudit
+from app.audit.service import verify_audit_calculations
+from app.core.settings import settings
 from app.data_quality.models import DataQualityRow, DataQualitySummary
 from app.scoring.models import FinancialMetrics
 from app.sector.profiles import CompanyProfile
@@ -39,20 +42,58 @@ def _status(completeness: float, errors: list[str], warnings: list[str]) -> str:
     return "Doğrulandı"
 
 
-def build_data_quality_summary(companies: Sequence[FinancialMetrics]) -> DataQualitySummary:
+def _calculation_check(
+    audit: CompanyDataAudit | None,
+) -> tuple[str, list[str], list[str]]:
+    if audit is None:
+        return "Kayıt yok", [], []
+    if audit.methodology_version != settings.scoring_methodology_version:
+        return "Eski metodoloji", [], []
+    if not audit.source_values or not audit.metric_values:
+        return "Kaynak izi yok", [], []
+
+    checks = verify_audit_calculations(audit)
+    if not checks:
+        return "Uygulanamaz", [], []
+
+    mismatches = [check for check in checks if not check.matches]
+    if not mismatches:
+        return "Doğrulandı", [], []
+
+    fields = [FIELD_LABELS.get(check.field, check.field) for check in mismatches]
+    errors = [
+        f"{label}, ham tutarlardan yeniden hesaplanan değerle eşleşmiyor."
+        for label in fields
+    ]
+    return "Uyuşmazlık", fields, errors
+
+
+def build_data_quality_summary(
+    companies: Sequence[FinancialMetrics],
+    latest_audits: Mapping[str, CompanyDataAudit] | None = None,
+) -> DataQualitySummary:
+    audits = {
+        symbol.upper(): audit for symbol, audit in (latest_audits or {}).items()
+    }
     rows: list[DataQualityRow] = []
     for company in companies:
         report = validate_financial_metrics(company)
+        calculation_status, mismatch_fields, calculation_errors = (
+            _calculation_check(audits.get(company.symbol.upper()))
+        )
+        errors = [*report.errors, *calculation_errors]
         rows.append(
             DataQualityRow(
                 symbol=company.symbol,
                 company_name=company.company_name,
                 company_profile=CompanyProfile(company.company_profile),
                 completeness=report.completeness,
-                status=_status(report.completeness, report.errors, report.warnings),
+                status=_status(report.completeness, errors, report.warnings),
                 missing_fields=[FIELD_LABELS.get(field, field) for field in report.missing_fields],
                 warnings=report.warnings,
-                errors=report.errors,
+                errors=errors,
+                calculation_check_status=calculation_status,
+                calculation_mismatch_fields=mismatch_fields,
             )
         )
 
