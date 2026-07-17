@@ -338,6 +338,63 @@ def test_financial_report_scales_only_monetary_fields(monkeypatch):
     assert result.draft.capital_adequacy_ratio == 18.5
 
 
+def test_financial_services_profile_uses_operating_income_rows():
+    draft, extracted = extract_financial_values(
+        "Esas faaliyet gelirleri 3.570.000 1.650.000",
+        CompanyProfile.FINANCIAL_SERVICES,
+    )
+
+    assert draft.revenue == 3_570_000
+    assert draft.previous_revenue == 1_650_000
+    assert "revenue" in extracted
+
+
+def test_financial_report_profile_override_reextracts_sector_rows(
+    monkeypatch,
+):
+    text = """
+    ÖRNEK HOLDİNG A.Ş.
+    BIST: ORNK
+    Esas faaliyet gelirleri 3.570.000 1.650.000
+    """
+    monkeypatch.setattr(
+        "app.parser.extractor._read_pdf",
+        lambda _file_bytes: (text, 1),
+    )
+
+    standard = extract_financial_report(b"pdf", "ORNK.pdf")
+    financial = extract_financial_report(
+        b"pdf",
+        "ORNK.pdf",
+        CompanyProfile.FINANCIAL_SERVICES,
+    )
+
+    assert standard.draft.revenue == 0
+    assert financial.draft.revenue == 3_570_000
+    assert financial.draft.company_profile == CompanyProfile.FINANCIAL_SERVICES
+
+
+def test_insurance_premium_growth_is_derived_from_written_premiums():
+    draft, extracted = extract_financial_values(
+        "Brüt yazılan primler 1.500.000 1.000.000",
+        CompanyProfile.INSURANCE,
+    )
+    draft = draft.model_copy(
+        update={
+            "symbol": "TSGR",
+            "company_name": "Test Sigorta A.Ş.",
+            "company_profile": CompanyProfile.INSURANCE,
+        }
+    )
+
+    metrics = to_financial_metrics(draft)
+
+    assert draft.premium_revenue == 1_500_000
+    assert draft.previous_premium_revenue == 1_000_000
+    assert "premium_revenue" in extracted
+    assert metrics.premium_growth == 50
+
+
 def test_manual_scale_override_preserves_percentages():
     draft = FinancialReportDraft(
         revenue=1_000,

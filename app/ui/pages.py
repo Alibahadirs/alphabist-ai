@@ -103,8 +103,16 @@ SCORE_INPUT_LABELS = {
 
 
 @st.cache_data(show_spinner=False, max_entries=10)
-def _parse_pdf(file_bytes: bytes, file_name: str = "") -> PdfExtractionResult:
-    return extract_financial_report(file_bytes, file_name)
+def _parse_pdf(
+    file_bytes: bytes,
+    file_name: str = "",
+    company_profile_override: CompanyProfile | None = None,
+) -> PdfExtractionResult:
+    return extract_financial_report(
+        file_bytes,
+        file_name,
+        company_profile_override,
+    )
 
 
 @st.cache_data(show_spinner=False, max_entries=10)
@@ -1177,6 +1185,7 @@ def _render_pdf_company_form() -> None:
                 "pdf_period_end",
                 "pdf_monetary_scale",
                 "pdf_comparison_confirmed",
+                "pdf_company_profile",
             }:
                 del st.session_state[key]
         st.session_state["company_pdf_token"] = document_token
@@ -1192,6 +1201,25 @@ def _render_pdf_company_form() -> None:
     except PdfParsingError as exc:
         st.error(str(exc))
         return
+
+    suggested_profile = financial_result.draft.company_profile
+    if (
+        activity_result
+        and activity_result.metadata.company_profile
+        != CompanyProfile.STANDARD
+    ):
+        suggested_profile = activity_result.metadata.company_profile
+    company_profile = _profile_select(
+        "Şirket türü / sektör profili",
+        suggested_profile,
+        "pdf_company_profile",
+    )
+    if company_profile != financial_result.draft.company_profile:
+        financial_result = _parse_pdf(
+            financial_bytes,
+            financial_file.name,
+            company_profile,
+        )
 
     scale_options = {
         1.0: "TL",
@@ -1257,9 +1285,7 @@ def _render_pdf_company_form() -> None:
                 ),
                 "report_period_end": effective_period_end,
                 "company_profile": (
-                    metadata.company_profile
-                    if metadata.company_profile != CompanyProfile.STANDARD
-                    else draft.company_profile
+                    company_profile
                 ),
             }
         )
@@ -1307,6 +1333,21 @@ def _render_pdf_company_form() -> None:
             ("Operasyonel nakit akışı", draft.operating_cash_flow),
             ("Yatırım harcaması", draft.capital_expenditures),
             ("Toplam varlık", draft.total_assets),
+            ("Cari dönem yazılan primler", draft.premium_revenue),
+            (
+                "Önceki dönem yazılan primler",
+                draft.previous_premium_revenue,
+            ),
+        ]
+        source_rows = [
+            (label, value)
+            for label, value in source_rows
+            if value != 0
+            or label
+            not in {
+                "Cari dönem yazılan primler",
+                "Önceki dönem yazılan primler",
+            }
         ]
         st.dataframe(
             pd.DataFrame(
@@ -1334,11 +1375,6 @@ def _render_pdf_company_form() -> None:
         format="DD.MM.YYYY",
         key="pdf_period_end",
         help="PDF'den bulunan tarihi resmi rapor kapağıyla doğrulayın.",
-    )
-    company_profile = _profile_select(
-        "Şirket türü / sektör profili",
-        draft.company_profile,
-        "pdf_company_profile",
     )
     calculation_draft = draft.model_copy(
         update={

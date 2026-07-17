@@ -29,6 +29,7 @@ FINANCIAL_METRIC_DEPENDENCIES = {
     "operating_cash_flow": {"operating_cash_flow"},
     "free_cash_flow": {"operating_cash_flow", "capital_expenditures"},
     "asset_turnover": {"revenue", "total_assets"},
+    "premium_growth": {"premium_revenue", "previous_premium_revenue"},
 }
 
 

@@ -24,6 +24,8 @@ class FinancialReportDraft(BaseModel):
     operating_cash_flow: float = 0
     capital_expenditures: float = 0
     total_assets: float = 0
+    premium_revenue: float = 0
+    previous_premium_revenue: float = 0
 
     capital_adequacy_ratio: float | None = None
     npl_ratio: float | None = None

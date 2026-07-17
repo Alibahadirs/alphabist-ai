@@ -225,7 +225,12 @@ def test_pdf_field_sources_distinguish_reports_and_user_changes():
     financial_result = PdfExtractionResult(
         draft=FinancialReportDraft(),
         page_count=10,
-        extracted_fields=["revenue", "previous_revenue"],
+        extracted_fields=[
+            "revenue",
+            "previous_revenue",
+            "premium_revenue",
+            "previous_premium_revenue",
+        ],
     )
     activity_result = ActivityReportExtractionResult(
         metadata=CompanyMetadata(),
@@ -236,6 +241,7 @@ def test_pdf_field_sources_distinguish_reports_and_user_changes():
         symbol="TEST",
         company_name="Test",
         revenue_growth=20,
+        premium_growth=50,
         capital_adequacy_ratio=18.5,
         risk_score_input=50,
     )
@@ -246,6 +252,7 @@ def test_pdf_field_sources_distinguish_reports_and_user_changes():
         defaults,
         {
             "revenue_growth": 20,
+            "premium_growth": 50,
             "capital_adequacy_ratio": 18.5,
             "risk_score_input": 50,
         },
@@ -258,6 +265,7 @@ def test_pdf_field_sources_distinguish_reports_and_user_changes():
     )
 
     assert sources["revenue_growth"] == MetricSourceType.FINANCIAL_REPORT
+    assert sources["premium_growth"] == MetricSourceType.FINANCIAL_REPORT
     assert (
         sources["capital_adequacy_ratio"]
         == MetricSourceType.ACTIVITY_REPORT

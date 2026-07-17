@@ -68,6 +68,41 @@ FIELD_LABELS = {
     ),
 }
 
+PROFILE_FIELD_LABELS = {
+    CompanyProfile.BANK: {
+        ("revenue", "previous_revenue"): (
+            "faiz gelirleri",
+            "net faiz geliri",
+            "bankacılık faaliyet gelirleri",
+        ),
+    },
+    CompanyProfile.INSURANCE: {
+        ("revenue", "previous_revenue"): (
+            "sigortacılık hizmet gelirleri",
+            "sigorta hizmet gelirleri",
+        ),
+        ("premium_revenue", "previous_premium_revenue"): (
+            "brüt yazılan primler",
+            "yazılan primler",
+            "prim üretimi",
+        ),
+    },
+    CompanyProfile.REIT: {
+        ("revenue", "previous_revenue"): (
+            "gayrimenkul satış gelirleri",
+            "kira gelirleri",
+        ),
+    },
+    CompanyProfile.FINANCIAL_SERVICES: {
+        ("revenue", "previous_revenue"): (
+            "esas faaliyet gelirleri",
+            "faktoring gelirleri",
+            "finans sektörü faaliyetleri hasılatı",
+            "hizmet gelirleri",
+        ),
+    },
+}
+
 SYMBOL_PATTERNS = (
     re.compile(r"(?:BIST|PAY KODU|HİSSE KODU)\s*[:\-]?\s*([A-Z0-9]{3,6})", re.I),
     re.compile(r"(?:BORSA KODU|İŞLEM KODU)\s*[:\-]?\s*([A-Z0-9]{3,6})", re.I),
@@ -117,6 +152,8 @@ MONETARY_FIELDS = {
     "operating_cash_flow",
     "capital_expenditures",
     "total_assets",
+    "premium_revenue",
+    "previous_premium_revenue",
 }
 
 
@@ -412,8 +449,15 @@ def extract_sector_metrics(text: str) -> dict[str, float]:
 
 def extract_financial_values(
     text: str,
+    company_profile: CompanyProfile = CompanyProfile.STANDARD,
 ) -> tuple[FinancialReportDraft, list[str]]:
     extracted: dict[str, float] = {}
+    field_labels = dict(FIELD_LABELS)
+    for fields, labels in PROFILE_FIELD_LABELS.get(
+        CompanyProfile(company_profile),
+        {},
+    ).items():
+        field_labels[fields] = labels + field_labels.get(fields, ())
 
     for line in text.splitlines():
         clean_line = " ".join(line.split())
@@ -421,7 +465,7 @@ def extract_financial_values(
             continue
 
         folded_line = _fold(clean_line)
-        for fields, labels in FIELD_LABELS.items():
+        for fields, labels in field_labels.items():
             if any(field in extracted for field in fields):
                 continue
 
@@ -444,14 +488,23 @@ def extract_financial_values(
 def extract_financial_report(
     file_bytes: bytes,
     file_name: str = "",
+    company_profile_override: CompanyProfile | None = None,
 ) -> PdfExtractionResult:
     text, page_count = _read_pdf(file_bytes)
-    draft, extracted_fields = extract_financial_values(text)
+    metadata = extract_company_metadata(text, file_name)
+    effective_profile = (
+        CompanyProfile(company_profile_override)
+        if company_profile_override is not None
+        else metadata.company_profile
+    )
+    draft, extracted_fields = extract_financial_values(
+        text,
+        effective_profile,
+    )
     monetary_scale, monetary_unit_label, scale_detected = detect_monetary_scale(
         text
     )
     draft = _apply_monetary_scale(draft, monetary_scale)
-    metadata = extract_company_metadata(text, file_name)
     comparison_period_end, comparison_order_current_first = (
         detect_comparison_period(text, metadata.report_period_end)
     )
@@ -459,7 +512,7 @@ def extract_financial_report(
         "symbol": metadata.symbol,
         "company_name": metadata.company_name,
         "report_period_end": metadata.report_period_end,
-        "company_profile": metadata.company_profile,
+        "company_profile": effective_profile,
     }
     sector_metrics = extract_sector_metrics(text)
     metadata_updates.update(sector_metrics)

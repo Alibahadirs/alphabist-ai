@@ -23,6 +23,12 @@ def to_financial_metrics(draft: FinancialReportDraft) -> FinancialMetrics:
 
     annualization_factor = 12 / draft.period_months
     free_cash_flow = draft.operating_cash_flow - abs(draft.capital_expenditures)
+    premium_growth = draft.premium_growth
+    if premium_growth is None and draft.previous_premium_revenue > 0:
+        premium_growth = _growth_rate(
+            draft.premium_revenue,
+            draft.previous_premium_revenue,
+        )
 
     return FinancialMetrics(
         symbol=symbol,
@@ -56,7 +62,7 @@ def to_financial_metrics(draft: FinancialReportDraft) -> FinancialMetrics:
         loan_to_deposit_ratio=draft.loan_to_deposit_ratio,
         net_interest_margin=draft.net_interest_margin,
         cost_income_ratio=draft.cost_income_ratio,
-        premium_growth=draft.premium_growth,
+        premium_growth=premium_growth,
         combined_ratio=draft.combined_ratio,
         solvency_ratio=draft.solvency_ratio,
         nav_discount=draft.nav_discount,
