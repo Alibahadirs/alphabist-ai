@@ -7,6 +7,7 @@ from app.parser.converter import to_financial_metrics
 from app.parser.extractor import (
     extract_company_metadata,
     detect_monetary_scale,
+    detect_comparison_period,
     extract_financial_report,
     extract_financial_values,
     parse_turkish_number,
@@ -56,6 +57,45 @@ def test_detects_financial_report_monetary_scale(
     assert detected is True
     assert detected_scale == scale
     assert detected_label == label
+
+
+def test_detects_same_period_previous_year_comparison():
+    comparison_end, current_first = detect_comparison_period(
+        "31.03.2026 31.03.2025 31.12.2025",
+        date(2026, 3, 31),
+    )
+
+    assert comparison_end == date(2025, 3, 31)
+    assert current_first is True
+
+
+def test_reports_unusual_comparison_column_order():
+    comparison_end, current_first = detect_comparison_period(
+        "31.03.2025 31.03.2026",
+        date(2026, 3, 31),
+    )
+
+    assert comparison_end == date(2025, 3, 31)
+    assert current_first is False
+
+
+def test_unusual_column_order_requires_manual_confirmation(monkeypatch):
+    text = """
+    ÖRNEK SANAYİ A.Ş.
+    BIST: ORNK
+    31.03.2025 31.03.2026
+    Hasılat 900.000 1.000.000
+    """
+    monkeypatch.setattr(
+        "app.parser.extractor._read_pdf",
+        lambda _file_bytes: (text, 1),
+    )
+
+    result = extract_financial_report(b"pdf", "ORNK_2026.pdf")
+
+    assert result.comparison_period_end == date(2025, 3, 31)
+    assert result.comparison_order_current_first is False
+    assert result.comparison_period_validated is False
 
 
 def test_bank_profile_is_detected_from_report_title():

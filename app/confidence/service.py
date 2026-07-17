@@ -66,9 +66,11 @@ def calculate_analysis_confidence(
     if audit:
         report_component += 5
         if audit.financial_report_name or audit.activity_report_name:
-            report_component += 3
+            report_component += 2
         if audit.financial_report_hash or audit.activity_report_hash:
             report_component += 2
+        if audit.comparison_period_confirmed:
+            report_component += 1
     period_assessment = assess_report_period(
         audit.report_period_end if audit else None,
         audit.period_months if audit else None,
@@ -107,6 +109,10 @@ def calculate_analysis_confidence(
     ):
         reasons.append(
             "Rapor adı kayıtlı ancak dosya içeriğini doğrulayan belge kimliği yok."
+        )
+    if audit and audit.source_type.value == "pdf" and not audit.comparison_period_confirmed:
+        reasons.append(
+            "Büyüme oranlarının karşılaştırma dönemi doğrulanmamış."
         )
     if validation.missing_fields:
         reasons.append(

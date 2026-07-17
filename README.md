@@ -29,6 +29,7 @@ yerel Streamlit uygulaması.
 - Aynı PDF'nin farklı şirket veya rapor döneminde kullanılmasını engelleme
 - Finansal/faaliyet raporu, hisse kodu ve şirket unvanı çapraz doğrulaması
 - TL, bin TL ve milyon TL sunum birimini yalnızca parasal kalemlere uygulama
+- Büyüme sütunları için geçen yılın aynı karşılaştırma dönemi doğrulaması
 - SQLite ile yerel veri saklama
 
 ## Çalıştırma

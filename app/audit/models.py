@@ -51,6 +51,8 @@ class CompanyDataAudit(BaseModel):
         default="", pattern=r"^(?:[0-9a-f]{64})?$"
     )
     financial_report_scale: float = Field(default=1, gt=0, le=1_000_000_000)
+    comparison_period_end: date | None = None
+    comparison_period_confirmed: bool = False
     completeness: float = Field(ge=0, le=100)
     alpha_score: float = Field(ge=0, le=100)
     grade: str = ""

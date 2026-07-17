@@ -314,6 +314,14 @@ def _render_data_source_caption(audit: CompanyDataAudit | None) -> None:
             "Finansal rapor sunum birimi: "
             + _monetary_scale_label(audit.financial_report_scale)
         )
+        comparison_label = (
+            f"{audit.comparison_period_end:%d.%m.%Y}"
+            if audit.comparison_period_end
+            else "kullanıcı tarafından kontrol edildi"
+            if audit.comparison_period_confirmed
+            else "doğrulanmadı"
+        )
+        st.caption("Büyüme karşılaştırma dönemi: " + comparison_label)
 
     if audit.field_sources:
         with st.expander("Son puanın gösterge kaynakları"):
@@ -557,6 +565,10 @@ def render_dashboard() -> None:
                             ),
                             "Rapor sunum birimi": _monetary_scale_label(
                                 audit.financial_report_scale
+                            ),
+                            "Karşılaştırma dönemi": audit.comparison_period_end,
+                            "Karşılaştırma doğrulandı": (
+                                audit.comparison_period_confirmed
                             ),
                             "Yeterlilik (%)": audit.completeness,
                             "Alpha Score": audit.alpha_score,
@@ -826,6 +838,14 @@ def _render_quality_correction_form() -> None:
         ),
         financial_report_scale=(
             previous_audit.financial_report_scale if previous_audit else 1
+        ),
+        comparison_period_end=(
+            previous_audit.comparison_period_end if previous_audit else None
+        ),
+        comparison_period_confirmed=(
+            previous_audit.comparison_period_confirmed
+            if previous_audit
+            else False
         ),
         completeness=validation.completeness,
         alpha_score=score.total,
@@ -1156,6 +1176,7 @@ def _render_pdf_company_form() -> None:
                 "pdf_period",
                 "pdf_period_end",
                 "pdf_monetary_scale",
+                "pdf_comparison_confirmed",
             }:
                 del st.session_state[key]
         st.session_state["company_pdf_token"] = document_token
@@ -1346,6 +1367,18 @@ def _render_pdf_company_form() -> None:
     )
     with st.form("pdf_company_form", border=True):
         st.subheader("Otomatik doldurulan şirket bilgileri")
+        if financial_result.comparison_period_validated:
+            comparison_confirmed = True
+            st.caption(
+                "Büyüme karşılaştırma dönemi doğrulandı: "
+                f"{financial_result.comparison_period_end:%d.%m.%Y}"
+            )
+        else:
+            comparison_confirmed = st.checkbox(
+                "Cari ve önceki dönem sütunlarını resmi gelir tablosundan "
+                "kontrol ettim",
+                key="pdf_comparison_confirmed",
+            )
         symbol = st.text_input(
             "Hisse kodu",
             value=draft.symbol,
@@ -1445,6 +1478,12 @@ def _render_pdf_company_form() -> None:
 
     if not submitted:
         return
+    if not comparison_confirmed:
+        st.error(
+            "Karşılaştırma dönemi otomatik doğrulanamadı. Büyüme oranlarını "
+            "kaydetmek için cari ve önceki dönem sütunlarını doğrulayın."
+        )
+        return
     identity_errors = validate_report_identity(
         submitted_symbol=symbol,
         submitted_company_name=company_name,
@@ -1502,6 +1541,8 @@ def _render_pdf_company_form() -> None:
         financial_report_hash=financial_report_hash,
         activity_report_hash=activity_report_hash,
         financial_report_scale=selected_scale,
+        comparison_period_end=financial_result.comparison_period_end,
+        comparison_period_confirmed=comparison_confirmed,
         field_sources=build_pdf_field_sources(
             financial_result,
             activity_result,
@@ -1681,6 +1722,8 @@ def _validate_and_save_company(
     financial_report_hash: str = "",
     activity_report_hash: str = "",
     financial_report_scale: float = 1,
+    comparison_period_end: date | None = None,
+    comparison_period_confirmed: bool = False,
     field_sources: dict[str, MetricSourceType] | None = None,
 ) -> None:
     sector_metrics = sector_metrics or {}
@@ -1750,6 +1793,8 @@ def _validate_and_save_company(
         financial_report_hash=financial_report_hash,
         activity_report_hash=activity_report_hash,
         financial_report_scale=financial_report_scale,
+        comparison_period_end=comparison_period_end,
+        comparison_period_confirmed=comparison_period_confirmed,
     )
     if document_conflicts:
         st.error(

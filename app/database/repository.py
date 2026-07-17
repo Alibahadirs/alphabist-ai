@@ -102,6 +102,8 @@ def init_db():
             financial_report_hash TEXT NOT NULL DEFAULT '',
             activity_report_hash TEXT NOT NULL DEFAULT '',
             financial_report_scale REAL NOT NULL DEFAULT 1,
+            comparison_period_end TEXT,
+            comparison_period_confirmed INTEGER NOT NULL DEFAULT 0,
             completeness REAL NOT NULL,
             alpha_score REAL NOT NULL,
             grade TEXT NOT NULL DEFAULT '',
@@ -134,6 +136,8 @@ def init_db():
             "financial_report_hash": "TEXT NOT NULL DEFAULT ''",
             "activity_report_hash": "TEXT NOT NULL DEFAULT ''",
             "financial_report_scale": "REAL NOT NULL DEFAULT 1",
+            "comparison_period_end": "TEXT",
+            "comparison_period_confirmed": "INTEGER NOT NULL DEFAULT 0",
         }
         for column, definition in audit_migrations.items():
             if column not in audit_columns:
@@ -211,10 +215,11 @@ def add_company_data_audit(audit: CompanyDataAudit) -> None:
             symbol, source_type, company_profile, period_months, report_period_end,
             financial_report_name, activity_report_name,
             financial_report_hash, activity_report_hash,
-            financial_report_scale, completeness,
+            financial_report_scale, comparison_period_end,
+            comparison_period_confirmed, completeness,
             alpha_score, grade, decision, confidence_score, confidence_status,
             methodology_version, input_fingerprint, score_breakdown, field_sources)
-            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 audit.symbol.upper().strip(),
                 audit.source_type.value,
@@ -230,6 +235,12 @@ def add_company_data_audit(audit: CompanyDataAudit) -> None:
                 audit.financial_report_hash,
                 audit.activity_report_hash,
                 audit.financial_report_scale,
+                (
+                    audit.comparison_period_end.isoformat()
+                    if audit.comparison_period_end
+                    else None
+                ),
+                int(audit.comparison_period_confirmed),
                 audit.completeness,
                 audit.alpha_score,
                 audit.grade,
@@ -267,7 +278,8 @@ def get_latest_company_data_audit(symbol: str) -> CompanyDataAudit | None:
             report_period_end,
             financial_report_name, activity_report_name,
             financial_report_hash, activity_report_hash,
-            financial_report_scale, completeness,
+            financial_report_scale, comparison_period_end,
+            comparison_period_confirmed, completeness,
             alpha_score, grade, decision, confidence_score,
             confidence_status, methodology_version, input_fingerprint,
             score_breakdown,
@@ -290,7 +302,8 @@ def list_company_data_audits(
             report_period_end,
             financial_report_name, activity_report_name,
             financial_report_hash, activity_report_hash,
-            financial_report_scale, completeness,
+            financial_report_scale, comparison_period_end,
+            comparison_period_confirmed, completeness,
             alpha_score, grade, decision, confidence_score,
             confidence_status, methodology_version, input_fingerprint,
             score_breakdown,
@@ -311,6 +324,7 @@ def list_latest_company_data_audits() -> list[CompanyDataAudit]:
             audit.financial_report_name, audit.activity_report_name,
             audit.financial_report_hash, audit.activity_report_hash,
             audit.financial_report_scale,
+            audit.comparison_period_end, audit.comparison_period_confirmed,
             audit.completeness, audit.alpha_score, audit.grade,
             audit.decision, audit.confidence_score, audit.confidence_status,
             audit.methodology_version, audit.input_fingerprint,
@@ -339,7 +353,8 @@ def list_document_usages(
             report_period_end,
             financial_report_name, activity_report_name,
             financial_report_hash, activity_report_hash,
-            financial_report_scale, completeness,
+            financial_report_scale, comparison_period_end,
+            comparison_period_confirmed, completeness,
             alpha_score, grade, decision, confidence_score,
             confidence_status, methodology_version, input_fingerprint,
             score_breakdown, field_sources, created_at

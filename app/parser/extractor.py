@@ -297,17 +297,57 @@ def _canonical_symbol(symbol: str, company_name: str = "") -> str:
     return normalized_symbol
 
 
-def _extract_report_period_end(text: str) -> date | None:
-    candidates: list[date] = []
-    for day, month, year in re.findall(
+def _quarter_dates(text: str) -> list[tuple[date, int]]:
+    candidates: list[tuple[date, int]] = []
+    for match in re.finditer(
         r"\b(30|31)[./-](0?3|0?6|0?9|12)[./-](20\d{2})\b",
         text[:12000],
     ):
+        day, month, year = match.groups()
         try:
-            candidates.append(date(int(year), int(month), int(day)))
+            candidates.append(
+                (date(int(year), int(month), int(day)), match.start())
+            )
         except ValueError:
             continue
+    return candidates
+
+
+def _extract_report_period_end(text: str) -> date | None:
+    candidates = [value for value, _ in _quarter_dates(text)]
     return max(candidates) if candidates else None
+
+
+def detect_comparison_period(
+    text: str,
+    report_period_end: date | None,
+) -> tuple[date | None, bool | None]:
+    if report_period_end is None:
+        return None, None
+    try:
+        expected = report_period_end.replace(year=report_period_end.year - 1)
+    except ValueError:
+        return None, None
+
+    dated_positions = _quarter_dates(text)
+    current_positions = [
+        position
+        for value, position in dated_positions
+        if value == report_period_end
+    ]
+    previous_positions = [
+        position
+        for value, position in dated_positions
+        if value == expected
+    ]
+    if not previous_positions:
+        return None, None
+    current_first = (
+        min(current_positions) < min(previous_positions)
+        if current_positions
+        else None
+    )
+    return expected, current_first
 
 
 def extract_company_metadata(text: str, file_name: str = "") -> CompanyMetadata:
@@ -412,6 +452,9 @@ def extract_financial_report(
     )
     draft = _apply_monetary_scale(draft, monetary_scale)
     metadata = extract_company_metadata(text, file_name)
+    comparison_period_end, comparison_order_current_first = (
+        detect_comparison_period(text, metadata.report_period_end)
+    )
     metadata_updates = {
         "symbol": metadata.symbol,
         "company_name": metadata.company_name,
@@ -443,6 +486,16 @@ def extract_financial_report(
             "Finansal raporun para birimi ölçeği bulunamadı; tutarlar TL kabul "
             "edildi. Rapor kapağındaki sunum birimini doğrulayın."
         )
+    if comparison_period_end is None:
+        warnings.append(
+            "Geçen yılın aynı karşılaştırma dönemi otomatik doğrulanamadı. "
+            "Büyüme oranlarını resmi gelir tablosundan kontrol edin."
+        )
+    elif comparison_order_current_first is False:
+        warnings.append(
+            "Karşılaştırma dönemi rapor metninde cari dönemden önce görünüyor. "
+            "Cari ve önceki dönem sütun sırasını doğrulayın."
+        )
     if draft.revenue == 0 and draft.previous_revenue > 0:
         warnings.append(
             "Cari dönem hasılatı raporda boş veya sıfır; önceki döneme göre ciro "
@@ -463,6 +516,12 @@ def extract_financial_report(
         page_count=page_count,
         monetary_scale=monetary_scale,
         monetary_unit_label=monetary_unit_label,
+        comparison_period_end=comparison_period_end,
+        comparison_period_validated=(
+            comparison_period_end is not None
+            and comparison_order_current_first is not False
+        ),
+        comparison_order_current_first=comparison_order_current_first,
         extracted_fields=extracted_fields,
         warnings=warnings,
     )

@@ -51,6 +51,10 @@ def _audit(source: MetricSourceType) -> CompanyDataAudit:
         report_period_end=report_period_end,
         financial_report_name="financial.pdf",
         financial_report_hash="a" * 64,
+        comparison_period_end=report_period_end.replace(
+            year=report_period_end.year - 1
+        ),
+        comparison_period_confirmed=True,
         completeness=100,
         alpha_score=100,
         field_sources={field: source for field in required},
@@ -93,6 +97,8 @@ def test_manual_sources_gate_strong_buy_decision():
             "report_period_end": None,
             "financial_report_name": "",
             "financial_report_hash": "",
+            "comparison_period_end": None,
+            "comparison_period_confirmed": False,
         }
     )
 

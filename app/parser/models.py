@@ -46,6 +46,9 @@ class PdfExtractionResult(BaseModel):
     page_count: int
     monetary_scale: float = Field(default=1, gt=0)
     monetary_unit_label: str = "TL"
+    comparison_period_end: date | None = None
+    comparison_period_validated: bool = False
+    comparison_order_current_first: bool | None = None
     extracted_fields: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
 
