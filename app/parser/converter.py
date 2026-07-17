@@ -15,6 +15,14 @@ def _ratio(numerator: float, denominator: float) -> float:
     return numerator / denominator
 
 
+def _average_balance(current: float, previous: float) -> float:
+    if current <= 0:
+        return 0
+    if previous <= 0:
+        return current
+    return (current + previous) / 2
+
+
 def to_financial_metrics(draft: FinancialReportDraft) -> FinancialMetrics:
     symbol = draft.symbol.upper().strip()
     company_name = draft.company_name.strip()
@@ -23,6 +31,11 @@ def to_financial_metrics(draft: FinancialReportDraft) -> FinancialMetrics:
 
     annualization_factor = 12 / draft.period_months
     free_cash_flow = draft.operating_cash_flow - abs(draft.capital_expenditures)
+    average_equity = _average_balance(draft.equity, draft.previous_equity)
+    average_assets = _average_balance(
+        draft.total_assets,
+        draft.previous_total_assets,
+    )
     premium_growth = draft.premium_growth
     if premium_growth is None and draft.previous_premium_revenue > 0:
         premium_growth = _growth_rate(
@@ -40,7 +53,7 @@ def to_financial_metrics(draft: FinancialReportDraft) -> FinancialMetrics:
             draft.previous_net_profit,
         ),
         net_margin=_ratio(draft.net_profit, draft.revenue) * 100,
-        roe=_ratio(draft.net_profit, draft.equity)
+        roe=_ratio(draft.net_profit, average_equity)
         * 100
         * annualization_factor,
         debt_to_equity=_ratio(draft.total_debt, draft.equity),
@@ -51,7 +64,7 @@ def to_financial_metrics(draft: FinancialReportDraft) -> FinancialMetrics:
         operating_cash_flow=draft.operating_cash_flow,
         free_cash_flow=free_cash_flow,
         asset_turnover=max(
-            _ratio(draft.revenue, draft.total_assets) * annualization_factor,
+            _ratio(draft.revenue, average_assets) * annualization_factor,
             0,
         ),
         valuation_score_input=draft.valuation_score_input,

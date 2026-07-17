@@ -17,6 +17,7 @@ class FinancialReportDraft(BaseModel):
     net_profit: float = 0
     previous_net_profit: float = 0
     equity: float = 0
+    previous_equity: float = 0
     total_debt: float = 0
     cash: float = 0
     current_assets: float = 0
@@ -24,6 +25,7 @@ class FinancialReportDraft(BaseModel):
     operating_cash_flow: float = 0
     capital_expenditures: float = 0
     total_assets: float = 0
+    previous_total_assets: float = 0
     premium_revenue: float = 0
     previous_premium_revenue: float = 0
 

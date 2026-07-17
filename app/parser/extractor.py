@@ -43,11 +43,11 @@ FIELD_LABELS = {
         "kısa vadeli yükümlülükler",
         "kısa vadeli borçlar",
     ),
-    ("equity",): (
+    ("equity", "previous_equity"): (
         "toplam özkaynaklar",
         "özkaynaklar",
     ),
-    ("total_assets",): (
+    ("total_assets", "previous_total_assets"): (
         "toplam varlıklar",
         "toplam aktifler",
     ),
@@ -145,6 +145,7 @@ MONETARY_FIELDS = {
     "net_profit",
     "previous_net_profit",
     "equity",
+    "previous_equity",
     "total_debt",
     "cash",
     "current_assets",
@@ -152,6 +153,7 @@ MONETARY_FIELDS = {
     "operating_cash_flow",
     "capital_expenditures",
     "total_assets",
+    "previous_total_assets",
     "premium_revenue",
     "previous_premium_revenue",
 }
@@ -562,6 +564,16 @@ def extract_financial_report(
     if draft.equity <= 0:
         warnings.append(
             "Özkaynak tutarı bulunamadı veya geçersiz; ROE değerini kontrol edin."
+        )
+    elif "previous_equity" not in extracted_fields:
+        warnings.append(
+            "Önceki dönem özkaynağı bulunamadı; ROE dönem sonu özkaynağıyla "
+            "hesaplandı."
+        )
+    if draft.total_assets > 0 and "previous_total_assets" not in extracted_fields:
+        warnings.append(
+            "Önceki dönem toplam aktifi bulunamadı; aktif devir hızı dönem sonu "
+            "aktifiyle hesaplandı."
         )
 
     return PdfExtractionResult(

@@ -31,6 +31,7 @@ yerel Streamlit uygulaması.
 - TL, bin TL ve milyon TL sunum birimini yalnızca parasal kalemlere uygulama
 - Büyüme sütunları için geçen yılın aynı karşılaştırma dönemi doğrulaması
 - Banka, sigorta, GYO ve finansal hizmet raporlarına özgü gelir satırı eşlemesi
+- ROE ve aktif devir hızında ortalama özkaynak/aktif kullanımı
 - SQLite ile yerel veri saklama
 
 ## Çalıştırma

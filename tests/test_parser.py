@@ -198,6 +198,62 @@ def test_converter_requires_symbol_and_company_name():
         to_financial_metrics(FinancialReportDraft())
 
 
+def test_converter_uses_average_equity_and_assets():
+    draft = FinancialReportDraft(
+        symbol="TEST",
+        company_name="Test Şirketi",
+        period_months=12,
+        revenue=1_200,
+        net_profit=200,
+        equity=1_200,
+        previous_equity=800,
+        total_assets=2_400,
+        previous_total_assets=1_600,
+    )
+
+    metrics = to_financial_metrics(draft)
+
+    assert metrics.roe == 20
+    assert metrics.asset_turnover == 0.6
+
+
+def test_financial_values_extract_previous_balance_sheet_amounts():
+    draft, extracted = extract_financial_values(
+        """
+        Toplam özkaynaklar 1.200.000 800.000
+        Toplam varlıklar 2.400.000 1.600.000
+        """
+    )
+
+    assert draft.equity == 1_200_000
+    assert draft.previous_equity == 800_000
+    assert draft.total_assets == 2_400_000
+    assert draft.previous_total_assets == 1_600_000
+    assert "previous_equity" in extracted
+    assert "previous_total_assets" in extracted
+
+
+def test_financial_report_warns_when_average_balances_are_unavailable(
+    monkeypatch,
+):
+    text = """
+    TEST SANAYİ A.Ş.
+    BIST: TEST
+    31.03.2026 31.03.2025
+    Özkaynaklar 1.200.000
+    Toplam varlıklar 2.400.000
+    """
+    monkeypatch.setattr(
+        "app.parser.extractor._read_pdf",
+        lambda _file_bytes: (text, 1),
+    )
+
+    result = extract_financial_report(b"pdf", "TEST.pdf")
+
+    assert any("ROE dönem sonu özkaynağıyla" in item for item in result.warnings)
+    assert any("aktif devir hızı dönem sonu" in item for item in result.warnings)
+
+
 def test_extract_company_metadata_from_activity_report_text():
     text = """
     AKSA AKRİLİK KİMYA SANAYİİ A.Ş.
