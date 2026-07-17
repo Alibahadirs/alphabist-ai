@@ -42,6 +42,7 @@ yerel Streamlit uygulaması.
 - Hesap uyuşmazlığında analiz güvenini ve yatırım kararını otomatik olarak durdurma
 - Liderlik, tarama ve takip hedeflerinde doğrulama temelli karara hazırlık kontrolü
 - Portföyde güven ağırlıklı puan ve doğrulama gereken pozisyon payı
+- Kullanıcıya özel SQLite verisini kaynak kodu commitlerinden ayırma
 - SQLite ile yerel veri saklama
 
 ## Çalıştırma
@@ -60,6 +61,13 @@ py -m streamlit run main.py
 ```
 
 Uygulama varsayılan olarak `http://localhost:8501` adresinde açılır.
+
+## Yerel veri güvenliği
+
+Şirket analizleri, takip listesi ve portföy kayıtları `data/alphabist.db`
+dosyasında yalnızca yerel bilgisayarda tutulur. Bu dosya Git tarafından
+izlenmez ve GitHub'a gönderilmez. Uygulama yeni bir kurulumda veritabanını
+otomatik oluşturur.
 
 ## Testler
 
