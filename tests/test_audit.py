@@ -13,6 +13,7 @@ from app.audit.service import (
     document_fingerprint,
     document_identity_conflicts,
     is_duplicate_analysis,
+    verify_audit_calculations,
 )
 from app.confidence.models import AnalysisConfidence
 from app.core.settings import settings
@@ -312,8 +313,79 @@ def test_pdf_field_sources_distinguish_reports_and_user_changes():
     )
     assert sources["risk_score_input"] == MetricSourceType.MANUAL
     assert changed_sources["revenue_growth"] == MetricSourceType.MANUAL
-    assert corrected_sources["revenue_growth"] == MetricSourceType.CORRECTION
-    assert corrected_sources["roe"] == MetricSourceType.CORRECTION
+    assert (
+        corrected_sources["revenue_growth"]
+        == MetricSourceType.SOURCE_CORRECTION
+    )
+    assert corrected_sources["roe"] == MetricSourceType.SOURCE_CORRECTION
+
+
+def test_audit_calculations_are_reproduced_from_source_values():
+    audit = _audit("TEST", 80, DataSourceType.PDF).model_copy(
+        update={
+            "methodology_version": settings.scoring_methodology_version,
+            "period_months": 12,
+            "source_values": {
+                "revenue": 1_200_000,
+                "previous_revenue": 1_000_000,
+                "net_profit": 120_000,
+                "previous_net_profit": 100_000,
+                "equity": 600_000,
+                "previous_equity": 600_000,
+            },
+            "metric_values": {
+                "company_name": "Test Şirketi",
+                "revenue_growth": 20.0,
+                "net_margin": 10.0,
+            },
+            "field_sources": {
+                "revenue_growth": MetricSourceType.FINANCIAL_REPORT,
+                "net_margin": MetricSourceType.SOURCE_CORRECTION,
+            },
+        }
+    )
+
+    checks = verify_audit_calculations(audit)
+
+    assert {check.field for check in checks} == {
+        "revenue_growth",
+        "net_margin",
+    }
+    assert all(check.matches for check in checks)
+
+
+def test_audit_calculation_mismatch_and_manual_values_are_distinguished():
+    audit = _audit("TEST", 80, DataSourceType.PDF).model_copy(
+        update={
+            "methodology_version": settings.scoring_methodology_version,
+            "period_months": 12,
+            "source_values": {
+                "revenue": 1_200_000,
+                "previous_revenue": 1_000_000,
+            },
+            "metric_values": {
+                "company_name": "Test Şirketi",
+                "revenue_growth": 25.0,
+                "roe": 30.0,
+            },
+            "field_sources": {
+                "revenue_growth": MetricSourceType.FINANCIAL_REPORT,
+                "roe": MetricSourceType.CORRECTION,
+            },
+        }
+    )
+
+    checks = verify_audit_calculations(audit)
+
+    assert len(checks) == 1
+    assert checks[0].field == "revenue_growth"
+    assert checks[0].matches is False
+
+
+def test_old_methodology_is_not_recalculated_with_new_formulas():
+    audit = _audit("TEST", 80, DataSourceType.PDF)
+
+    assert verify_audit_calculations(audit) == []
 
 
 def test_analysis_snapshot_freezes_methodology_and_breakdown():

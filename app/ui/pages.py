@@ -23,11 +23,13 @@ from app.audit.service import (
     document_fingerprint,
     document_identity_conflicts,
     is_duplicate_analysis,
+    verify_audit_calculations,
 )
 from app.comparison.service import build_comparison
 from app.confidence.service import calculate_analysis_confidence
 from app.core.constants import CATEGORY_MAX_POINTS
 from app.core.exceptions import PdfParsingError, ValidationError as AppValidationError
+from app.core.settings import settings
 from app.database.repository import (
     add_company_data_audit,
     add_score_history,
@@ -513,6 +515,57 @@ def _render_data_source_caption(audit: CompanyDataAudit | None) -> None:
                 hide_index=True,
                 width="stretch",
             )
+    calculation_checks = verify_audit_calculations(audit)
+    if calculation_checks:
+        with st.expander("Finansal hesaplama doğrulaması"):
+            if all(check.matches for check in calculation_checks):
+                st.success(
+                    "Kaydedilmiş göstergeler ham tutarlardan yeniden "
+                    "hesaplandığında aynı sonuçlar elde edildi."
+                )
+            else:
+                st.warning(
+                    "Bazı göstergeler güncel formülle yeniden hesaplandığında "
+                    "kaydedilmiş değerle eşleşmiyor."
+                )
+            st.dataframe(
+                pd.DataFrame(
+                    [
+                        {
+                            "Gösterge": FIELD_LABELS.get(
+                                check.field,
+                                check.field,
+                            ),
+                            "Formül": check.formula,
+                            "Kaydedilen": _format_metric_snapshot_value(
+                                check.field,
+                                check.stored_value,
+                            ),
+                            "Yeniden hesaplanan": _format_metric_snapshot_value(
+                                check.field,
+                                check.recalculated_value,
+                            ),
+                            "Durum": (
+                                "Eşleşiyor"
+                                if check.matches
+                                else "Kontrol gerekli"
+                            ),
+                        }
+                        for check in calculation_checks
+                    ]
+                ),
+                hide_index=True,
+                width="stretch",
+            )
+    elif (
+        audit.source_values
+        and audit.metric_values
+        and audit.methodology_version != settings.scoring_methodology_version
+    ):
+        st.caption(
+            "Hesaplama doğrulaması bu kaydın eski metodoloji sürümüne ait "
+            "olması nedeniyle uygulanmadı."
+        )
 
 
 def _render_snapshot_comparison(

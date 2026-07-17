@@ -10,6 +10,7 @@ from app.validation.service import PROFILE_REQUIREMENTS, validate_financial_metr
 SOURCE_WEIGHTS = {
     MetricSourceType.FINANCIAL_REPORT: 1.0,
     MetricSourceType.ACTIVITY_REPORT: 1.0,
+    MetricSourceType.SOURCE_CORRECTION: 0.95,
     MetricSourceType.CORRECTION: 0.9,
     MetricSourceType.MANUAL: 0.7,
 }

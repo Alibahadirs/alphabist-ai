@@ -87,6 +87,20 @@ def test_complete_pdf_sources_produce_high_confidence():
     assert confidence.decision == "Güçlü Al"
 
 
+def test_pdf_source_corrections_keep_high_but_not_full_confidence():
+    metrics = _strong_metrics()
+    score = calculate_alpha_score(metrics)
+
+    confidence = calculate_analysis_confidence(
+        metrics,
+        score,
+        _audit(MetricSourceType.SOURCE_CORRECTION),
+    )
+
+    assert confidence.total == 98.75
+    assert confidence.status == "Yüksek"
+
+
 def test_manual_sources_gate_strong_buy_decision():
     metrics = _strong_metrics()
     score = calculate_alpha_score(metrics)

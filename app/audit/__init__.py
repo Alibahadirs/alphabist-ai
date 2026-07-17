@@ -1,5 +1,6 @@
 from app.audit.models import (
     AnalysisSnapshotComparison,
+    CalculationCheck,
     CompanyDataAudit,
     DataSourceType,
     METRIC_SOURCE_LABELS,
@@ -14,10 +15,12 @@ from app.audit.service import (
     build_source_value_snapshot,
     compare_analysis_snapshots,
     is_duplicate_analysis,
+    verify_audit_calculations,
 )
 
 __all__ = [
     "AnalysisSnapshotComparison",
+    "CalculationCheck",
     "CompanyDataAudit",
     "DataSourceType",
     "METRIC_SOURCE_LABELS",
@@ -30,4 +33,5 @@ __all__ = [
     "build_source_value_snapshot",
     "compare_analysis_snapshots",
     "is_duplicate_analysis",
+    "verify_audit_calculations",
 ]

@@ -16,6 +16,7 @@ class DataSourceType(str, Enum):
 class MetricSourceType(str, Enum):
     FINANCIAL_REPORT = "financial_report"
     ACTIVITY_REPORT = "activity_report"
+    SOURCE_CORRECTION = "source_correction"
     MANUAL = "manual"
     CORRECTION = "correction"
 
@@ -30,6 +31,7 @@ SOURCE_LABELS = {
 METRIC_SOURCE_LABELS = {
     MetricSourceType.FINANCIAL_REPORT: "Finansal rapor",
     MetricSourceType.ACTIVITY_REPORT: "Faaliyet raporu",
+    MetricSourceType.SOURCE_CORRECTION: "PDF tutar düzeltmesi",
     MetricSourceType.MANUAL: "Kullanıcı girişi",
     MetricSourceType.CORRECTION: "Kullanıcı düzeltmesi",
 }
@@ -52,6 +54,28 @@ SOURCE_VALUE_LABELS = {
     "premium_revenue": "Cari dönem yazılan primler",
     "previous_premium_revenue": "Önceki dönem yazılan primler",
 }
+
+
+CALCULATION_FORMULAS = {
+    "revenue_growth": "(Cari hasılat - Önceki hasılat) / Önceki hasılat × 100",
+    "net_profit_growth": "(Cari net kâr - Önceki net kâr) / Önceki net kâr × 100",
+    "net_margin": "Net kâr / Hasılat × 100",
+    "roe": "Net kâr / Ortalama özkaynak × dönem yıllıklandırması × 100",
+    "debt_to_equity": "Finansal borç / Özkaynak",
+    "current_ratio": "Dönen varlık / Kısa vadeli yükümlülük",
+    "operating_cash_flow": "Operasyonel nakit akışı",
+    "free_cash_flow": "Operasyonel nakit akışı - |Yatırım harcaması|",
+    "asset_turnover": "Hasılat / Ortalama toplam varlık × dönem yıllıklandırması",
+    "premium_growth": "(Cari prim - Önceki prim) / Önceki prim × 100",
+}
+
+
+class CalculationCheck(BaseModel):
+    field: str
+    formula: str
+    stored_value: float | None = None
+    recalculated_value: float | None = None
+    matches: bool
 
 
 class CompanyDataAudit(BaseModel):
