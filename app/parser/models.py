@@ -44,6 +44,8 @@ class FinancialReportDraft(BaseModel):
 class PdfExtractionResult(BaseModel):
     draft: FinancialReportDraft
     page_count: int
+    monetary_scale: float = Field(default=1, gt=0)
+    monetary_unit_label: str = "TL"
     extracted_fields: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
 

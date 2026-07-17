@@ -104,6 +104,21 @@ SECTOR_METRIC_LABELS = {
     "occupancy_rate": ("doluluk oranı",),
 }
 
+MONETARY_FIELDS = {
+    "revenue",
+    "previous_revenue",
+    "net_profit",
+    "previous_net_profit",
+    "equity",
+    "total_debt",
+    "cash",
+    "current_assets",
+    "current_liabilities",
+    "operating_cash_flow",
+    "capital_expenditures",
+    "total_assets",
+}
+
 
 def parse_turkish_number(raw_value: str) -> float:
     value = raw_value.strip()
@@ -130,6 +145,75 @@ def parse_turkish_number(raw_value: str) -> float:
 def _fold(value: str) -> str:
     normalized = unicodedata.normalize("NFKD", value)
     return "".join(char for char in normalized if not unicodedata.combining(char)).casefold()
+
+
+def detect_monetary_scale(text: str) -> tuple[float, str, bool]:
+    header = _fold(text[:20000]).replace("ı", "i")
+    declarations: list[tuple[int, float, str]] = []
+    anchors = (
+        "aksi belirtilmedikce",
+        "finansal tablolar",
+        "sunum para birimi",
+        "tutarlar",
+    )
+    for unit, scale, label in (
+        ("milyon", 1_000_000.0, "milyon TL"),
+        ("bin", 1_000.0, "bin TL"),
+    ):
+        for anchor in anchors:
+            pattern = re.compile(
+                rf"{re.escape(anchor)}.{{0,260}}\b{unit}\s+"
+                r"(?:turk lirasi|tl)\b",
+                re.DOTALL,
+            )
+            match = pattern.search(header)
+            if match:
+                declarations.append((match.start(), scale, label))
+        reverse_pattern = re.compile(
+            rf"\b{unit}\s+(?:turk lirasi|tl)\b.{{0,160}}"
+            r"(?:olarak ifade|olarak sunul)",
+            re.DOTALL,
+        )
+        reverse_match = reverse_pattern.search(header)
+        if reverse_match:
+            declarations.append((reverse_match.start(), scale, label))
+
+    if declarations:
+        _, scale, label = min(declarations, key=lambda item: item[0])
+        return scale, label, True
+
+    tl_declaration = re.search(
+        r"(?:sunum para birimi|tutarlar).{0,180}"
+        r"(?:turk lirasi|tl)\b",
+        header,
+        re.DOTALL,
+    )
+    return 1.0, "TL", tl_declaration is not None
+
+
+def _apply_monetary_scale(
+    draft: FinancialReportDraft,
+    scale: float,
+) -> FinancialReportDraft:
+    if scale == 1:
+        return draft
+    return draft.model_copy(
+        update={
+            field: getattr(draft, field) * scale
+            for field in MONETARY_FIELDS
+        }
+    )
+
+
+def rescale_monetary_values(
+    draft: FinancialReportDraft,
+    current_scale: float,
+    target_scale: float,
+) -> FinancialReportDraft:
+    if current_scale <= 0 or target_scale <= 0:
+        raise ValueError("Para birimi ölçeği sıfırdan büyük olmalıdır.")
+    factor = target_scale / current_scale
+    return _apply_monetary_scale(draft, factor)
 
 
 def _line_values(
@@ -323,6 +407,10 @@ def extract_financial_report(
 ) -> PdfExtractionResult:
     text, page_count = _read_pdf(file_bytes)
     draft, extracted_fields = extract_financial_values(text)
+    monetary_scale, monetary_unit_label, scale_detected = detect_monetary_scale(
+        text
+    )
+    draft = _apply_monetary_scale(draft, monetary_scale)
     metadata = extract_company_metadata(text, file_name)
     metadata_updates = {
         "symbol": metadata.symbol,
@@ -350,6 +438,11 @@ def extract_financial_report(
         warnings.append("Finansal raporda hisse kodu bulunamadı.")
     if not metadata.company_name:
         warnings.append("Finansal raporda şirket unvanı bulunamadı.")
+    if not scale_detected:
+        warnings.append(
+            "Finansal raporun para birimi ölçeği bulunamadı; tutarlar TL kabul "
+            "edildi. Rapor kapağındaki sunum birimini doğrulayın."
+        )
     if draft.revenue == 0 and draft.previous_revenue > 0:
         warnings.append(
             "Cari dönem hasılatı raporda boş veya sıfır; önceki döneme göre ciro "
@@ -368,6 +461,8 @@ def extract_financial_report(
     return PdfExtractionResult(
         draft=draft,
         page_count=page_count,
+        monetary_scale=monetary_scale,
+        monetary_unit_label=monetary_unit_label,
         extracted_fields=extracted_fields,
         warnings=warnings,
     )

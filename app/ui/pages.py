@@ -51,6 +51,7 @@ from app.parser.extractor import (
     extract_activity_report,
     extract_financial_report,
     parse_turkish_number,
+    rescale_monetary_values,
 )
 from app.parser.identity import company_names_match, validate_report_identity
 from app.parser.models import (
@@ -267,6 +268,15 @@ def _audit_date(audit: CompanyDataAudit | None):
     return audit.created_at if audit else None
 
 
+def _monetary_scale_label(scale: float) -> str:
+    labels = {
+        1.0: "TL",
+        1_000.0: "bin TL",
+        1_000_000.0: "milyon TL",
+    }
+    return labels.get(scale, f"{scale:g} × TL")
+
+
 def _render_data_source_caption(audit: CompanyDataAudit | None) -> None:
     if audit is None:
         st.caption("Veri kaynağı: belirtilmemiş (eski kayıt)")
@@ -299,6 +309,11 @@ def _render_data_source_caption(audit: CompanyDataAudit | None) -> None:
         )
     if document_ids:
         st.caption("Belge kimlikleri: " + " | ".join(document_ids))
+    if audit.financial_report_name:
+        st.caption(
+            "Finansal rapor sunum birimi: "
+            + _monetary_scale_label(audit.financial_report_scale)
+        )
 
     if audit.field_sources:
         with st.expander("Son puanın gösterge kaynakları"):
@@ -539,6 +554,9 @@ def render_dashboard() -> None:
                                 audit.activity_report_hash[:10]
                                 if audit.activity_report_hash
                                 else "-"
+                            ),
+                            "Rapor sunum birimi": _monetary_scale_label(
+                                audit.financial_report_scale
                             ),
                             "Yeterlilik (%)": audit.completeness,
                             "Alpha Score": audit.alpha_score,
@@ -805,6 +823,9 @@ def _render_quality_correction_form() -> None:
         ),
         activity_report_hash=(
             previous_audit.activity_report_hash if previous_audit else ""
+        ),
+        financial_report_scale=(
+            previous_audit.financial_report_scale if previous_audit else 1
         ),
         completeness=validation.completeness,
         alpha_score=score.total,
@@ -1134,6 +1155,7 @@ def _render_pdf_company_form() -> None:
             if key.startswith("pdf_field_") or key in {
                 "pdf_period",
                 "pdf_period_end",
+                "pdf_monetary_scale",
             }:
                 del st.session_state[key]
         st.session_state["company_pdf_token"] = document_token
@@ -1150,7 +1172,32 @@ def _render_pdf_company_form() -> None:
         st.error(str(exc))
         return
 
-    draft = financial_result.draft
+    scale_options = {
+        1.0: "TL",
+        1_000.0: "bin TL",
+        1_000_000.0: "milyon TL",
+    }
+    selected_scale = st.selectbox(
+        "Finansal rapor sunum birimi",
+        list(scale_options),
+        index=list(scale_options).index(financial_result.monetary_scale),
+        format_func=scale_options.get,
+        key="pdf_monetary_scale",
+        help=(
+            "Rapor kapağındaki sunum birimini doğrulayın. Bu seçim yalnızca "
+            "parasal tutarları etkiler; yüzdeler ve oranlar değişmez."
+        ),
+    )
+    draft = rescale_monetary_values(
+        financial_result.draft,
+        financial_result.monetary_scale,
+        selected_scale,
+    )
+    if selected_scale != financial_result.monetary_scale:
+        st.warning(
+            "Otomatik bulunan sunum birimi kullanıcı seçimine göre değiştirildi. "
+            "Parasal tutarlar yeni ölçeğe göre yeniden hesaplandı."
+        )
     if activity_result:
         metadata = activity_result.metadata
         report_identity_errors = validate_report_identity(
@@ -1212,6 +1259,11 @@ def _render_pdf_company_form() -> None:
             border=True,
         )
         st.metric("Finansal rapor", f"{financial_result.page_count} sayfa", border=True)
+        st.metric(
+            "Tutar ölçeği",
+            financial_result.monetary_unit_label,
+            border=True,
+        )
         if activity_result:
             st.metric("Faaliyet raporu", f"{activity_result.page_count} sayfa", border=True)
 
@@ -1449,6 +1501,7 @@ def _render_pdf_company_form() -> None:
         activity_report_name=activity_file.name if activity_file else "",
         financial_report_hash=financial_report_hash,
         activity_report_hash=activity_report_hash,
+        financial_report_scale=selected_scale,
         field_sources=build_pdf_field_sources(
             financial_result,
             activity_result,
@@ -1627,6 +1680,7 @@ def _validate_and_save_company(
     activity_report_name: str = "",
     financial_report_hash: str = "",
     activity_report_hash: str = "",
+    financial_report_scale: float = 1,
     field_sources: dict[str, MetricSourceType] | None = None,
 ) -> None:
     sector_metrics = sector_metrics or {}
@@ -1695,6 +1749,7 @@ def _validate_and_save_company(
         report_period_end=report_period_end,
         financial_report_hash=financial_report_hash,
         activity_report_hash=activity_report_hash,
+        financial_report_scale=financial_report_scale,
     )
     if document_conflicts:
         st.error(

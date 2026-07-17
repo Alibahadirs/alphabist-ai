@@ -6,9 +6,11 @@ from app.core.exceptions import ValidationError
 from app.parser.converter import to_financial_metrics
 from app.parser.extractor import (
     extract_company_metadata,
+    detect_monetary_scale,
     extract_financial_report,
     extract_financial_values,
     parse_turkish_number,
+    rescale_monetary_values,
 )
 from app.parser.identity import company_names_match, validate_report_identity
 from app.sector.profiles import CompanyProfile
@@ -26,6 +28,34 @@ from app.parser.models import FinancialReportDraft
 )
 def test_parse_turkish_number(raw_value, expected):
     assert parse_turkish_number(raw_value) == expected
+
+
+@pytest.mark.parametrize(
+    ("declaration", "scale", "label"),
+    [
+        (
+            "Tutarlar aksi belirtilmedikçe bin Türk Lirası olarak ifade edilmiştir.",
+            1_000,
+            "bin TL",
+        ),
+        (
+            "Finansal tablolar milyon TL olarak sunulmuştur.",
+            1_000_000,
+            "milyon TL",
+        ),
+        ("Sunum para birimi Türk Lirası (TL)", 1, "TL"),
+    ],
+)
+def test_detects_financial_report_monetary_scale(
+    declaration,
+    scale,
+    label,
+):
+    detected_scale, detected_label, detected = detect_monetary_scale(declaration)
+
+    assert detected is True
+    assert detected_scale == scale
+    assert detected_label == label
 
 
 def test_bank_profile_is_detected_from_report_title():
@@ -244,6 +274,42 @@ def test_financial_report_warns_when_identity_is_missing(monkeypatch):
 
     assert "Finansal raporda hisse kodu bulunamadı." in result.warnings
     assert "Finansal raporda şirket unvanı bulunamadı." in result.warnings
+
+
+def test_financial_report_scales_only_monetary_fields(monkeypatch):
+    text = """
+    ÖRNEK BANKASI ANONİM ŞİRKETİ
+    BIST: ORNK
+    Tutarlar aksi belirtilmedikçe bin Türk Lirası olarak ifade edilmiştir.
+    Hasılat 1.000 900
+    Sermaye yeterliliği oranı 18,50
+    """
+    monkeypatch.setattr(
+        "app.parser.extractor._read_pdf",
+        lambda _file_bytes: (text, 1),
+    )
+
+    result = extract_financial_report(b"pdf", "ORNK_2026.pdf")
+
+    assert result.monetary_scale == 1_000
+    assert result.monetary_unit_label == "bin TL"
+    assert result.draft.revenue == 1_000_000
+    assert result.draft.previous_revenue == 900_000
+    assert result.draft.capital_adequacy_ratio == 18.5
+
+
+def test_manual_scale_override_preserves_percentages():
+    draft = FinancialReportDraft(
+        revenue=1_000,
+        net_profit=100,
+        capital_adequacy_ratio=18.5,
+    )
+
+    rescaled = rescale_monetary_values(draft, 1, 1_000)
+
+    assert rescaled.revenue == 1_000_000
+    assert rescaled.net_profit == 100_000
+    assert rescaled.capital_adequacy_ratio == 18.5
 
 
 def test_financial_report_tracks_sector_metric_fields(monkeypatch):

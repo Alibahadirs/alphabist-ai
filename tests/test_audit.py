@@ -37,6 +37,7 @@ def _audit(symbol: str, score: float, source: DataSourceType) -> CompanyDataAudi
         activity_report_name="activity.pdf",
         financial_report_hash="b" * 64,
         activity_report_hash="c" * 64,
+        financial_report_scale=1_000,
         completeness=92.5,
         alpha_score=score,
         grade="A",
@@ -74,6 +75,7 @@ def test_audit_repository_returns_latest_record(tmp_path, monkeypatch):
     assert latest.financial_report_name == "financial.pdf"
     assert latest.financial_report_hash == "b" * 64
     assert latest.activity_report_hash == "c" * 64
+    assert latest.financial_report_scale == 1_000
     assert latest.report_period_end == date(2026, 3, 31)
     assert (
         latest.field_sources["revenue_growth"]
@@ -158,6 +160,7 @@ def test_init_db_migrates_existing_audit_table(tmp_path, monkeypatch):
         "score_breakdown",
         "financial_report_hash",
         "activity_report_hash",
+        "financial_report_scale",
     }.issubset(columns)
     assert {
         "idx_company_data_audit_financial_hash",
