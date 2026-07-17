@@ -83,6 +83,7 @@ class CompanyDataAudit(BaseModel):
     score_breakdown: dict[str, float] = Field(default_factory=dict)
     field_sources: dict[str, MetricSourceType] = Field(default_factory=dict)
     source_values: dict[str, float | None] = Field(default_factory=dict)
+    metric_values: dict[str, float | str | None] = Field(default_factory=dict)
     created_at: datetime | None = None
 
 

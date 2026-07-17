@@ -115,6 +115,7 @@ def init_db():
             score_breakdown TEXT NOT NULL DEFAULT '{}',
             field_sources TEXT NOT NULL DEFAULT '{}',
             source_values TEXT NOT NULL DEFAULT '{}',
+            metric_values TEXT NOT NULL DEFAULT '{}',
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY(symbol) REFERENCES companies(symbol))"""
         )
@@ -135,6 +136,7 @@ def init_db():
             "input_fingerprint": "TEXT NOT NULL DEFAULT ''",
             "score_breakdown": "TEXT NOT NULL DEFAULT '{}'",
             "source_values": "TEXT NOT NULL DEFAULT '{}'",
+            "metric_values": "TEXT NOT NULL DEFAULT '{}'",
             "financial_report_hash": "TEXT NOT NULL DEFAULT ''",
             "activity_report_hash": "TEXT NOT NULL DEFAULT ''",
             "financial_report_scale": "REAL NOT NULL DEFAULT 1",
@@ -221,8 +223,8 @@ def add_company_data_audit(audit: CompanyDataAudit) -> None:
             comparison_period_confirmed, completeness,
             alpha_score, grade, decision, confidence_score, confidence_status,
             methodology_version, input_fingerprint, score_breakdown,
-            field_sources, source_values)
-            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            field_sources, source_values, metric_values)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 audit.symbol.upper().strip(),
                 audit.source_type.value,
@@ -266,6 +268,11 @@ def add_company_data_audit(audit: CompanyDataAudit) -> None:
                     ensure_ascii=False,
                     sort_keys=True,
                 ),
+                json.dumps(
+                    audit.metric_values,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                ),
             ),
         )
 
@@ -278,6 +285,9 @@ def _audit_from_row(row: sqlite3.Row) -> CompanyDataAudit:
     )
     values["source_values"] = json.loads(
         values.get("source_values") or "{}"
+    )
+    values["metric_values"] = json.loads(
+        values.get("metric_values") or "{}"
     )
     return CompanyDataAudit(**values)
 
@@ -294,7 +304,7 @@ def get_latest_company_data_audit(symbol: str) -> CompanyDataAudit | None:
             alpha_score, grade, decision, confidence_score,
             confidence_status, methodology_version, input_fingerprint,
             score_breakdown,
-            field_sources, source_values, created_at
+            field_sources, source_values, metric_values, created_at
             FROM company_data_audit
             WHERE symbol=? ORDER BY id DESC LIMIT 1""",
             (symbol.upper().strip(),),
@@ -318,7 +328,7 @@ def list_company_data_audits(
             alpha_score, grade, decision, confidence_score,
             confidence_status, methodology_version, input_fingerprint,
             score_breakdown,
-            field_sources, source_values, created_at
+            field_sources, source_values, metric_values, created_at
             FROM company_data_audit
             WHERE symbol=? ORDER BY id DESC LIMIT ?""",
             (symbol.upper().strip(), safe_limit),
@@ -340,7 +350,8 @@ def list_latest_company_data_audits() -> list[CompanyDataAudit]:
             audit.decision, audit.confidence_score, audit.confidence_status,
             audit.methodology_version, audit.input_fingerprint,
             audit.score_breakdown,
-            audit.field_sources, audit.source_values, audit.created_at
+            audit.field_sources, audit.source_values, audit.metric_values,
+            audit.created_at
             FROM company_data_audit AS audit
             INNER JOIN (
                 SELECT symbol, MAX(id) AS latest_id
@@ -368,7 +379,8 @@ def list_document_usages(
             comparison_period_confirmed, completeness,
             alpha_score, grade, decision, confidence_score,
             confidence_status, methodology_version, input_fingerprint,
-            score_breakdown, field_sources, source_values, created_at
+            score_breakdown, field_sources, source_values, metric_values,
+            created_at
             FROM company_data_audit
             WHERE financial_report_hash=? OR activity_report_hash=?
             ORDER BY id DESC LIMIT ?""",

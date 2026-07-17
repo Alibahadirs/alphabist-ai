@@ -36,6 +36,7 @@ yerel Streamlit uygulaması.
 - Sektöre duyarlı kaynak tutar ve bilanço tutarlılık kontrolleri
 - PDF kaynak tutarlarını düzeltme ve oranları anında yeniden hesaplama
 - Her analiz için ham finansal tutar anlık görüntüsü ve hesap izi
+- Dönem bazlı gösterge değeri, birim ve kaynak anlık görüntüsü
 - SQLite ile yerel veri saklama
 
 ## Çalıştırma

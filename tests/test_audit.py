@@ -59,6 +59,10 @@ def _audit(symbol: str, score: float, source: DataSourceType) -> CompanyDataAudi
             "previous_revenue": 1_000_000,
             "total_debt": None,
         },
+        metric_values={
+            "revenue_growth": 20.0,
+            "operating_cash_flow": 350_000.0,
+        },
     )
 
 
@@ -99,6 +103,8 @@ def test_audit_repository_returns_latest_record(tmp_path, monkeypatch):
     assert latest.source_values["revenue"] == 1_200_000
     assert latest.source_values["previous_revenue"] == 1_000_000
     assert latest.source_values["total_debt"] is None
+    assert latest.metric_values["revenue_growth"] == 20.0
+    assert latest.metric_values["operating_cash_flow"] == 350_000.0
 
     audits = repository.list_latest_company_data_audits()
     assert len(audits) == 1
@@ -172,6 +178,7 @@ def test_init_db_migrates_existing_audit_table(tmp_path, monkeypatch):
         "input_fingerprint",
         "score_breakdown",
         "source_values",
+        "metric_values",
         "financial_report_hash",
         "activity_report_hash",
         "financial_report_scale",
@@ -348,6 +355,9 @@ def test_analysis_snapshot_freezes_methodology_and_breakdown():
     assert snapshot.methodology_version == settings.scoring_methodology_version
     assert len(snapshot.input_fingerprint) == 64
     assert snapshot.score_breakdown["profitability"] == 12
+    assert snapshot.metric_values["symbol"] == "TEST"
+    assert snapshot.metric_values["revenue_growth"] is None
+    assert snapshot.metric_values["valuation_score_input"] == 50
 
 
 def test_analysis_snapshot_comparison_calculates_category_changes():

@@ -108,6 +108,28 @@ SCORE_INPUT_LABELS = {
     "risk_score_input": "Risk dayanıklılığı",
 }
 
+AMOUNT_METRIC_FIELDS = {
+    "operating_cash_flow",
+    "free_cash_flow",
+}
+
+PERCENT_METRIC_FIELDS = {
+    "revenue_growth",
+    "net_profit_growth",
+    "net_margin",
+    "roe",
+    "capital_adequacy_ratio",
+    "npl_ratio",
+    "loan_to_deposit_ratio",
+    "net_interest_margin",
+    "cost_income_ratio",
+    "premium_growth",
+    "combined_ratio",
+    "solvency_ratio",
+    "nav_discount",
+    "occupancy_rate",
+}
+
 
 @st.cache_data(show_spinner=False, max_entries=10)
 def _parse_pdf(
@@ -191,6 +213,29 @@ def _format_turkish_amount(value: float | None) -> str:
     decimals = 0 if float(value).is_integer() else 2
     formatted = f"{value:,.{decimals}f}"
     return formatted.replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def _format_metric_snapshot_value(
+    field: str,
+    value: float | str | None,
+) -> str:
+    if value is None:
+        return "-"
+    if isinstance(value, str):
+        return value
+    if field in AMOUNT_METRIC_FIELDS:
+        return f"{_format_turkish_amount(value)} TL"
+    formatted = (
+        f"{float(value):,.2f}"
+        .replace(",", "X")
+        .replace(".", ",")
+        .replace("X", ".")
+    )
+    if field in PERCENT_METRIC_FIELDS:
+        return f"%{formatted}"
+    if field in SCORE_INPUT_LABELS:
+        return f"{float(value):.0f}/100"
+    return formatted
 
 
 def _amount_input(label: str, value: float | None, key: str) -> str:
@@ -433,6 +478,10 @@ def _render_data_source_caption(audit: CompanyDataAudit | None) -> None:
                         {
                             "Gösterge": FIELD_LABELS.get(
                                 field, SCORE_INPUT_LABELS.get(field, field)
+                            ),
+                            "Değer": _format_metric_snapshot_value(
+                                field,
+                                audit.metric_values.get(field),
                             ),
                             "Kaynak": METRIC_SOURCE_LABELS[source],
                         }

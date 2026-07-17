@@ -201,6 +201,7 @@ def attach_analysis_snapshot(
                 category: getattr(score, category)
                 for category in CATEGORY_MAX_POINTS
             },
+            "metric_values": metrics.model_dump(mode="json"),
         }
     )
 
