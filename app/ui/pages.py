@@ -48,6 +48,11 @@ from app.database.repository import (
     upsert_portfolio_position,
     upsert_watchlist_entry,
 )
+from app.database.backup import (
+    create_database_backup,
+    restore_database_backup,
+    validate_database_backup,
+)
 from app.data_quality.service import FIELD_LABELS, build_data_quality_summary
 from app.market_data.provider import get_history, get_quote
 from app.parser.converter import to_financial_metrics
@@ -2666,3 +2671,79 @@ def render_portfolio() -> None:
         remove_portfolio_position(remove_symbol)
         st.success(f"{remove_symbol} portföyden çıkarıldı.")
         st.rerun()
+
+
+def render_data_backup() -> None:
+    st.title("Veri yedekleme")
+
+    with st.container(border=True):
+        st.subheader("Yedeği indir")
+        try:
+            backup_data = create_database_backup()
+        except FileNotFoundError as exc:
+            st.error(str(exc))
+        else:
+            st.metric(
+                "Yedek boyutu",
+                f"{len(backup_data) / 1024:.1f} KB",
+                border=True,
+            )
+            st.download_button(
+                "Yedeği indir",
+                data=backup_data,
+                file_name=(
+                    f"alphabist-yedek-{date.today():%Y%m%d}.db"
+                ),
+                mime="application/x-sqlite3",
+                icon=":material/download:",
+                type="primary",
+                width="stretch",
+            )
+
+    with st.container(border=True):
+        st.subheader("Yedeği geri yükle")
+        uploaded = st.file_uploader(
+            "AlphaBIST yedek dosyası",
+            type="db",
+            max_upload_size=100,
+            key="database_restore_upload",
+        )
+        validation = None
+        if uploaded is not None:
+            validation = validate_database_backup(uploaded.getvalue())
+            if validation.valid:
+                st.success(validation.message)
+                st.caption(
+                    f"Doğrulanan tablo sayısı: {len(validation.tables)}"
+                )
+            else:
+                st.error(validation.message)
+
+        confirmed = st.checkbox(
+            "Mevcut kayıtların yedekteki verilerle değiştirileceğini onaylıyorum.",
+            disabled=validation is None or not validation.valid,
+        )
+        restore_submitted = st.button(
+            "Yedeği geri yükle",
+            icon=":material/restore:",
+            type="primary",
+            disabled=(
+                validation is None
+                or not validation.valid
+                or not confirmed
+            ),
+        )
+        if restore_submitted and uploaded is not None:
+            try:
+                safety_backup = restore_database_backup(
+                    uploaded.getvalue()
+                )
+            except (RuntimeError, ValueError) as exc:
+                st.error(str(exc))
+            else:
+                st.success("Yedek başarıyla geri yüklendi.")
+                if safety_backup is not None:
+                    st.caption(
+                        "Önceki veriler güvenlik kopyasına alındı: "
+                        f"{safety_backup.name}"
+                    )

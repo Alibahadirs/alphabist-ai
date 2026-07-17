@@ -6,5 +6,6 @@ __pycache__/
 !.streamlit/config.toml
 .env
 data/*.db
+data/backups/
 .vscode/
 .idea/

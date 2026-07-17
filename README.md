@@ -43,6 +43,7 @@ yerel Streamlit uygulaması.
 - Liderlik, tarama ve takip hedeflerinde doğrulama temelli karara hazırlık kontrolü
 - Portföyde güven ağırlıklı puan ve doğrulama gereken pozisyon payı
 - Kullanıcıya özel SQLite verisini kaynak kodu commitlerinden ayırma
+- SQLite yedeğini bütünlük kontrolüyle indirme ve güvenli geri yükleme
 - SQLite ile yerel veri saklama
 
 ## Çalıştırma
