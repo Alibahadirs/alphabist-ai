@@ -11,6 +11,9 @@ class CompanyComparisonRow(BaseModel):
     technical_signal: str | None = None
     combined_score: float | None = Field(default=None, ge=0, le=100)
     atr_percent: float | None = Field(default=None, ge=0)
+    confidence_score: float | None = Field(default=None, ge=0, le=100)
+    confidence_status: str = ""
+    calculation_check_status: str = "Kayıt yok"
 
 
 class ComparisonSummary(BaseModel):
@@ -18,4 +21,3 @@ class ComparisonSummary(BaseModel):
     leader_symbol: str
     average_alpha_score: float = Field(ge=0, le=100)
     average_combined_score: float | None = Field(default=None, ge=0, le=100)
-

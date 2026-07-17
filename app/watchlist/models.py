@@ -21,6 +21,9 @@ class WatchlistRow(BaseModel):
     decision: str
     note: str
     target_reached: bool
+    confidence_score: float | None = Field(default=None, ge=0, le=100)
+    confidence_status: str = ""
+    calculation_check_status: str = "Kayıt yok"
 
 
 class WatchlistSummary(BaseModel):

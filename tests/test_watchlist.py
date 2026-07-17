@@ -60,3 +60,17 @@ def test_watchlist_summary_ranks_scores_and_marks_targets():
     assert summary.rows[0].target_reached is True
     assert summary.rows[1].target_reached is False
     assert summary.targets_reached == 1
+
+
+def test_watchlist_uses_confidence_gated_decision_when_audits_are_supplied():
+    company = _company("SAFE", margin=25)
+
+    summary = build_watchlist_summary(
+        [WatchlistEntry(symbol="SAFE")],
+        {"SAFE": company},
+        {},
+    )
+
+    assert summary.rows[0].decision == "Doğrula / Karar verme"
+    assert summary.rows[0].confidence_score is not None
+    assert summary.rows[0].confidence_status == "Düşük"

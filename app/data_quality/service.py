@@ -1,7 +1,7 @@
 from collections.abc import Mapping, Sequence
 
 from app.audit.models import CompanyDataAudit
-from app.audit.service import verify_audit_calculations
+from app.audit.calculations import verify_audit_calculations
 from app.core.settings import settings
 from app.data_quality.models import DataQualityRow, DataQualitySummary
 from app.scoring.models import FinancialMetrics

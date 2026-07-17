@@ -722,6 +722,9 @@ def render_dashboard() -> None:
     )
     _render_data_source_caption(latest_audit)
     with st.expander("Analiz güveni ayrıntıları"):
+        st.caption(
+            f"Hesap kontrolü: {confidence.calculation_check_status}"
+        )
         st.dataframe(
             pd.DataFrame(
                 [
@@ -1260,6 +1263,9 @@ def render_scanner() -> None:
     if not companies:
         st.info("Tarama için önce şirket verisi kaydedin.")
         return
+    latest_audits = {
+        audit.symbol: audit for audit in list_latest_company_data_audits()
+    }
 
     with st.form("scanner_filters", border=True):
         st.subheader("Filtreler")
@@ -1309,6 +1315,7 @@ def render_scanner() -> None:
             maximum_debt_to_equity=maximum_debt_to_equity,
             positive_operating_cash_flow_only=positive_cash_flow,
         ),
+        latest_audits,
     )
 
     with st.container(horizontal=True):
@@ -1337,6 +1344,9 @@ def render_scanner() -> None:
             "Alpha": row.alpha_score,
             "Not": row.grade,
             "Karar": row.decision,
+            "Analiz güveni (%)": row.confidence_score,
+            "Güven durumu": row.confidence_status,
+            "Hesap kontrolü": row.calculation_check_status,
             "Ciro büyümesi (%)": row.revenue_growth,
             "Net marj (%)": row.net_margin,
             "ROE (%)": row.roe,
@@ -1356,6 +1366,12 @@ def render_scanner() -> None:
             column_config={
                 "Alpha": st.column_config.ProgressColumn(
                     "Alpha", min_value=0, max_value=100, format="%.1f"
+                ),
+                "Analiz güveni (%)": st.column_config.ProgressColumn(
+                    "Analiz güveni (%)",
+                    min_value=0,
+                    max_value=100,
+                    format="%.1f",
                 ),
                 "Ciro büyümesi (%)": st.column_config.NumberColumn(format="%.2f"),
                 "Net marj (%)": st.column_config.NumberColumn(format="%.2f"),
@@ -2149,9 +2165,16 @@ def render_pdf_analysis() -> None:
 def render_company_list() -> None:
     st.title("Kayıtlı şirketler")
 
+    companies = list_companies()
+    latest_audits = {
+        audit.symbol: audit for audit in list_latest_company_data_audits()
+    }
     rows = []
-    for company in list_companies():
+    for company in companies:
         score = calculate_alpha_score(company)
+        confidence = calculate_analysis_confidence(
+            company, score, latest_audits.get(company.symbol)
+        )
         rows.append(
             {
                 "Hisse": company.symbol,
@@ -2160,7 +2183,10 @@ def render_company_list() -> None:
                 "Alpha Score": score.total,
                 "Veri yeterliliği (%)": score.data_completeness,
                 "Not": score.grade,
-                "Karar": score.decision,
+                "Karar": confidence.decision,
+                "Analiz güveni (%)": confidence.total,
+                "Güven durumu": confidence.status,
+                "Hesap kontrolü": confidence.calculation_check_status,
             }
         )
 
@@ -2178,7 +2204,13 @@ def render_company_list() -> None:
                 min_value=0,
                 max_value=100,
                 format="%.2f",
-            )
+            ),
+            "Analiz güveni (%)": st.column_config.ProgressColumn(
+                "Analiz güveni (%)",
+                min_value=0,
+                max_value=100,
+                format="%.1f",
+            ),
         },
     )
 
@@ -2239,7 +2271,12 @@ def render_comparison() -> None:
                 f"temel puanlarla hazırlandı: {', '.join(failed_symbols)}"
             )
 
-    summary = build_comparison(selected_companies, technical_scores)
+    latest_audits = {
+        audit.symbol: audit for audit in list_latest_company_data_audits()
+    }
+    summary = build_comparison(
+        selected_companies, technical_scores, latest_audits
+    )
     with st.container(horizontal=True):
         st.metric("Lider", summary.leader_symbol, border=True)
         st.metric(
@@ -2267,6 +2304,9 @@ def render_comparison() -> None:
                 "Birleşik": row.combined_score,
                 "Not": row.grade,
                 "Temel karar": row.decision,
+                "Analiz güveni (%)": row.confidence_score,
+                "Güven durumu": row.confidence_status,
+                "Hesap kontrolü": row.calculation_check_status,
                 "Teknik sinyal": row.technical_signal,
                 "ATR (%)": row.atr_percent,
             }
@@ -2282,6 +2322,12 @@ def render_comparison() -> None:
             column_config={
                 "Alpha": st.column_config.ProgressColumn(
                     "Alpha", min_value=0, max_value=100, format="%.1f"
+                ),
+                "Analiz güveni (%)": st.column_config.ProgressColumn(
+                    "Analiz güveni (%)",
+                    min_value=0,
+                    max_value=100,
+                    format="%.1f",
                 ),
                 "Teknik": st.column_config.NumberColumn(format="%.1f"),
                 "Birleşik": st.column_config.NumberColumn(format="%.1f"),
@@ -2334,7 +2380,12 @@ def render_watchlist() -> None:
         st.success(f"{symbol} takip listesine kaydedildi.")
 
     entries = list_watchlist_entries()
-    summary = build_watchlist_summary(entries, company_by_symbol)
+    latest_audits = {
+        audit.symbol: audit for audit in list_latest_company_data_audits()
+    }
+    summary = build_watchlist_summary(
+        entries, company_by_symbol, latest_audits
+    )
     if not summary.rows:
         st.info("Takip listeniz henüz boş.")
         return
@@ -2357,6 +2408,9 @@ def render_watchlist() -> None:
             "Durum": "Hedefte" if row.target_reached else "Hedef altında",
             "Not": row.grade,
             "Karar": row.decision,
+            "Analiz güveni (%)": row.confidence_score,
+            "Güven durumu": row.confidence_status,
+            "Hesap kontrolü": row.calculation_check_status,
             "Kullanıcı notu": row.note,
         }
         for row in summary.rows
@@ -2370,6 +2424,12 @@ def render_watchlist() -> None:
             column_config={
                 "Alpha": st.column_config.ProgressColumn(
                     "Alpha", min_value=0, max_value=100, format="%.1f"
+                ),
+                "Analiz güveni (%)": st.column_config.ProgressColumn(
+                    "Analiz güveni (%)",
+                    min_value=0,
+                    max_value=100,
+                    format="%.1f",
                 ),
                 "Hedef": st.column_config.NumberColumn(format="%.0f"),
             },

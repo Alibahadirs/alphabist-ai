@@ -10,4 +10,6 @@ class AnalysisConfidence(BaseModel):
     report_component: float = Field(ge=0, le=10)
     period_component: float = Field(ge=0, le=5)
     validation_component: float = Field(ge=0, le=5)
+    calculation_check_status: str = "Kayıt yok"
+    calculation_mismatch_fields: list[str] = Field(default_factory=list)
     reasons: list[str] = Field(default_factory=list)

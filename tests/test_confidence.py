@@ -7,6 +7,7 @@ from app.audit.models import (
     MetricSourceType,
 )
 from app.confidence.service import calculate_analysis_confidence
+from app.core.settings import settings
 from app.scoring.engine import calculate_alpha_score
 from app.scoring.models import FinancialMetrics
 from app.sector.profiles import CompanyProfile
@@ -152,3 +153,56 @@ def test_stale_report_caps_confidence_and_blocks_decision():
     assert confidence.status == "Düşük"
     assert confidence.decision == "Doğrula / Karar verme"
     assert any("güncel değil" in reason for reason in confidence.reasons)
+
+
+def test_calculation_mismatch_caps_confidence_and_blocks_decision():
+    metrics = _strong_metrics()
+    score = calculate_alpha_score(metrics)
+    audit = _audit(MetricSourceType.FINANCIAL_REPORT).model_copy(
+        update={
+            "methodology_version": settings.scoring_methodology_version,
+            "source_values": {
+                "revenue": 1_200_000,
+                "previous_revenue": 1_000_000,
+            },
+            "metric_values": {
+                "company_name": "Test Şirketi",
+                "revenue_growth": 25.0,
+            },
+        }
+    )
+
+    confidence = calculate_analysis_confidence(metrics, score, audit)
+
+    assert confidence.total == 69
+    assert confidence.status == "Düşük"
+    assert confidence.decision == "Doğrula / Karar verme"
+    assert confidence.validation_component == 0
+    assert confidence.calculation_check_status == "Uyuşmazlık"
+    assert confidence.calculation_mismatch_fields == ["Gelir büyümesi"]
+    assert any("eşleşmiyor" in reason for reason in confidence.reasons)
+
+
+def test_old_methodology_calculation_snapshot_does_not_block_decision():
+    metrics = _strong_metrics()
+    score = calculate_alpha_score(metrics)
+    audit = _audit(MetricSourceType.FINANCIAL_REPORT).model_copy(
+        update={
+            "methodology_version": "alpha-2025.1",
+            "source_values": {
+                "revenue": 1_200_000,
+                "previous_revenue": 1_000_000,
+            },
+            "metric_values": {
+                "company_name": "Test Şirketi",
+                "revenue_growth": 25.0,
+            },
+        }
+    )
+
+    confidence = calculate_analysis_confidence(metrics, score, audit)
+
+    assert confidence.total == 100
+    assert confidence.decision == "Güçlü Al"
+    assert confidence.calculation_check_status == "Eski metodoloji"
+    assert confidence.calculation_mismatch_fields == []

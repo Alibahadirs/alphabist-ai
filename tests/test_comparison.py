@@ -81,3 +81,16 @@ def test_comparison_ranks_by_combined_score_with_technical_data():
         2,
     )
     assert result.average_combined_score == expected
+
+
+def test_comparison_uses_confidence_gated_decisions_when_audits_are_supplied():
+    result = build_comparison(
+        [_company("AAA", 20, 30), _company("BBB", 10, 15)],
+        latest_audits={},
+    )
+
+    assert all(
+        row.decision == "Doğrula / Karar verme" for row in result.rows
+    )
+    assert all(row.confidence_score is not None for row in result.rows)
+    assert all(row.confidence_status == "Düşük" for row in result.rows)

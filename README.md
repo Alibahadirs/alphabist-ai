@@ -39,6 +39,7 @@ yerel Streamlit uygulaması.
 - Dönem bazlı gösterge değeri, birim ve kaynak anlık görüntüsü
 - Ham tutarlardan yeniden hesaplama ve metodolojiye duyarlı tutarlılık kontrolü
 - Formül uyuşmazlıklarını veri kalite merkezinde kritik kayıt olarak gösterme
+- Hesap uyuşmazlığında analiz güvenini ve yatırım kararını otomatik olarak durdurma
 - SQLite ile yerel veri saklama
 
 ## Çalıştırma

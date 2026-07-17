@@ -23,6 +23,9 @@ class ScannerRow(BaseModel):
     operating_cash_flow: float
     company_profile: str = "standard"
     data_completeness: float = Field(default=100, ge=0, le=100)
+    confidence_score: float | None = Field(default=None, ge=0, le=100)
+    confidence_status: str = ""
+    calculation_check_status: str = "Kayıt yok"
 
 
 class ScannerSummary(BaseModel):

@@ -1,5 +1,7 @@
 from app.audit.models import CompanyDataAudit, MetricSourceType
+from app.audit.calculations import verify_audit_calculations
 from app.confidence.models import AnalysisConfidence
+from app.core.settings import settings
 from app.reporting.models import ReportFreshnessStatus
 from app.reporting.service import assess_report_period
 from app.scoring.models import FinancialMetrics, ScoreBreakdown
@@ -14,6 +16,41 @@ SOURCE_WEIGHTS = {
     MetricSourceType.CORRECTION: 0.9,
     MetricSourceType.MANUAL: 0.7,
 }
+
+CALCULATION_FIELD_LABELS = {
+    "revenue_growth": "Gelir büyümesi",
+    "net_profit_growth": "Net kâr büyümesi",
+    "net_margin": "Net kâr marjı",
+    "roe": "ROE",
+    "debt_to_equity": "Borç / özkaynak",
+    "current_ratio": "Cari oran",
+    "operating_cash_flow": "Operasyonel nakit akışı",
+    "free_cash_flow": "Serbest nakit akışı",
+    "asset_turnover": "Aktif devir hızı",
+    "premium_growth": "Prim büyümesi",
+}
+
+
+def _calculation_integrity(
+    audit: CompanyDataAudit | None,
+) -> tuple[str, list[str]]:
+    if audit is None:
+        return "Kayıt yok", []
+    if audit.methodology_version != settings.scoring_methodology_version:
+        return "Eski metodoloji", []
+    if not audit.source_values or not audit.metric_values:
+        return "Kaynak izi yok", []
+
+    checks = verify_audit_calculations(audit)
+    if not checks:
+        return "Uygulanamaz", []
+
+    mismatches = [
+        CALCULATION_FIELD_LABELS.get(check.field, check.field)
+        for check in checks
+        if not check.matches
+    ]
+    return ("Uyuşmazlık", mismatches) if mismatches else ("Doğrulandı", [])
 
 
 def _status(total: float) -> str:
@@ -82,6 +119,9 @@ def calculate_analysis_confidence(
         len(validation.errors) * 5 + len(validation.warnings) * 1.5,
     )
     validation_component = round(5.0 - validation_penalty, 2)
+    calculation_status, calculation_mismatches = _calculation_integrity(audit)
+    if calculation_mismatches:
+        validation_component = 0.0
     total = round(
         completeness_component
         + source_component
@@ -91,6 +131,8 @@ def calculate_analysis_confidence(
         2,
     )
     if period_assessment.blocks_decision:
+        total = min(total, 69.0)
+    if calculation_mismatches:
         total = min(total, 69.0)
 
     reasons: list[str] = []
@@ -125,6 +167,11 @@ def calculate_analysis_confidence(
         reasons.append(
             f"{len(validation.warnings)} veri kontrol uyarısı bulunuyor."
         )
+    if calculation_mismatches:
+        reasons.append(
+            "Ham tutarlardan yeniden hesaplanan göstergeler kayıtlı değerlerle "
+            f"eşleşmiyor: {', '.join(calculation_mismatches)}."
+        )
     if not reasons:
         reasons.append("Zorunlu göstergeler ve veri kaynakları doğrulanabilir durumda.")
 
@@ -134,12 +181,16 @@ def calculate_analysis_confidence(
         decision=_gated_decision(
             score,
             total,
-            bool(validation.errors) or period_assessment.blocks_decision,
+            bool(validation.errors)
+            or period_assessment.blocks_decision
+            or bool(calculation_mismatches),
         ),
         completeness_component=completeness_component,
         source_component=source_component,
         report_component=report_component,
         period_component=period_component,
         validation_component=validation_component,
+        calculation_check_status=calculation_status,
+        calculation_mismatch_fields=calculation_mismatches,
         reasons=reasons,
     )

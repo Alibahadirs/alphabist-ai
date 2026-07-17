@@ -58,3 +58,17 @@ def test_scanner_returns_empty_summary_when_nothing_matches():
     assert summary.rows == []
     assert summary.matched_count == 0
     assert summary.average_alpha_score == 0
+
+
+def test_scanner_uses_confidence_gated_decision_when_audits_are_supplied():
+    company = _company("SAFE", 25, 30, 0.4, 100)
+
+    summary = scan_companies(
+        [company],
+        ScannerFilters(minimum_alpha_score=0),
+        {},
+    )
+
+    assert summary.rows[0].decision == "Doğrula / Karar verme"
+    assert summary.rows[0].confidence_score is not None
+    assert summary.rows[0].confidence_status == "Düşük"
