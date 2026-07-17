@@ -56,6 +56,7 @@ from app.parser.extractor import (
 from app.parser.identity import company_names_match, validate_report_identity
 from app.parser.models import (
     ActivityReportExtractionResult,
+    FinancialReportDraft,
     PdfExtractionResult,
 )
 from app.portfolio.models import PortfolioPosition
@@ -185,7 +186,9 @@ def _technical_score_table(score: TechnicalScoreBreakdown) -> pd.DataFrame:
 def _format_turkish_amount(value: float | None) -> str:
     if value is None:
         return "-"
-    return f"{value:,.0f}".replace(",", ".")
+    decimals = 0 if float(value).is_integer() else 2
+    formatted = f"{value:,.{decimals}f}"
+    return formatted.replace(",", "X").replace(".", ",").replace("X", ".")
 
 
 def _amount_input(label: str, value: float | None, key: str) -> str:
@@ -204,6 +207,104 @@ def _parse_amount_input(label: str, raw_value: str) -> float | None:
         return parse_turkish_number(raw_value)
     except ValueError as exc:
         raise AppValidationError(f"{label} geçerli bir TL tutarı değil.") from exc
+
+
+PDF_SOURCE_FIELD_LABELS = {
+    "revenue": "Hasılat",
+    "previous_revenue": "Önceki dönem hasılat",
+    "net_profit": "Net dönem kârı",
+    "previous_net_profit": "Önceki dönem net kârı",
+    "equity": "Özkaynak",
+    "previous_equity": "Önceki dönem özkaynak",
+    "total_debt": "Finansal borç",
+    "cash": "Nakit",
+    "current_assets": "Dönen varlık",
+    "current_liabilities": "Kısa vadeli yükümlülük",
+    "operating_cash_flow": "Operasyonel nakit akışı",
+    "capital_expenditures": "Yatırım harcaması",
+    "total_assets": "Toplam varlık",
+    "previous_total_assets": "Önceki dönem toplam varlık",
+    "premium_revenue": "Cari dönem yazılan primler",
+    "previous_premium_revenue": "Önceki dönem yazılan primler",
+}
+
+BASE_PDF_SOURCE_FIELDS = (
+    "revenue",
+    "previous_revenue",
+    "net_profit",
+    "previous_net_profit",
+    "equity",
+    "previous_equity",
+    "cash",
+    "total_assets",
+    "previous_total_assets",
+)
+
+OPERATING_PDF_SOURCE_FIELDS = (
+    "total_debt",
+    "current_assets",
+    "current_liabilities",
+    "operating_cash_flow",
+    "capital_expenditures",
+)
+
+
+def _pdf_source_fields(profile: CompanyProfile) -> tuple[str, ...]:
+    fields = list(BASE_PDF_SOURCE_FIELDS)
+    if profile in (
+        CompanyProfile.STANDARD,
+        CompanyProfile.REIT,
+        CompanyProfile.FINANCIAL_SERVICES,
+    ):
+        fields.extend(OPERATING_PDF_SOURCE_FIELDS)
+    if profile == CompanyProfile.INSURANCE:
+        fields.extend(("premium_revenue", "previous_premium_revenue"))
+    return tuple(fields)
+
+
+def _render_pdf_source_editor(
+    draft: FinancialReportDraft,
+    profile: CompanyProfile,
+) -> tuple[FinancialReportDraft, set[str], list[str]]:
+    fields = _pdf_source_fields(profile)
+    corrected_fields: set[str] = set()
+    input_errors: list[str] = []
+    updates: dict[str, float | None] = {}
+
+    with st.expander("PDF kaynak tutarlarını kontrol et ve düzelt"):
+        st.caption(
+            "Tutarlar TL biçimindedir. Yanlış okunan değeri düzelttiğinizde "
+            "oranlar otomatik olarak yeniden hesaplanır."
+        )
+        left, right = st.columns(2)
+        for index, field in enumerate(fields):
+            label = PDF_SOURCE_FIELD_LABELS[field]
+            original_value = getattr(draft, field)
+            target = left if index % 2 == 0 else right
+            with target:
+                raw_value = _amount_input(
+                    label,
+                    original_value,
+                    key=f"pdf_source_{field}",
+                )
+            try:
+                parsed_value = _parse_amount_input(label, raw_value)
+            except AppValidationError as exc:
+                input_errors.append(str(exc))
+                parsed_value = original_value
+            updates[field] = parsed_value
+            if parsed_value != original_value:
+                corrected_fields.add(field)
+
+        if corrected_fields:
+            corrected_labels = ", ".join(
+                PDF_SOURCE_FIELD_LABELS[field]
+                for field in fields
+                if field in corrected_fields
+            )
+            st.info(f"Kullanıcı tarafından düzeltilen kalemler: {corrected_labels}")
+
+    return draft.model_copy(update=updates), corrected_fields, input_errors
 
 
 def _profile_select(label: str, value: CompanyProfile, key: str) -> CompanyProfile:
@@ -1188,13 +1289,18 @@ def _render_pdf_company_form() -> None:
     document_token = hashlib.sha256(financial_bytes + activity_bytes).hexdigest()
     if st.session_state.get("company_pdf_token") != document_token:
         for key in list(st.session_state):
-            if key.startswith("pdf_field_") or key in {
-                "pdf_period",
-                "pdf_period_end",
-                "pdf_monetary_scale",
-                "pdf_comparison_confirmed",
-                "pdf_company_profile",
-            }:
+            if (
+                key.startswith("pdf_field_")
+                or key.startswith("pdf_source_")
+                or key
+                in {
+                    "pdf_period",
+                    "pdf_period_end",
+                    "pdf_monetary_scale",
+                    "pdf_comparison_confirmed",
+                    "pdf_company_profile",
+                }
+            ):
                 del st.session_state[key]
         st.session_state["company_pdf_token"] = document_token
 
@@ -1328,47 +1434,35 @@ def _render_pdf_company_form() -> None:
         for warning in activity_result.warnings:
             st.warning(warning)
 
-    with st.expander("PDF'den bulunan kaynak değerler"):
-        source_rows = [
-            ("Hasılat", draft.revenue),
-            ("Önceki dönem hasılat", draft.previous_revenue),
-            ("Net dönem kârı", draft.net_profit),
-            ("Önceki dönem net kârı", draft.previous_net_profit),
-            ("Özkaynak", draft.equity),
-            ("Önceki dönem özkaynak", draft.previous_equity),
-            ("Finansal borç", draft.total_debt),
-            ("Dönen varlık", draft.current_assets),
-            ("Kısa vadeli yükümlülük", draft.current_liabilities),
-            ("Operasyonel nakit akışı", draft.operating_cash_flow),
-            ("Yatırım harcaması", draft.capital_expenditures),
-            ("Toplam varlık", draft.total_assets),
-            ("Önceki dönem toplam varlık", draft.previous_total_assets),
-            ("Cari dönem yazılan primler", draft.premium_revenue),
-            (
-                "Önceki dönem yazılan primler",
-                draft.previous_premium_revenue,
-            ),
-        ]
-        source_rows = [
-            (label, value)
-            for label, value in source_rows
-            if value is not None
-            or label
-            not in {
-                "Cari dönem yazılan primler",
-                "Önceki dönem yazılan primler",
-            }
-        ]
-        st.dataframe(
-            pd.DataFrame(
-                [
-                    {"Finansal kalem": label, "Tutar (TL)": _format_turkish_amount(value)}
-                    for label, value in source_rows
-                ]
-            ),
-            hide_index=True,
-            width="stretch",
-        )
+    source_context = f"{company_profile.value}:{selected_scale:g}"
+    if st.session_state.get("pdf_source_context") != source_context:
+        for key in list(st.session_state):
+            if key.startswith("pdf_source_"):
+                del st.session_state[key]
+        st.session_state["pdf_source_context"] = source_context
+
+    draft, corrected_source_fields, source_input_errors = (
+        _render_pdf_source_editor(draft, company_profile)
+    )
+    for source_input_error in source_input_errors:
+        st.error(source_input_error)
+
+    source_token = hashlib.sha256(
+        repr(
+            tuple(
+                (field, getattr(draft, field))
+                for field in _pdf_source_fields(company_profile)
+            )
+        ).encode("utf-8")
+    ).hexdigest()
+    if st.session_state.get("pdf_source_token") != source_token:
+        for key in list(st.session_state):
+            if key.startswith("pdf_field_") and key not in {
+                "pdf_field_symbol",
+                "pdf_field_company_name",
+            }:
+                del st.session_state[key]
+        st.session_state["pdf_source_token"] = source_token
 
     period_options = [3, 6, 9, 12]
     period_default = draft.period_months if draft.period_months in period_options else 3
@@ -1529,6 +1623,9 @@ def _render_pdf_company_form() -> None:
 
     if not submitted:
         return
+    if source_input_errors:
+        st.error("Kaynak tutarlardaki biçim hatalarını düzeltmeden kayıt yapılamaz.")
+        return
     if source_validation.errors:
         st.error(
             "PDF'den çıkarılan kaynak tutarlarda kritik tutarsızlık bulundu. "
@@ -1619,6 +1716,7 @@ def _render_pdf_company_form() -> None:
                 "risk_score_input": risk,
                 **sector_metrics,
             },
+            corrected_source_fields=corrected_source_fields,
         ),
     )
 

@@ -34,6 +34,7 @@ yerel Streamlit uygulaması.
 - ROE ve aktif devir hızında ortalama özkaynak/aktif kullanımı
 - PDF'de bulunamayan finansal değerleri sıfır yerine eksik olarak koruma
 - Sektöre duyarlı kaynak tutar ve bilanço tutarlılık kontrolleri
+- PDF kaynak tutarlarını düzeltme ve oranları anında yeniden hesaplama
 - SQLite ile yerel veri saklama
 
 ## Çalıştırma

@@ -263,6 +263,13 @@ def test_pdf_field_sources_distinguish_reports_and_user_changes():
         defaults,
         {"revenue_growth": 25},
     )
+    corrected_sources = build_pdf_field_sources(
+        financial_result,
+        activity_result,
+        defaults.model_copy(update={"roe": 12}),
+        {"revenue_growth": 20, "roe": 12},
+        corrected_source_fields={"revenue", "previous_equity"},
+    )
 
     assert sources["revenue_growth"] == MetricSourceType.FINANCIAL_REPORT
     assert sources["premium_growth"] == MetricSourceType.FINANCIAL_REPORT
@@ -272,6 +279,8 @@ def test_pdf_field_sources_distinguish_reports_and_user_changes():
     )
     assert sources["risk_score_input"] == MetricSourceType.MANUAL
     assert changed_sources["revenue_growth"] == MetricSourceType.MANUAL
+    assert corrected_sources["revenue_growth"] == MetricSourceType.CORRECTION
+    assert corrected_sources["roe"] == MetricSourceType.CORRECTION
 
 
 def test_analysis_snapshot_freezes_methodology_and_breakdown():

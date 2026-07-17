@@ -32,6 +32,11 @@ FINANCIAL_METRIC_DEPENDENCIES = {
     "premium_growth": {"premium_revenue", "previous_premium_revenue"},
 }
 
+FINANCIAL_METRIC_OPTIONAL_DEPENDENCIES = {
+    "roe": {"previous_equity"},
+    "asset_turnover": {"previous_total_assets"},
+}
+
 
 def document_fingerprint(file_bytes: bytes) -> str:
     """Return a stable identity for an uploaded source document."""
@@ -194,9 +199,11 @@ def build_pdf_field_sources(
     activity_result: ActivityReportExtractionResult | None,
     defaults: FinancialMetrics,
     submitted_values: dict[str, float | None],
+    corrected_source_fields: set[str] | None = None,
 ) -> dict[str, MetricSourceType]:
     extracted = set(financial_result.extracted_fields)
     activity_fields = set(activity_result.sector_metrics) if activity_result else set()
+    corrected_fields = corrected_source_fields or set()
     sources: dict[str, MetricSourceType] = {}
 
     for field, value in submitted_values.items():
@@ -213,6 +220,14 @@ def build_pdf_field_sources(
             source = MetricSourceType.FINANCIAL_REPORT
         else:
             source = MetricSourceType.MANUAL
+        correction_dependencies = (
+            FINANCIAL_METRIC_DEPENDENCIES.get(field, set())
+            | FINANCIAL_METRIC_OPTIONAL_DEPENDENCIES.get(field, set())
+        )
+        if field in corrected_fields or (
+            correction_dependencies.intersection(corrected_fields)
+        ):
+            source = MetricSourceType.CORRECTION
 
         default_value = getattr(defaults, field, None)
         if (
