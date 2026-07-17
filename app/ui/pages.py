@@ -71,7 +71,11 @@ from app.technical.engine import calculate_combined_score, calculate_technical_s
 from app.technical.models import TechnicalScoreBreakdown
 from app.watchlist.models import WatchlistEntry
 from app.watchlist.service import build_watchlist_summary
-from app.validation.service import PROFILE_REQUIREMENTS, validate_financial_metrics
+from app.validation.service import (
+    PROFILE_REQUIREMENTS,
+    validate_financial_draft,
+    validate_financial_metrics,
+)
 
 
 CATEGORY_LABELS = {
@@ -1392,6 +1396,11 @@ def _render_pdf_company_form() -> None:
         }
     )
     defaults = to_financial_metrics(calculation_draft)
+    source_validation = validate_financial_draft(calculation_draft)
+    for error in source_validation.errors:
+        st.error(error)
+    for warning in source_validation.warnings:
+        st.warning(warning)
     if abs(defaults.roe or 0) > 100:
         st.warning(
             f"Yıllıklandırılmış ROE %{defaults.roe:,.1f}. Tek seferlik gelirler veya "
@@ -1519,6 +1528,12 @@ def _render_pdf_company_form() -> None:
         )
 
     if not submitted:
+        return
+    if source_validation.errors:
+        st.error(
+            "PDF'den çıkarılan kaynak tutarlarda kritik tutarsızlık bulundu. "
+            "Rapor birimini veya PDF eşleşmesini düzeltmeden kayıt yapılamaz."
+        )
         return
     if not comparison_confirmed:
         st.error(

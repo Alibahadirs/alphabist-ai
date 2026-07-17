@@ -1,6 +1,7 @@
 from math import isfinite
 from pydantic import BaseModel, Field
 
+from app.parser.models import FinancialReportDraft
 from app.scoring.models import FinancialMetrics
 from app.sector.profiles import CompanyProfile
 
@@ -10,6 +11,15 @@ class ValidationReport(BaseModel):
     errors: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     missing_fields: list[str] = Field(default_factory=list)
+
+    @property
+    def is_valid(self) -> bool:
+        return not self.errors
+
+
+class SourceValidationReport(BaseModel):
+    errors: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
 
     @property
     def is_valid(self) -> bool:
@@ -40,6 +50,137 @@ PROFILE_REQUIREMENTS = {
         "capital_adequacy_ratio", "npl_ratio", "cost_income_ratio",
     ),
 }
+
+
+def _is_materially_greater(
+    value: float | None,
+    reference: float | None,
+    tolerance: float = 0.02,
+) -> bool:
+    if value is None or reference is None or reference < 0:
+        return False
+    return value > reference * (1 + tolerance)
+
+
+def _has_scale_gap(
+    current: float | None,
+    previous: float | None,
+    threshold: float = 1_000,
+) -> bool:
+    if current is None or previous is None or current == 0 or previous == 0:
+        return False
+    smaller = min(abs(current), abs(previous))
+    larger = max(abs(current), abs(previous))
+    return smaller > 0 and larger / smaller >= threshold
+
+
+def validate_financial_draft(
+    draft: FinancialReportDraft,
+) -> SourceValidationReport:
+    errors: list[str] = []
+    warnings: list[str] = []
+    profile = CompanyProfile(draft.company_profile)
+
+    nonnegative_fields = {
+        "Hasılat": draft.revenue,
+        "Önceki dönem hasılat": draft.previous_revenue,
+        "Finansal borç": draft.total_debt,
+        "Nakit": draft.cash,
+        "Dönen varlık": draft.current_assets,
+        "Kısa vadeli yükümlülük": draft.current_liabilities,
+        "Cari dönem yazılan primler": draft.premium_revenue,
+        "Önceki dönem yazılan primler": draft.previous_premium_revenue,
+    }
+    for label, value in nonnegative_fields.items():
+        if value is not None and value < 0:
+            errors.append(f"{label} negatif olamaz.")
+
+    for label, value in (
+        ("Toplam varlık", draft.total_assets),
+        ("Önceki dönem toplam varlık", draft.previous_total_assets),
+    ):
+        if value is not None and value <= 0:
+            errors.append(f"{label} sıfırdan büyük olmalıdır.")
+
+    for label, value in draft.model_dump().items():
+        if isinstance(value, (int, float)) and not isfinite(float(value)):
+            errors.append(f"{label} sonlu bir sayı olmalıdır.")
+
+    if _is_materially_greater(draft.equity, draft.total_assets):
+        errors.append(
+            "Özkaynak toplam varlıktan büyük görünüyor; tutar birimini ve "
+            "çıkarılan bilanço satırlarını kontrol edin."
+        )
+    if _is_materially_greater(
+        draft.previous_equity,
+        draft.previous_total_assets,
+    ):
+        errors.append(
+            "Önceki dönem özkaynağı önceki dönem toplam varlığından büyük "
+            "görünüyor."
+        )
+    if _is_materially_greater(draft.cash, draft.total_assets):
+        errors.append("Nakit toplam varlıktan büyük olamaz.")
+
+    if profile in (CompanyProfile.STANDARD, CompanyProfile.REIT):
+        if _is_materially_greater(draft.current_assets, draft.total_assets):
+            errors.append("Dönen varlık toplam varlıktan büyük olamaz.")
+        if _is_materially_greater(draft.cash, draft.current_assets):
+            errors.append("Nakit dönen varlıktan büyük olamaz.")
+        if (
+            draft.total_debt is not None
+            and draft.total_assets is not None
+            and draft.total_assets > 0
+            and draft.total_debt > draft.total_assets * 2
+        ):
+            warnings.append(
+                "Finansal borç toplam varlığın iki katını aşıyor; borç satırının "
+                "ve rapor biriminin doğru alındığını kontrol edin."
+            )
+
+    scale_pairs = (
+        ("hasılat", draft.revenue, draft.previous_revenue),
+        ("net dönem kârı", draft.net_profit, draft.previous_net_profit),
+        ("özkaynak", draft.equity, draft.previous_equity),
+        ("toplam varlık", draft.total_assets, draft.previous_total_assets),
+        (
+            "yazılan primler",
+            draft.premium_revenue,
+            draft.previous_premium_revenue,
+        ),
+    )
+    for label, current, previous in scale_pairs:
+        if _has_scale_gap(current, previous):
+            warnings.append(
+                f"Cari ve önceki dönem {label} değerleri arasında en az 1.000 kat "
+                "fark var; dönem sırasını ve para birimini kontrol edin."
+            )
+
+    margin_reference = draft.revenue
+    margin_limit = 20 if profile == CompanyProfile.REIT else 5
+    if (
+        draft.net_profit is not None
+        and margin_reference is not None
+        and margin_reference > 0
+        and abs(draft.net_profit) > margin_reference * margin_limit
+    ):
+        warnings.append(
+            "Net dönem kârı gelire göre olağan dışı yüksek; tek seferlik gelir, "
+            "gerçeğe uygun değer farkı veya yanlış satır eşleşmesini kontrol edin."
+        )
+
+    if (
+        draft.operating_cash_flow is not None
+        and draft.total_assets is not None
+        and draft.total_assets > 0
+        and abs(draft.operating_cash_flow) > draft.total_assets * 5
+    ):
+        warnings.append(
+            "Operasyonel nakit akışı toplam varlığa göre olağan dışı yüksek; "
+            "rapor birimini kontrol edin."
+        )
+
+    return SourceValidationReport(errors=errors, warnings=warnings)
 
 
 def validate_financial_metrics(metrics: FinancialMetrics) -> ValidationReport:

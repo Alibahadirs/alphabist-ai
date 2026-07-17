@@ -33,6 +33,7 @@ yerel Streamlit uygulaması.
 - Banka, sigorta, GYO ve finansal hizmet raporlarına özgü gelir satırı eşlemesi
 - ROE ve aktif devir hızında ortalama özkaynak/aktif kullanımı
 - PDF'de bulunamayan finansal değerleri sıfır yerine eksik olarak koruma
+- Sektöre duyarlı kaynak tutar ve bilanço tutarlılık kontrolleri
 - SQLite ile yerel veri saklama
 
 ## Çalıştırma
