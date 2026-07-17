@@ -94,3 +94,6 @@ def test_comparison_uses_confidence_gated_decisions_when_audits_are_supplied():
     )
     assert all(row.confidence_score is not None for row in result.rows)
     assert all(row.confidence_status == "Düşük" for row in result.rows)
+    assert all(row.decision_ready is False for row in result.rows)
+    assert result.decision_ready_count == 0
+    assert result.leader_symbol == "-"

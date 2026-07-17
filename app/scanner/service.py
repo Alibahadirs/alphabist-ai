@@ -26,6 +26,12 @@ def scan_companies(
             if latest_audits is not None
             else None
         )
+        if (
+            filters.decision_ready_only
+            and confidence is not None
+            and not confidence.decision_ready
+        ):
+            continue
         if score.total < filters.minimum_alpha_score:
             continue
         profile = CompanyProfile(company.company_profile)
@@ -60,6 +66,9 @@ def scan_companies(
                     confidence.calculation_check_status
                     if confidence
                     else "Kayıt yok"
+                ),
+                decision_ready=(
+                    confidence.decision_ready if confidence else True
                 ),
             )
         )

@@ -24,9 +24,11 @@ class WatchlistRow(BaseModel):
     confidence_score: float | None = Field(default=None, ge=0, le=100)
     confidence_status: str = ""
     calculation_check_status: str = "Kayıt yok"
+    decision_ready: bool = True
 
 
 class WatchlistSummary(BaseModel):
     rows: list[WatchlistRow]
     average_alpha_score: float = Field(ge=0, le=100)
     targets_reached: int = Field(ge=0)
+    decision_ready_count: int = Field(default=0, ge=0)

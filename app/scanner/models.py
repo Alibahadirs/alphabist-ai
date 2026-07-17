@@ -7,6 +7,7 @@ class ScannerFilters(BaseModel):
     minimum_net_margin: float = 0
     maximum_debt_to_equity: float = Field(default=3, ge=0)
     positive_operating_cash_flow_only: bool = True
+    decision_ready_only: bool = False
 
 
 class ScannerRow(BaseModel):
@@ -26,6 +27,7 @@ class ScannerRow(BaseModel):
     confidence_score: float | None = Field(default=None, ge=0, le=100)
     confidence_status: str = ""
     calculation_check_status: str = "Kayıt yok"
+    decision_ready: bool = True
 
 
 class ScannerSummary(BaseModel):

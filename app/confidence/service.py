@@ -134,6 +134,12 @@ def calculate_analysis_confidence(
         total = min(total, 69.0)
     if calculation_mismatches:
         total = min(total, 69.0)
+    has_blocking_error = (
+        bool(validation.errors)
+        or period_assessment.blocks_decision
+        or bool(calculation_mismatches)
+    )
+    decision_ready = not has_blocking_error and total >= 85
 
     reasons: list[str] = []
     if audit is None:
@@ -181,10 +187,9 @@ def calculate_analysis_confidence(
         decision=_gated_decision(
             score,
             total,
-            bool(validation.errors)
-            or period_assessment.blocks_decision
-            or bool(calculation_mismatches),
+            has_blocking_error,
         ),
+        decision_ready=decision_ready,
         completeness_component=completeness_component,
         source_component=source_component,
         report_component=report_component,

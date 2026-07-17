@@ -55,11 +55,15 @@ def build_comparison(
                     if confidence
                     else "Kayıt yok"
                 ),
+                decision_ready=(
+                    confidence.decision_ready if confidence else True
+                ),
             )
         )
 
     rows.sort(
         key=lambda row: (
+            row.decision_ready,
             row.combined_score
             if row.combined_score is not None
             else row.alpha_score
@@ -71,7 +75,10 @@ def build_comparison(
     ]
     return ComparisonSummary(
         rows=rows,
-        leader_symbol=rows[0].symbol,
+        leader_symbol=next(
+            (row.symbol for row in rows if row.decision_ready),
+            "-",
+        ),
         average_alpha_score=round(
             sum(row.alpha_score for row in rows) / len(rows),
             2,
@@ -81,4 +88,5 @@ def build_comparison(
             if combined_values
             else None
         ),
+        decision_ready_count=sum(row.decision_ready for row in rows),
     )

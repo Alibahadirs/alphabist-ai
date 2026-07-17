@@ -28,6 +28,9 @@ def build_watchlist_summary(
             if latest_audits is not None
             else None
         )
+        decision_ready = (
+            confidence.decision_ready if confidence else True
+        )
         rows.append(
             WatchlistRow(
                 symbol=company.symbol,
@@ -37,7 +40,10 @@ def build_watchlist_summary(
                 grade=score.grade,
                 decision=confidence.decision if confidence else score.decision,
                 note=entry.note,
-                target_reached=score.total >= entry.target_alpha_score,
+                target_reached=(
+                    score.total >= entry.target_alpha_score
+                    and decision_ready
+                ),
                 confidence_score=confidence.total if confidence else None,
                 confidence_status=confidence.status if confidence else "",
                 calculation_check_status=(
@@ -45,6 +51,7 @@ def build_watchlist_summary(
                     if confidence
                     else "Kayıt yok"
                 ),
+                decision_ready=decision_ready,
             )
         )
 
@@ -57,4 +64,5 @@ def build_watchlist_summary(
             else 0
         ),
         targets_reached=sum(row.target_reached for row in rows),
+        decision_ready_count=sum(row.decision_ready for row in rows),
     )

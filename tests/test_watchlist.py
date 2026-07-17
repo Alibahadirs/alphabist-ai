@@ -74,3 +74,6 @@ def test_watchlist_uses_confidence_gated_decision_when_audits_are_supplied():
     assert summary.rows[0].decision == "Doğrula / Karar verme"
     assert summary.rows[0].confidence_score is not None
     assert summary.rows[0].confidence_status == "Düşük"
+    assert summary.rows[0].decision_ready is False
+    assert summary.rows[0].target_reached is False
+    assert summary.decision_ready_count == 0

@@ -718,7 +718,9 @@ def render_dashboard() -> None:
 
     st.caption(
         f"Profil: {PROFILE_LABELS[CompanyProfile(company.company_profile)]} | "
-        f"Veri yeterliliği: %{score.data_completeness:.0f}"
+        f"Veri yeterliliği: %{score.data_completeness:.0f} | "
+        f"Karar hazırlığı: "
+        f"{'Hazır' if confidence.decision_ready else 'Doğrulama gerekli'}"
     )
     _render_data_source_caption(latest_audit)
     with st.expander("Analiz güveni ayrıntıları"):
@@ -1300,6 +1302,14 @@ def render_scanner() -> None:
                 "Yalnızca pozitif operasyonel nakit akışı",
                 value=True,
             )
+            decision_ready_only = st.toggle(
+                "Yalnızca karara hazır şirketler",
+                value=False,
+                help=(
+                    "Güncel raporu, yeterli güveni ve hesap tutarlılığı "
+                    "bulunan şirketleri gösterir."
+                ),
+            )
         st.form_submit_button(
             "Filtrele",
             type="primary",
@@ -1314,6 +1324,7 @@ def render_scanner() -> None:
             minimum_net_margin=minimum_net_margin,
             maximum_debt_to_equity=maximum_debt_to_equity,
             positive_operating_cash_flow_only=positive_cash_flow,
+            decision_ready_only=decision_ready_only,
         ),
         latest_audits,
     )
@@ -1347,6 +1358,9 @@ def render_scanner() -> None:
             "Analiz güveni (%)": row.confidence_score,
             "Güven durumu": row.confidence_status,
             "Hesap kontrolü": row.calculation_check_status,
+            "Karar hazırlığı": (
+                "Hazır" if row.decision_ready else "Doğrulama gerekli"
+            ),
             "Ciro büyümesi (%)": row.revenue_growth,
             "Net marj (%)": row.net_margin,
             "ROE (%)": row.roe,
@@ -2184,6 +2198,11 @@ def render_company_list() -> None:
                 "Veri yeterliliği (%)": score.data_completeness,
                 "Not": score.grade,
                 "Karar": confidence.decision,
+                "Karar hazırlığı": (
+                    "Hazır"
+                    if confidence.decision_ready
+                    else "Doğrulama gerekli"
+                ),
                 "Analiz güveni (%)": confidence.total,
                 "Güven durumu": confidence.status,
                 "Hesap kontrolü": confidence.calculation_check_status,
@@ -2291,6 +2310,11 @@ def render_comparison() -> None:
                 border=True,
             )
         st.metric("Karşılaştırılan", len(summary.rows), border=True)
+        st.metric(
+            "Karara hazır",
+            summary.decision_ready_count,
+            border=True,
+        )
 
     rows = []
     for rank, row in enumerate(summary.rows, start=1):
@@ -2307,6 +2331,9 @@ def render_comparison() -> None:
                 "Analiz güveni (%)": row.confidence_score,
                 "Güven durumu": row.confidence_status,
                 "Hesap kontrolü": row.calculation_check_status,
+                "Karar hazırlığı": (
+                    "Hazır" if row.decision_ready else "Doğrulama gerekli"
+                ),
                 "Teknik sinyal": row.technical_signal,
                 "ATR (%)": row.atr_percent,
             }
@@ -2398,6 +2425,11 @@ def render_watchlist() -> None:
             border=True,
         )
         st.metric("Hedefe ulaşan", summary.targets_reached, border=True)
+        st.metric(
+            "Karara hazır",
+            summary.decision_ready_count,
+            border=True,
+        )
 
     rows = [
         {
@@ -2411,6 +2443,9 @@ def render_watchlist() -> None:
             "Analiz güveni (%)": row.confidence_score,
             "Güven durumu": row.confidence_status,
             "Hesap kontrolü": row.calculation_check_status,
+            "Karar hazırlığı": (
+                "Hazır" if row.decision_ready else "Doğrulama gerekli"
+            ),
             "Kullanıcı notu": row.note,
         }
         for row in summary.rows

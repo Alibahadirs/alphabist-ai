@@ -71,6 +71,7 @@ def test_legacy_record_cannot_produce_investment_decision():
     assert confidence.total == 60
     assert confidence.status == "Düşük"
     assert confidence.decision == "Doğrula / Karar verme"
+    assert confidence.decision_ready is False
 
 
 def test_complete_pdf_sources_produce_high_confidence():
@@ -86,6 +87,7 @@ def test_complete_pdf_sources_produce_high_confidence():
     assert confidence.total == 100
     assert confidence.status == "Yüksek"
     assert confidence.decision == "Güçlü Al"
+    assert confidence.decision_ready is True
 
 
 def test_pdf_source_corrections_keep_high_but_not_full_confidence():
@@ -122,6 +124,7 @@ def test_manual_sources_gate_strong_buy_decision():
     assert confidence.total == 82.5
     assert confidence.status == "Orta"
     assert confidence.decision == "İzle / Doğrula"
+    assert confidence.decision_ready is False
 
 
 def test_legacy_pdf_without_document_hash_loses_proof_points():
@@ -152,6 +155,7 @@ def test_stale_report_caps_confidence_and_blocks_decision():
     assert confidence.total == 69
     assert confidence.status == "Düşük"
     assert confidence.decision == "Doğrula / Karar verme"
+    assert confidence.decision_ready is False
     assert any("güncel değil" in reason for reason in confidence.reasons)
 
 
@@ -181,6 +185,7 @@ def test_calculation_mismatch_caps_confidence_and_blocks_decision():
     assert confidence.calculation_check_status == "Uyuşmazlık"
     assert confidence.calculation_mismatch_fields == ["Gelir büyümesi"]
     assert any("eşleşmiyor" in reason for reason in confidence.reasons)
+    assert confidence.decision_ready is False
 
 
 def test_old_methodology_calculation_snapshot_does_not_block_decision():
@@ -204,5 +209,6 @@ def test_old_methodology_calculation_snapshot_does_not_block_decision():
 
     assert confidence.total == 100
     assert confidence.decision == "Güçlü Al"
+    assert confidence.decision_ready is True
     assert confidence.calculation_check_status == "Eski metodoloji"
     assert confidence.calculation_mismatch_fields == []

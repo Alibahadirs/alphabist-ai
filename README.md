@@ -40,6 +40,7 @@ yerel Streamlit uygulaması.
 - Ham tutarlardan yeniden hesaplama ve metodolojiye duyarlı tutarlılık kontrolü
 - Formül uyuşmazlıklarını veri kalite merkezinde kritik kayıt olarak gösterme
 - Hesap uyuşmazlığında analiz güvenini ve yatırım kararını otomatik olarak durdurma
+- Liderlik, tarama ve takip hedeflerinde doğrulama temelli karara hazırlık kontrolü
 - SQLite ile yerel veri saklama
 
 ## Çalıştırma

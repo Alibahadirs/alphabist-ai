@@ -72,3 +72,20 @@ def test_scanner_uses_confidence_gated_decision_when_audits_are_supplied():
     assert summary.rows[0].decision == "Doğrula / Karar verme"
     assert summary.rows[0].confidence_score is not None
     assert summary.rows[0].confidence_status == "Düşük"
+    assert summary.rows[0].decision_ready is False
+
+
+def test_scanner_can_hide_companies_that_are_not_decision_ready():
+    company = _company("SAFE", 25, 30, 0.4, 100)
+
+    summary = scan_companies(
+        [company],
+        ScannerFilters(
+            minimum_alpha_score=0,
+            decision_ready_only=True,
+        ),
+        {},
+    )
+
+    assert summary.rows == []
+    assert summary.matched_count == 0
