@@ -2544,7 +2544,15 @@ def render_portfolio() -> None:
                 prices[position.symbol] = None
                 failed_symbols.append(position.symbol)
 
-    summary = build_portfolio_summary(positions, company_by_symbol, prices)
+    latest_audits = {
+        audit.symbol: audit for audit in list_latest_company_data_audits()
+    }
+    summary = build_portfolio_summary(
+        positions,
+        company_by_symbol,
+        prices,
+        latest_audits,
+    )
     if failed_symbols:
         st.warning(
             "Fiyat alınamayan hisselerde güncel değer yerine maliyet kullanıldı: "
@@ -2573,6 +2581,30 @@ def render_portfolio() -> None:
             f"{summary.weighted_alpha_score:.1f}/100",
             border=True,
         )
+        st.metric(
+            "Ağırlıklı güven",
+            (
+                f"{summary.weighted_confidence_score:.1f}/100"
+                if summary.weighted_confidence_score is not None
+                else "-"
+            ),
+            border=True,
+        )
+        st.metric(
+            "Karara hazır değer",
+            f"%{summary.decision_ready_value_percent:.1f}",
+            border=True,
+        )
+
+    if summary.verification_required_count:
+        pending_symbols = [
+            row.symbol for row in summary.rows if not row.decision_ready
+        ]
+        st.warning(
+            f"{summary.verification_required_count} pozisyon doğrulama "
+            "gerektiriyor: "
+            + ", ".join(pending_symbols)
+        )
 
     rows = [
         {
@@ -2585,6 +2617,13 @@ def render_portfolio() -> None:
             "Kâr / zarar (TL)": row.profit_loss,
             "Getiri (%)": row.return_percent,
             "Alpha": row.alpha_score,
+            "Analiz güveni (%)": row.confidence_score,
+            "Güven durumu": row.confidence_status,
+            "Karar": row.decision,
+            "Karar hazırlığı": (
+                "Hazır" if row.decision_ready else "Doğrulama gerekli"
+            ),
+            "Hesap kontrolü": row.calculation_check_status,
             "Fiyat durumu": "Güncel" if row.price_available else "Fiyat bekleniyor",
         }
         for row in summary.rows
@@ -2604,6 +2643,12 @@ def render_portfolio() -> None:
                 "Getiri (%)": st.column_config.NumberColumn(format="%.2f"),
                 "Alpha": st.column_config.ProgressColumn(
                     "Alpha", min_value=0, max_value=100, format="%.1f"
+                ),
+                "Analiz güveni (%)": st.column_config.ProgressColumn(
+                    "Analiz güveni (%)",
+                    min_value=0,
+                    max_value=100,
+                    format="%.1f",
                 ),
             },
         )

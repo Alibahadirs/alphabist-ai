@@ -1,5 +1,7 @@
 from collections.abc import Mapping, Sequence
 
+from app.audit.models import CompanyDataAudit
+from app.confidence.service import calculate_analysis_confidence
 from app.portfolio.models import PortfolioPosition, PortfolioRow, PortfolioSummary
 from app.scoring.engine import calculate_alpha_score
 from app.scoring.models import FinancialMetrics
@@ -9,7 +11,11 @@ def build_portfolio_summary(
     positions: Sequence[PortfolioPosition],
     companies: Mapping[str, FinancialMetrics],
     prices: Mapping[str, float | None],
+    latest_audits: Mapping[str, CompanyDataAudit] | None = None,
 ) -> PortfolioSummary:
+    audits = {
+        symbol.upper(): audit for symbol, audit in (latest_audits or {}).items()
+    }
     rows: list[PortfolioRow] = []
     for position in positions:
         company = companies.get(position.symbol)
@@ -23,7 +29,14 @@ def build_portfolio_summary(
         market_value = position.quantity * effective_price
         profit_loss = market_value - cost_value
         return_percent = profit_loss / cost_value * 100 if cost_value else 0
-        alpha_score = calculate_alpha_score(company).total
+        score = calculate_alpha_score(company)
+        confidence = (
+            calculate_analysis_confidence(
+                company, score, audits.get(company.symbol.upper())
+            )
+            if latest_audits is not None
+            else None
+        )
 
         rows.append(
             PortfolioRow(
@@ -36,8 +49,19 @@ def build_portfolio_summary(
                 market_value=market_value,
                 profit_loss=profit_loss,
                 return_percent=return_percent,
-                alpha_score=alpha_score,
+                alpha_score=score.total,
                 price_available=price_available,
+                confidence_score=confidence.total if confidence else None,
+                confidence_status=confidence.status if confidence else "",
+                decision=confidence.decision if confidence else score.decision,
+                decision_ready=(
+                    confidence.decision_ready if confidence else True
+                ),
+                calculation_check_status=(
+                    confidence.calculation_check_status
+                    if confidence
+                    else "Kayıt yok"
+                ),
             )
         )
 
@@ -51,6 +75,24 @@ def build_portfolio_summary(
         if weight_base
         else 0
     )
+    confidence_rows = [
+        row for row in rows if row.confidence_score is not None
+    ]
+    weighted_confidence_score = (
+        sum(
+            float(row.confidence_score) * row.market_value
+            for row in confidence_rows
+        )
+        / weight_base
+        if weight_base and len(confidence_rows) == len(rows)
+        else None
+    )
+    decision_ready_value = sum(
+        row.market_value for row in rows if row.decision_ready
+    )
+    decision_ready_value_percent = (
+        decision_ready_value / weight_base * 100 if weight_base else 0
+    )
 
     return PortfolioSummary(
         rows=rows,
@@ -59,4 +101,16 @@ def build_portfolio_summary(
         total_profit_loss=round(total_profit_loss, 2),
         total_return_percent=round(total_return_percent, 2),
         weighted_alpha_score=round(weighted_alpha_score, 2),
+        weighted_confidence_score=(
+            round(weighted_confidence_score, 2)
+            if weighted_confidence_score is not None
+            else None
+        ),
+        decision_ready_count=sum(row.decision_ready for row in rows),
+        verification_required_count=sum(
+            not row.decision_ready for row in rows
+        ),
+        decision_ready_value_percent=round(
+            decision_ready_value_percent, 2
+        ),
     )

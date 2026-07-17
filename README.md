@@ -41,6 +41,7 @@ yerel Streamlit uygulaması.
 - Formül uyuşmazlıklarını veri kalite merkezinde kritik kayıt olarak gösterme
 - Hesap uyuşmazlığında analiz güvenini ve yatırım kararını otomatik olarak durdurma
 - Liderlik, tarama ve takip hedeflerinde doğrulama temelli karara hazırlık kontrolü
+- Portföyde güven ağırlıklı puan ve doğrulama gereken pozisyon payı
 - SQLite ile yerel veri saklama
 
 ## Çalıştırma

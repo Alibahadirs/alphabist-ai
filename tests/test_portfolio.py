@@ -61,3 +61,27 @@ def test_portfolio_summary_calculates_return_and_weighted_alpha():
     assert summary.weighted_alpha_score == pytest.approx(
         summary.rows[0].alpha_score
     )
+    assert summary.weighted_confidence_score is None
+    assert summary.decision_ready_count == 1
+    assert summary.verification_required_count == 0
+    assert summary.decision_ready_value_percent == 100
+
+
+def test_portfolio_exposes_unverified_position_value_and_confidence():
+    company = _company()
+    summary = build_portfolio_summary(
+        [PortfolioPosition(symbol="TEST", quantity=10, average_cost=20)],
+        {"TEST": company},
+        {"TEST": 25},
+        {},
+    )
+
+    row = summary.rows[0]
+    assert row.confidence_score == 60
+    assert row.confidence_status == "Düşük"
+    assert row.decision == "Doğrula / Karar verme"
+    assert row.decision_ready is False
+    assert summary.weighted_confidence_score == 60
+    assert summary.decision_ready_count == 0
+    assert summary.verification_required_count == 1
+    assert summary.decision_ready_value_percent == 0

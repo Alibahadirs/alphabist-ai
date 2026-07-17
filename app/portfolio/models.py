@@ -24,6 +24,11 @@ class PortfolioRow(BaseModel):
     return_percent: float
     alpha_score: float = Field(ge=0, le=100)
     price_available: bool
+    confidence_score: float | None = Field(default=None, ge=0, le=100)
+    confidence_status: str = ""
+    decision: str = ""
+    decision_ready: bool = True
+    calculation_check_status: str = "Kayıt yok"
 
 
 class PortfolioSummary(BaseModel):
@@ -33,3 +38,9 @@ class PortfolioSummary(BaseModel):
     total_profit_loss: float
     total_return_percent: float
     weighted_alpha_score: float = Field(ge=0, le=100)
+    weighted_confidence_score: float | None = Field(
+        default=None, ge=0, le=100
+    )
+    decision_ready_count: int = Field(default=0, ge=0)
+    verification_required_count: int = Field(default=0, ge=0)
+    decision_ready_value_percent: float = Field(default=0, ge=0, le=100)
