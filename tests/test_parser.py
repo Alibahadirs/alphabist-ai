@@ -16,6 +16,8 @@ from app.parser.extractor import (
 from app.parser.identity import company_names_match, validate_report_identity
 from app.sector.profiles import CompanyProfile
 from app.parser.models import FinancialReportDraft
+from app.scoring.engine import calculate_alpha_score
+from app.validation.service import validate_financial_metrics
 
 
 @pytest.mark.parametrize(
@@ -138,7 +140,7 @@ def test_note_numbers_and_empty_current_period_are_not_financial_values():
 
     draft, _ = extract_financial_values(text)
 
-    assert draft.revenue == 0
+    assert draft.revenue is None
     assert draft.previous_revenue == 709_628
     assert draft.net_profit == 1_426_444_983
     assert draft.previous_net_profit == -51_183_071
@@ -188,8 +190,8 @@ def test_loss_to_profit_turnaround_is_not_shown_as_growth_percentage():
     metrics = to_financial_metrics(draft)
 
     assert metrics.revenue_growth == -100
-    assert metrics.net_margin == 0
-    assert metrics.net_profit_growth == 0
+    assert metrics.net_margin is None
+    assert metrics.net_profit_growth is None
     assert metrics.roe == pytest.approx(146.24, rel=0.01)
 
 
@@ -425,7 +427,7 @@ def test_financial_report_profile_override_reextracts_sector_rows(
         CompanyProfile.FINANCIAL_SERVICES,
     )
 
-    assert standard.draft.revenue == 0
+    assert standard.draft.revenue is None
     assert financial.draft.revenue == 3_570_000
     assert financial.draft.company_profile == CompanyProfile.FINANCIAL_SERVICES
 
@@ -463,6 +465,32 @@ def test_manual_scale_override_preserves_percentages():
     assert rescaled.revenue == 1_000_000
     assert rescaled.net_profit == 100_000
     assert rescaled.capital_adequacy_ratio == 18.5
+
+
+def test_missing_raw_values_remain_missing_in_scoring_metrics():
+    draft = FinancialReportDraft(
+        symbol="TEST",
+        company_name="Test Şirketi",
+        revenue=None,
+        previous_revenue=100,
+        net_profit=10,
+        equity=None,
+        total_debt=None,
+    )
+
+    metrics = to_financial_metrics(draft)
+
+    assert metrics.revenue_growth is None
+    assert metrics.net_margin is None
+    assert metrics.roe is None
+    assert metrics.debt_to_equity is None
+    assert metrics.free_cash_flow is None
+    validation = validate_financial_metrics(metrics)
+    assert "revenue_growth" in validation.missing_fields
+    assert "roe" in validation.missing_fields
+    score = calculate_alpha_score(metrics)
+    assert score.data_completeness < 70
+    assert score.decision == "Eksik veri / Doğrula"
 
 
 def test_financial_report_tracks_sector_metric_fields(monkeypatch):

@@ -238,7 +238,11 @@ def _apply_monetary_scale(
         return draft
     return draft.model_copy(
         update={
-            field: getattr(draft, field) * scale
+            field: (
+                getattr(draft, field) * scale
+                if getattr(draft, field) is not None
+                else None
+            )
             for field in MONETARY_FIELDS
         }
     )
@@ -260,7 +264,7 @@ def _line_values(
     label: str,
     *,
     allow_small_values: bool = False,
-) -> list[float]:
+) -> list[float | None]:
     label_match = re.search(re.escape(label), line, re.IGNORECASE)
     if label_match is None:
         return []
@@ -294,7 +298,7 @@ def _line_values(
     ):
         return []
 
-    return [0.0 if value is None else value for value in parsed]
+    return parsed
 
 
 def _read_pdf(file_bytes: bytes) -> tuple[str, int]:
@@ -440,7 +444,7 @@ def extract_sector_metrics(text: str) -> dict[str, float]:
                 if _fold(label) not in folded:
                     continue
                 values = _line_values(line, label, allow_small_values=True)
-                if values:
+                if values and values[0] is not None:
                     value = values[0]
                     if 0 <= abs(value) <= 1 and ("%" in line or "oran" in folded):
                         value *= 100
@@ -479,8 +483,13 @@ def extract_financial_values(
                 if not values:
                     continue
 
-                extracted[fields[0]] = values[0]
-                if len(fields) > 1 and len(values) > 1:
+                if values[0] is not None:
+                    extracted[fields[0]] = values[0]
+                if (
+                    len(fields) > 1
+                    and len(values) > 1
+                    and values[1] is not None
+                ):
                     extracted[fields[1]] = values[1]
                 break
 
@@ -551,17 +560,30 @@ def extract_financial_report(
             "Karşılaştırma dönemi rapor metninde cari dönemden önce görünüyor. "
             "Cari ve önceki dönem sütun sırasını doğrulayın."
         )
-    if draft.revenue == 0 and draft.previous_revenue > 0:
+    if draft.revenue is None:
         warnings.append(
-            "Cari dönem hasılatı raporda boş veya sıfır; önceki döneme göre ciro "
-            "büyümesi -%100 hesaplandı."
+            "Cari dönem hasılatı bulunamadı; ciro büyümesi ve net marj eksik "
+            "olarak işaretlendi."
         )
-    if draft.previous_net_profit <= 0 < draft.net_profit:
+    elif (
+        draft.revenue == 0
+        and draft.previous_revenue is not None
+        and draft.previous_revenue > 0
+    ):
+        warnings.append(
+            "Cari dönem hasılatı raporda gerçek sıfır görünüyor; önceki döneme "
+            "göre ciro büyümesi -%100 hesaplandı."
+        )
+    if (
+        draft.previous_net_profit is not None
+        and draft.net_profit is not None
+        and draft.previous_net_profit <= 0 < draft.net_profit
+    ):
         warnings.append(
             "Şirket zarardan kâra geçtiği için net kâr büyüme yüzdesi anlamlı "
-            "değildir ve puanlamada %0 kullanıldı."
+            "değildir ve eksik olarak işaretlendi."
         )
-    if draft.equity <= 0:
+    if draft.equity is None or draft.equity <= 0:
         warnings.append(
             "Özkaynak tutarı bulunamadı veya geçersiz; ROE değerini kontrol edin."
         )
@@ -570,7 +592,11 @@ def extract_financial_report(
             "Önceki dönem özkaynağı bulunamadı; ROE dönem sonu özkaynağıyla "
             "hesaplandı."
         )
-    if draft.total_assets > 0 and "previous_total_assets" not in extracted_fields:
+    if (
+        draft.total_assets is not None
+        and draft.total_assets > 0
+        and "previous_total_assets" not in extracted_fields
+    ):
         warnings.append(
             "Önceki dönem toplam aktifi bulunamadı; aktif devir hızı dönem sonu "
             "aktifiyle hesaplandı."

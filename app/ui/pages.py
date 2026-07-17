@@ -178,7 +178,9 @@ def _technical_score_table(score: TechnicalScoreBreakdown) -> pd.DataFrame:
     )
 
 
-def _format_turkish_amount(value: float) -> str:
+def _format_turkish_amount(value: float | None) -> str:
+    if value is None:
+        return "-"
     return f"{value:,.0f}".replace(",", ".")
 
 
@@ -191,7 +193,9 @@ def _amount_input(label: str, value: float | None, key: str) -> str:
     )
 
 
-def _parse_amount_input(label: str, raw_value: str) -> float:
+def _parse_amount_input(label: str, raw_value: str) -> float | None:
+    if not raw_value.strip():
+        return None
     try:
         return parse_turkish_number(raw_value)
     except ValueError as exc:
@@ -1344,7 +1348,7 @@ def _render_pdf_company_form() -> None:
         source_rows = [
             (label, value)
             for label, value in source_rows
-            if value != 0
+            if value is not None
             or label
             not in {
                 "Cari dönem yazılan primler",
@@ -1388,12 +1392,12 @@ def _render_pdf_company_form() -> None:
         }
     )
     defaults = to_financial_metrics(calculation_draft)
-    if abs(defaults.roe) > 100:
+    if abs(defaults.roe or 0) > 100:
         st.warning(
             f"Yıllıklandırılmış ROE %{defaults.roe:,.1f}. Tek seferlik gelirler veya "
             "düşük özkaynak nedeniyle yüksek olabilir; kaydetmeden önce kontrol edin."
         )
-    if defaults.debt_to_equity > 10:
+    if (defaults.debt_to_equity or 0) > 10:
         st.warning(
             "Borç / özkaynak oranı olağan dışı yüksek. PDF kaynak değerlerini "
             "kontrol edin."
@@ -1438,35 +1442,35 @@ def _render_pdf_company_form() -> None:
         with left:
             revenue_growth = st.number_input(
                 "Ciro büyümesi (%)",
-                value=float(defaults.revenue_growth),
+                value=defaults.revenue_growth,
                 step=0.1,
                 format="%.2f",
                 key="pdf_field_revenue_growth",
             )
             net_profit_growth = st.number_input(
                 "Net kâr büyümesi (%)",
-                value=float(defaults.net_profit_growth),
+                value=defaults.net_profit_growth,
                 step=0.1,
                 format="%.2f",
                 key="pdf_field_profit_growth",
             )
             net_margin = st.number_input(
                 "Net kâr marjı (%)",
-                value=float(defaults.net_margin),
+                value=defaults.net_margin,
                 step=0.1,
                 format="%.2f",
                 key="pdf_field_net_margin",
             )
             roe = st.number_input(
                 "ROE (%)",
-                value=float(defaults.roe),
+                value=defaults.roe,
                 step=0.1,
                 format="%.2f",
                 key="pdf_field_roe",
             )
             debt_to_equity = st.number_input(
                 "Borç / özkaynak",
-                value=float(defaults.debt_to_equity),
+                value=defaults.debt_to_equity,
                 min_value=0.0,
                 step=0.01,
                 format="%.4f",
@@ -1474,7 +1478,7 @@ def _render_pdf_company_form() -> None:
             )
             current_ratio = st.number_input(
                 "Cari oran",
-                value=float(defaults.current_ratio),
+                value=defaults.current_ratio,
                 min_value=0.0,
                 step=0.01,
                 format="%.2f",
@@ -1493,7 +1497,7 @@ def _render_pdf_company_form() -> None:
             )
             asset_turnover = st.number_input(
                 "Aktif devir hızı",
-                value=float(defaults.asset_turnover),
+                value=defaults.asset_turnover,
                 min_value=0.0,
                 step=0.01,
                 format="%.2f",
@@ -1738,15 +1742,15 @@ def _validate_and_save_company(
     *,
     symbol: str,
     company_name: str,
-    revenue_growth: float,
-    net_profit_growth: float,
-    net_margin: float,
-    roe: float,
-    debt_to_equity: float,
-    current_ratio: float,
-    operating_cash_flow: float,
-    free_cash_flow: float,
-    asset_turnover: float,
+    revenue_growth: float | None,
+    net_profit_growth: float | None,
+    net_margin: float | None,
+    roe: float | None,
+    debt_to_equity: float | None,
+    current_ratio: float | None,
+    operating_cash_flow: float | None,
+    free_cash_flow: float | None,
+    asset_turnover: float | None,
     valuation: float,
     management: float,
     risk: float,

@@ -32,6 +32,7 @@ yerel Streamlit uygulaması.
 - Büyüme sütunları için geçen yılın aynı karşılaştırma dönemi doğrulaması
 - Banka, sigorta, GYO ve finansal hizmet raporlarına özgü gelir satırı eşlemesi
 - ROE ve aktif devir hızında ortalama özkaynak/aktif kullanımı
+- PDF'de bulunamayan finansal değerleri sıfır yerine eksik olarak koruma
 - SQLite ile yerel veri saklama
 
 ## Çalıştırma
