@@ -44,6 +44,7 @@ yerel Streamlit uygulaması.
 - Portföyde güven ağırlıklı puan ve doğrulama gereken pozisyon payı
 - Kullanıcıya özel SQLite verisini kaynak kodu commitlerinden ayırma
 - SQLite yedeğini bütünlük kontrolüyle indirme ve güvenli geri yükleme
+- Geri yükleme öncesi güvenlik kopyalarını listeleme ve yeniden indirme
 - SQLite ile yerel veri saklama
 
 ## Çalıştırma

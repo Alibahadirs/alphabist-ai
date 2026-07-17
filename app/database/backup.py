@@ -25,6 +25,15 @@ class BackupValidation:
     tables: tuple[str, ...] = ()
 
 
+@dataclass(frozen=True)
+class SafetyBackupInfo:
+    path: Path
+    file_name: str
+    size_bytes: int
+    modified_at: datetime
+    valid: bool
+
+
 def _temporary_database_path() -> Path:
     file_descriptor, name = tempfile.mkstemp(suffix=".db")
     os.close(file_descriptor)
@@ -124,7 +133,7 @@ def restore_database_backup(
             backup_directory or target_path.parent / "backups"
         )
         safety_directory.mkdir(parents=True, exist_ok=True)
-        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
         safety_backup_path = (
             safety_directory
             / f"alphabist-before-restore-{timestamp}.db"
@@ -151,3 +160,31 @@ def restore_database_backup(
             + restored_validation.message
         )
     return safety_backup_path
+
+
+def list_safety_backups(
+    database_path: Path | None = None,
+    backup_directory: Path | None = None,
+) -> list[SafetyBackupInfo]:
+    target_path = _database_path(database_path)
+    safety_directory = backup_directory or target_path.parent / "backups"
+    if not safety_directory.exists():
+        return []
+
+    backups: list[SafetyBackupInfo] = []
+    for path in safety_directory.glob(
+        "alphabist-before-restore-*.db"
+    ):
+        stat = path.stat()
+        validation = validate_database_backup(path.read_bytes())
+        backups.append(
+            SafetyBackupInfo(
+                path=path,
+                file_name=path.name,
+                size_bytes=stat.st_size,
+                modified_at=datetime.fromtimestamp(stat.st_mtime),
+                valid=validation.valid,
+            )
+        )
+    backups.sort(key=lambda item: item.modified_at, reverse=True)
+    return backups

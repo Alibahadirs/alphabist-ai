@@ -1,6 +1,7 @@
 from app.database import repository
 from app.database.backup import (
     create_database_backup,
+    list_safety_backups,
     restore_database_backup,
     validate_database_backup,
 )
@@ -77,3 +78,42 @@ def test_restore_replaces_data_and_keeps_safety_backup(
         safety_path.read_bytes()
     )
     assert safety_validation.valid is True
+
+    backups = list_safety_backups(
+        target_path,
+        safety_directory,
+    )
+    assert len(backups) == 1
+    assert backups[0].path == safety_path
+    assert backups[0].valid is True
+    assert backups[0].size_bytes > 0
+
+
+def test_safety_backups_are_listed_newest_first(
+    tmp_path, monkeypatch
+):
+    database_path = tmp_path / "source.db"
+    safety_directory = tmp_path / "safety"
+    _create_database(database_path, monkeypatch, "SAFE")
+    backup_data = create_database_backup(database_path)
+
+    first = restore_database_backup(
+        backup_data,
+        database_path,
+        safety_directory,
+    )
+    second = restore_database_backup(
+        backup_data,
+        database_path,
+        safety_directory,
+    )
+
+    backups = list_safety_backups(
+        database_path,
+        safety_directory,
+    )
+    assert len(backups) == 2
+    assert first is not None
+    assert second is not None
+    assert backups[0].modified_at >= backups[1].modified_at
+    assert {item.path for item in backups} == {first, second}

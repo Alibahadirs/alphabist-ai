@@ -50,6 +50,7 @@ from app.database.repository import (
 )
 from app.database.backup import (
     create_database_backup,
+    list_safety_backups,
     restore_database_backup,
     validate_database_backup,
 )
@@ -2747,3 +2748,57 @@ def render_data_backup() -> None:
                         "Önceki veriler güvenlik kopyasına alındı: "
                         f"{safety_backup.name}"
                     )
+
+    with st.container(border=True):
+        st.subheader("Güvenlik kopyaları")
+        safety_backups = list_safety_backups()
+        if not safety_backups:
+            st.info("Henüz geri yükleme güvenlik kopyası bulunmuyor.")
+        else:
+            st.dataframe(
+                pd.DataFrame(
+                    [
+                        {
+                            "Dosya": item.file_name,
+                            "Tarih": item.modified_at,
+                            "Boyut (KB)": item.size_bytes / 1024,
+                            "Bütünlük": (
+                                "Doğrulandı"
+                                if item.valid
+                                else "Geçersiz"
+                            ),
+                        }
+                        for item in safety_backups
+                    ]
+                ),
+                hide_index=True,
+                width="stretch",
+                column_config={
+                    "Tarih": st.column_config.DatetimeColumn(
+                        "Tarih",
+                        format="DD.MM.YYYY HH:mm:ss",
+                    ),
+                    "Boyut (KB)": st.column_config.NumberColumn(
+                        "Boyut (KB)",
+                        format="%.1f",
+                    ),
+                },
+            )
+            selected_backup = st.selectbox(
+                "İndirilecek güvenlik kopyası",
+                safety_backups,
+                format_func=lambda item: item.file_name,
+            )
+            if selected_backup.valid:
+                st.download_button(
+                    "Güvenlik kopyasını indir",
+                    data=selected_backup.path.read_bytes(),
+                    file_name=selected_backup.file_name,
+                    mime="application/x-sqlite3",
+                    icon=":material/download:",
+                    width="stretch",
+                )
+            else:
+                st.error(
+                    "Seçilen güvenlik kopyası bütünlük kontrolünü geçemedi."
+                )
