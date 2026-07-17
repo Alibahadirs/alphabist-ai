@@ -11,12 +11,14 @@ from app.audit.models import (
     CompanyDataAudit,
     DataSourceType,
     METRIC_SOURCE_LABELS,
+    SOURCE_VALUE_LABELS,
     MetricSourceType,
     SOURCE_LABELS,
 )
 from app.audit.service import (
     attach_analysis_snapshot,
     build_pdf_field_sources,
+    build_source_value_snapshot,
     compare_analysis_snapshots,
     document_fingerprint,
     document_identity_conflicts,
@@ -209,24 +211,7 @@ def _parse_amount_input(label: str, raw_value: str) -> float | None:
         raise AppValidationError(f"{label} geçerli bir TL tutarı değil.") from exc
 
 
-PDF_SOURCE_FIELD_LABELS = {
-    "revenue": "Hasılat",
-    "previous_revenue": "Önceki dönem hasılat",
-    "net_profit": "Net dönem kârı",
-    "previous_net_profit": "Önceki dönem net kârı",
-    "equity": "Özkaynak",
-    "previous_equity": "Önceki dönem özkaynak",
-    "total_debt": "Finansal borç",
-    "cash": "Nakit",
-    "current_assets": "Dönen varlık",
-    "current_liabilities": "Kısa vadeli yükümlülük",
-    "operating_cash_flow": "Operasyonel nakit akışı",
-    "capital_expenditures": "Yatırım harcaması",
-    "total_assets": "Toplam varlık",
-    "previous_total_assets": "Önceki dönem toplam varlık",
-    "premium_revenue": "Cari dönem yazılan primler",
-    "previous_premium_revenue": "Önceki dönem yazılan primler",
-}
+PDF_SOURCE_FIELD_LABELS = SOURCE_VALUE_LABELS
 
 BASE_PDF_SOURCE_FIELDS = (
     "revenue",
@@ -452,6 +437,28 @@ def _render_data_source_caption(audit: CompanyDataAudit | None) -> None:
                             "Kaynak": METRIC_SOURCE_LABELS[source],
                         }
                         for field, source in audit.field_sources.items()
+                    ]
+                ),
+                hide_index=True,
+                width="stretch",
+            )
+    if audit.source_values:
+        with st.expander("Hesaplamada kullanılan ham finansal tutarlar"):
+            st.caption(
+                "Bu değerler analiz kaydedildiği anda dondurulmuştur. Oranlar "
+                "ve büyüme hesapları bu kaynak tutarlardan üretilmiştir."
+            )
+            st.dataframe(
+                pd.DataFrame(
+                    [
+                        {
+                            "Finansal kalem": label,
+                            "Tutar (TL)": _format_turkish_amount(
+                                audit.source_values[field]
+                            ),
+                        }
+                        for field, label in SOURCE_VALUE_LABELS.items()
+                        if field in audit.source_values
                     ]
                 ),
                 hide_index=True,
@@ -967,6 +974,11 @@ def _render_quality_correction_form() -> None:
         completeness=validation.completeness,
         alpha_score=score.total,
         field_sources=corrected_sources,
+        source_values=(
+            dict(previous_audit.source_values)
+            if previous_audit
+            else {}
+        ),
     )
     confidence = calculate_analysis_confidence(corrected, score, audit)
     add_company_data_audit(
@@ -1718,6 +1730,7 @@ def _render_pdf_company_form() -> None:
             },
             corrected_source_fields=corrected_source_fields,
         ),
+        source_values=build_source_value_snapshot(draft),
     )
 
 
@@ -1880,6 +1893,7 @@ def _validate_and_save_company(
     comparison_period_end: date | None = None,
     comparison_period_confirmed: bool = False,
     field_sources: dict[str, MetricSourceType] | None = None,
+    source_values: dict[str, float | None] | None = None,
 ) -> None:
     sector_metrics = sector_metrics or {}
     period_assessment = assess_report_period(report_period_end, period_months)
@@ -1947,9 +1961,6 @@ def _validate_and_save_company(
         report_period_end=report_period_end,
         financial_report_hash=financial_report_hash,
         activity_report_hash=activity_report_hash,
-        financial_report_scale=financial_report_scale,
-        comparison_period_end=comparison_period_end,
-        comparison_period_confirmed=comparison_period_confirmed,
     )
     if document_conflicts:
         st.error(
@@ -1994,9 +2005,13 @@ def _validate_and_save_company(
         activity_report_name=activity_report_name,
         financial_report_hash=financial_report_hash,
         activity_report_hash=activity_report_hash,
+        financial_report_scale=financial_report_scale,
+        comparison_period_end=comparison_period_end,
+        comparison_period_confirmed=comparison_period_confirmed,
         completeness=score.data_completeness,
         alpha_score=score.total,
         field_sources=field_sources,
+        source_values=source_values or {},
     )
     confidence = calculate_analysis_confidence(metrics, score, audit)
     add_company_data_audit(

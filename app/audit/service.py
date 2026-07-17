@@ -8,12 +8,14 @@ from app.audit.models import (
     AnalysisSnapshotComparison,
     CompanyDataAudit,
     MetricSourceType,
+    SOURCE_VALUE_LABELS,
 )
 from app.confidence.models import AnalysisConfidence
 from app.core.constants import CATEGORY_MAX_POINTS
 from app.core.settings import settings
 from app.parser.models import (
     ActivityReportExtractionResult,
+    FinancialReportDraft,
     PdfExtractionResult,
 )
 from app.scoring.models import FinancialMetrics, ScoreBreakdown
@@ -36,6 +38,15 @@ FINANCIAL_METRIC_OPTIONAL_DEPENDENCIES = {
     "roe": {"previous_equity"},
     "asset_turnover": {"previous_total_assets"},
 }
+
+
+def build_source_value_snapshot(
+    draft: FinancialReportDraft,
+) -> dict[str, float | None]:
+    return {
+        field: getattr(draft, field)
+        for field in SOURCE_VALUE_LABELS
+    }
 
 
 def document_fingerprint(file_bytes: bytes) -> str:

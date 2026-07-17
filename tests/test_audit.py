@@ -8,6 +8,7 @@ from app.audit.service import (
     analysis_input_fingerprint,
     attach_analysis_snapshot,
     build_pdf_field_sources,
+    build_source_value_snapshot,
     compare_analysis_snapshots,
     document_fingerprint,
     document_identity_conflicts,
@@ -53,6 +54,11 @@ def _audit(symbol: str, score: float, source: DataSourceType) -> CompanyDataAudi
             "revenue_growth": MetricSourceType.FINANCIAL_REPORT,
             "risk_score_input": MetricSourceType.MANUAL,
         },
+        source_values={
+            "revenue": 1_200_000,
+            "previous_revenue": 1_000_000,
+            "total_debt": None,
+        },
     )
 
 
@@ -90,6 +96,9 @@ def test_audit_repository_returns_latest_record(tmp_path, monkeypatch):
     assert latest.methodology_version == "test-methodology"
     assert latest.input_fingerprint == "a" * 64
     assert latest.score_breakdown["profitability"] == 12.5
+    assert latest.source_values["revenue"] == 1_200_000
+    assert latest.source_values["previous_revenue"] == 1_000_000
+    assert latest.source_values["total_debt"] is None
 
     audits = repository.list_latest_company_data_audits()
     assert len(audits) == 1
@@ -162,6 +171,7 @@ def test_init_db_migrates_existing_audit_table(tmp_path, monkeypatch):
         "methodology_version",
         "input_fingerprint",
         "score_breakdown",
+        "source_values",
         "financial_report_hash",
         "activity_report_hash",
         "financial_report_scale",
@@ -172,6 +182,22 @@ def test_init_db_migrates_existing_audit_table(tmp_path, monkeypatch):
         "idx_company_data_audit_financial_hash",
         "idx_company_data_audit_activity_hash",
     }.issubset(indexes)
+
+
+def test_source_value_snapshot_preserves_values_and_missing_fields():
+    snapshot = build_source_value_snapshot(
+        FinancialReportDraft(
+            revenue=1_200_000,
+            previous_revenue=1_000_000,
+            net_profit=120_000,
+            total_debt=None,
+        )
+    )
+
+    assert snapshot["revenue"] == 1_200_000
+    assert snapshot["previous_revenue"] == 1_000_000
+    assert snapshot["net_profit"] == 120_000
+    assert snapshot["total_debt"] is None
 
 
 def test_document_fingerprint_identifies_file_content():

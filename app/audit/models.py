@@ -34,6 +34,25 @@ METRIC_SOURCE_LABELS = {
     MetricSourceType.CORRECTION: "Kullanıcı düzeltmesi",
 }
 
+SOURCE_VALUE_LABELS = {
+    "revenue": "Hasılat",
+    "previous_revenue": "Önceki dönem hasılat",
+    "net_profit": "Net dönem kârı",
+    "previous_net_profit": "Önceki dönem net kârı",
+    "equity": "Özkaynak",
+    "previous_equity": "Önceki dönem özkaynak",
+    "total_debt": "Finansal borç",
+    "cash": "Nakit",
+    "current_assets": "Dönen varlık",
+    "current_liabilities": "Kısa vadeli yükümlülük",
+    "operating_cash_flow": "Operasyonel nakit akışı",
+    "capital_expenditures": "Yatırım harcaması",
+    "total_assets": "Toplam varlık",
+    "previous_total_assets": "Önceki dönem toplam varlık",
+    "premium_revenue": "Cari dönem yazılan primler",
+    "previous_premium_revenue": "Önceki dönem yazılan primler",
+}
+
 
 class CompanyDataAudit(BaseModel):
     id: int | None = Field(default=None, ge=1)
@@ -63,6 +82,7 @@ class CompanyDataAudit(BaseModel):
     input_fingerprint: str = Field(default="", max_length=64)
     score_breakdown: dict[str, float] = Field(default_factory=dict)
     field_sources: dict[str, MetricSourceType] = Field(default_factory=dict)
+    source_values: dict[str, float | None] = Field(default_factory=dict)
     created_at: datetime | None = None
 
 
