@@ -249,3 +249,98 @@ def test_profile_reconciliation_flags_two_different_sector_profiles():
     assert resolution.financial_profile == CompanyProfile.BANK
     assert resolution.activity_profile == CompanyProfile.FINANCIAL_SERVICES
     assert resolution.has_conflict is True
+
+
+def test_extreme_bank_ratios_require_review_without_blocking_record():
+    metrics = FinancialMetrics(
+        symbol="TBNK",
+        company_name="Test Bankası A.Ş.",
+        company_profile=CompanyProfile.BANK,
+        revenue_growth=20,
+        net_profit_growth=30,
+        roe=25,
+        capital_adequacy_ratio=18,
+        npl_ratio=35,
+        loan_to_deposit_ratio=700,
+        net_interest_margin=60,
+        cost_income_ratio=500,
+    )
+
+    report = validate_financial_metrics(metrics)
+
+    assert report.is_valid
+    assert len(report.warnings) >= 4
+    assert any("Kredi / mevduat" in warning for warning in report.warnings)
+    assert any("Net faiz marjı" in warning for warning in report.warnings)
+    assert any("Maliyet / gelir" in warning for warning in report.warnings)
+
+
+def test_extreme_insurance_ratios_require_review():
+    metrics = FinancialMetrics(
+        symbol="TSGR",
+        company_name="Test Sigorta A.Ş.",
+        company_profile=CompanyProfile.INSURANCE,
+        net_profit_growth=25,
+        net_margin=12,
+        roe=24,
+        current_ratio=50,
+        premium_growth=1_500,
+        combined_ratio=250,
+        solvency_ratio=900,
+    )
+
+    report = validate_financial_metrics(metrics)
+
+    assert report.is_valid
+    assert len(report.warnings) >= 4
+    assert any("Prim büyümesi" in warning for warning in report.warnings)
+    assert any("Ödeme gücü" in warning for warning in report.warnings)
+
+
+def test_reit_nav_discount_above_one_hundred_is_invalid():
+    metrics = FinancialMetrics(
+        symbol="TGYOR",
+        company_name="Test GYO A.Ş.",
+        company_profile=CompanyProfile.REIT,
+        nav_discount=120,
+    )
+
+    report = validate_financial_metrics(metrics)
+
+    assert not report.is_valid
+    assert "NAD iskontosu %100'den büyük olamaz." in report.errors
+
+
+def test_extreme_reit_nav_premium_requires_review():
+    metrics = FinancialMetrics(
+        symbol="TGYOR",
+        company_name="Test GYO A.Ş.",
+        company_profile=CompanyProfile.REIT,
+        nav_discount=-300,
+    )
+
+    report = validate_financial_metrics(metrics)
+
+    assert report.is_valid
+    assert any("NAD iskontosu" in warning for warning in report.warnings)
+
+
+def test_normal_bank_ratios_do_not_create_sector_range_warnings():
+    metrics = FinancialMetrics(
+        symbol="TBNK",
+        company_name="Test Bankası A.Ş.",
+        company_profile=CompanyProfile.BANK,
+        revenue_growth=20,
+        net_profit_growth=30,
+        roe=25,
+        capital_adequacy_ratio=18,
+        npl_ratio=2.5,
+        loan_to_deposit_ratio=100,
+        net_interest_margin=5,
+        cost_income_ratio=40,
+    )
+
+    report = validate_financial_metrics(metrics)
+
+    assert report.is_valid
+    assert report.warnings == []

@@ -99,6 +99,120 @@ def _has_scale_gap(
     return smaller > 0 and larger / smaller >= threshold
 
 
+def _warn_outside_range(
+    warnings: list[str],
+    value: float | None,
+    minimum: float,
+    maximum: float,
+    message: str,
+) -> None:
+    if value is not None and not minimum <= value <= maximum:
+        warnings.append(message)
+
+
+def _validate_sector_metric_ranges(
+    metrics: FinancialMetrics,
+    profile: CompanyProfile,
+    errors: list[str],
+    warnings: list[str],
+) -> None:
+    if profile == CompanyProfile.BANK:
+        _warn_outside_range(
+            warnings,
+            metrics.capital_adequacy_ratio,
+            5,
+            50,
+            "Sermaye yeterliliği oranı olağan banka aralığının dışında.",
+        )
+        _warn_outside_range(
+            warnings,
+            metrics.loan_to_deposit_ratio,
+            40,
+            250,
+            "Kredi / mevduat oranı olağan banka aralığının dışında.",
+        )
+        _warn_outside_range(
+            warnings,
+            metrics.net_interest_margin,
+            -30,
+            30,
+            "Net faiz marjı olağan banka aralığının dışında.",
+        )
+        _warn_outside_range(
+            warnings,
+            metrics.cost_income_ratio,
+            10,
+            200,
+            "Maliyet / gelir oranı olağan banka aralığının dışında.",
+        )
+        if metrics.npl_ratio is not None and metrics.npl_ratio > 30:
+            warnings.append(
+                "Takipteki kredi oranı olağan banka aralığının dışında."
+            )
+
+    elif profile == CompanyProfile.INSURANCE:
+        if metrics.current_ratio is not None and metrics.current_ratio > 20:
+            warnings.append(
+                "Cari oran olağan sigorta şirketi aralığının dışında."
+            )
+        _warn_outside_range(
+            warnings,
+            metrics.premium_growth,
+            -100,
+            1_000,
+            "Prim büyümesi olağan sigorta şirketi aralığının dışında.",
+        )
+        _warn_outside_range(
+            warnings,
+            metrics.solvency_ratio,
+            50,
+            500,
+            "Ödeme gücü oranı olağan sigorta şirketi aralığının dışında.",
+        )
+        if metrics.combined_ratio is not None and metrics.combined_ratio > 200:
+            warnings.append(
+                "Bileşik oran olağan sigorta şirketi aralığının dışında."
+            )
+
+    elif profile == CompanyProfile.REIT:
+        if metrics.nav_discount is not None:
+            if metrics.nav_discount > 100:
+                errors.append("NAD iskontosu %100'den büyük olamaz.")
+            elif metrics.nav_discount < -200:
+                warnings.append(
+                    "NAD iskontosu olağan GYO aralığının dışında; değer aslında "
+                    "yüksek bir NAD primini gösteriyor olabilir."
+                )
+
+    elif profile == CompanyProfile.FINANCIAL_SERVICES:
+        _warn_outside_range(
+            warnings,
+            metrics.capital_adequacy_ratio,
+            5,
+            150,
+            "Sermaye yeterliliği oranı olağan finansal hizmetler aralığının dışında.",
+        )
+        if metrics.debt_to_equity is not None and metrics.debt_to_equity > 50:
+            warnings.append(
+                "Borç / özkaynak oranı olağan finansal hizmetler aralığının dışında."
+            )
+        if metrics.current_ratio is not None and metrics.current_ratio > 20:
+            warnings.append(
+                "Cari oran olağan finansal hizmetler aralığının dışında."
+            )
+        _warn_outside_range(
+            warnings,
+            metrics.cost_income_ratio,
+            10,
+            300,
+            "Maliyet / gelir oranı olağan finansal hizmetler aralığının dışında.",
+        )
+        if metrics.npl_ratio is not None and metrics.npl_ratio > 30:
+            warnings.append(
+                "Takipteki alacak oranı olağan finansal hizmetler aralığının dışında."
+            )
+
+
 def validate_financial_draft(
     draft: FinancialReportDraft,
 ) -> SourceValidationReport:
@@ -241,13 +355,11 @@ def validate_financial_metrics(metrics: FinancialMetrics) -> ValidationReport:
             warnings.append("Borç / özkaynak oranı olağan aralığın dışında; tutar ve oran alanlarını kontrol edin.")
         if (metrics.asset_turnover or 0) > 10:
             warnings.append("Aktif devir hızı olağan aralığın dışında; gelir ve toplam aktif değerlerini kontrol edin.")
-    if profile == CompanyProfile.BANK and metrics.capital_adequacy_ratio is not None:
-        if not 5 <= metrics.capital_adequacy_ratio <= 50:
-            warnings.append("Sermaye yeterliliği oranı olağan banka aralığının dışında.")
     if metrics.npl_ratio is not None and not 0 <= metrics.npl_ratio <= 100:
         errors.append("Takipteki kredi/alacak oranı %0-%100 arasında olmalıdır.")
     if metrics.combined_ratio is not None and not 0 <= metrics.combined_ratio <= 300:
         errors.append("Bileşik oran %0-%300 arasında olmalıdır.")
+    _validate_sector_metric_ranges(metrics, profile, errors, warnings)
 
     return ValidationReport(
         completeness=completeness,

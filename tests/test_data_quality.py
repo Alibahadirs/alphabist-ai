@@ -89,6 +89,27 @@ def test_extreme_standard_ratios_require_review():
     assert len(row.warnings) >= 3
 
 
+def test_extreme_bank_ratios_are_visible_in_data_quality_center():
+    company = FinancialMetrics(
+        symbol="TBNK",
+        company_name="Test Bankası A.Ş.",
+        company_profile=CompanyProfile.BANK,
+        revenue_growth=20,
+        net_profit_growth=30,
+        roe=25,
+        capital_adequacy_ratio=18,
+        npl_ratio=2.5,
+        loan_to_deposit_ratio=700,
+        net_interest_margin=60,
+        cost_income_ratio=500,
+    )
+
+    row = build_data_quality_summary([company]).rows[0]
+
+    assert row.status == "Kontrol gerekli"
+    assert len(row.warnings) >= 3
+
+
 def test_matching_calculation_is_verified_in_data_quality_summary():
     company = _complete_company()
 
