@@ -7,6 +7,35 @@ from app.technical.quality import (
 )
 
 
+def _score_breakdown(score: float) -> dict[str, float]:
+    remaining = score
+    breakdown: dict[str, float] = {}
+    for field, maximum in (
+        ("trend", 20),
+        ("moving_averages", 20),
+        ("rsi", 15),
+        ("macd", 15),
+        ("volume", 15),
+        ("support_resistance", 15),
+    ):
+        value = min(remaining, maximum)
+        breakdown[field] = value
+        remaining -= value
+    return breakdown
+
+
+def _signal(score: float) -> str:
+    if score >= 85:
+        return "Güçlü Al"
+    if score >= 70:
+        return "Al"
+    if score >= 55:
+        return "İzle"
+    if score >= 40:
+        return "Bekle"
+    return "Kaçın"
+
+
 def _history_entry(
     entry_id: int,
     symbol: str,
@@ -23,10 +52,10 @@ def _history_entry(
         price_date=price_date,
         source=source,
         total_score=score,
-        signal="Al",
+        signal=_signal(score),
         rsi_value=55,
         atr_percent=2.4,
-        score_breakdown={"trend": 15.0},
+        score_breakdown=_score_breakdown(score),
         alignment_status=alignment_status,
         methodology_version=methodology_version,
         created_at=datetime(2026, 7, 18, 9, 0),
@@ -165,8 +194,37 @@ def test_technical_quality_rejects_unverified_record_metadata():
     assert summary.methodology_error_count == 1
     assert summary.alignment_error_count == 1
     assert summary.source_error_count == 1
+    assert summary.score_integrity_error_count == 0
     assert select_technical_refresh_candidates(summary) == [
         "METHOD",
         "ALIGN",
         "SOURCE",
     ]
+
+
+def test_technical_quality_rejects_score_breakdown_mismatch():
+    invalid = _history_entry(
+        1,
+        "BROKEN",
+        date(2026, 7, 17),
+        80,
+    ).model_copy(
+        update={
+            "score_breakdown": {
+                **_score_breakdown(80),
+                "trend": 5,
+            }
+        }
+    )
+    summary = build_technical_quality_summary(
+        ["BROKEN"],
+        {"BROKEN": [invalid]},
+        reference_date=date(2026, 7, 18),
+    )
+
+    row = summary.rows[0]
+    assert row.status == "Teknik puan tutarsız"
+    assert row.current is False
+    assert row.score_integrity_verified is False
+    assert summary.score_integrity_error_count == 1
+    assert select_technical_refresh_candidates(summary) == ["BROKEN"]

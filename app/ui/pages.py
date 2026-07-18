@@ -1383,6 +1383,11 @@ def render_data_quality() -> None:
             technical_quality.source_error_count,
             border=True,
         )
+        st.metric(
+            "Puan bütünlüğü",
+            technical_quality.score_integrity_error_count,
+            border=True,
+        )
 
     with st.container(horizontal=True):
         st.metric(
@@ -1412,9 +1417,9 @@ def render_data_quality() -> None:
     with st.container(border=True):
         st.subheader("Teknik veri sorunlarını düzelt")
         st.caption(
-            "Eski, eksik, tarih hatalı, eski metodolojili, hizalaması veya "
-            "kaynağı doğrulanmamış kayıtlar önceliklendirilir. Yalnız güncel "
-            "ve fiyat-grafik uyumu doğrulanan sonuçlar kaydedilir."
+            "Eski, eksik, tarih hatalı, eski metodolojili, hizalaması, kaynağı "
+            "veya puan kırılımı doğrulanmamış kayıtlar önceliklendirilir. "
+            "Yalnız tüm kontrolleri geçen sonuçlar kaydedilir."
         )
         refresh_symbols = st.multiselect(
             "Yenilenecek hisseler",
@@ -1541,6 +1546,11 @@ def render_data_quality() -> None:
                     "Doğrulandı"
                     if technical_by_symbol[row.symbol].source_verified
                     else "Doğrulama gerekli"
+                ),
+                "Puan bütünlüğü": (
+                    "Doğrulandı"
+                    if technical_by_symbol[row.symbol].score_integrity_verified
+                    else "Yenileme gerekli"
                 ),
                 "Karara hazırlık": readiness_by_symbol[row.symbol].status,
                 "Önerilen işlem": (

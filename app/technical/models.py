@@ -62,6 +62,7 @@ class TechnicalQualityRow(BaseModel):
     methodology_current: bool = False
     alignment_verified: bool = False
     source_verified: bool = False
+    score_integrity_verified: bool = False
 
 
 class TechnicalQualitySummary(BaseModel):
@@ -74,3 +75,4 @@ class TechnicalQualitySummary(BaseModel):
     methodology_error_count: int = Field(default=0, ge=0)
     alignment_error_count: int = Field(default=0, ge=0)
     source_error_count: int = Field(default=0, ge=0)
+    score_integrity_error_count: int = Field(default=0, ge=0)

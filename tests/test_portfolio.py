@@ -355,16 +355,39 @@ def _technical_history(
     identifier: int,
     score: float,
 ) -> TechnicalHistoryEntry:
+    remaining = score
+    breakdown: dict[str, float] = {}
+    for field, maximum in (
+        ("trend", 20),
+        ("moving_averages", 20),
+        ("rsi", 15),
+        ("macd", 15),
+        ("volume", 15),
+        ("support_resistance", 15),
+    ):
+        value = min(remaining, maximum)
+        breakdown[field] = value
+        remaining -= value
+    if score >= 85:
+        signal = "Güçlü Al"
+    elif score >= 70:
+        signal = "Al"
+    elif score >= 55:
+        signal = "İzle"
+    elif score >= 40:
+        signal = "Bekle"
+    else:
+        signal = "Kaçın"
     return TechnicalHistoryEntry(
         id=identifier,
         symbol=symbol,
         price_date=date(2026, 7, 17),
         source="Yahoo Finance",
         total_score=score,
-        signal="Al",
+        signal=signal,
         rsi_value=55,
         atr_percent=3,
-        score_breakdown={},
+        score_breakdown=breakdown,
         alignment_status="Fiyat ve grafik verisi uyumlu",
         methodology_version="technical-2026.1",
         created_at=datetime(2026, 7, 18, 10, identifier),

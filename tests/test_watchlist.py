@@ -7,6 +7,35 @@ from app.watchlist.service import build_watchlist_summary
 from app.technical.models import TechnicalHistoryEntry
 
 
+def _score_breakdown(score: float) -> dict[str, float]:
+    remaining = score
+    breakdown: dict[str, float] = {}
+    for field, maximum in (
+        ("trend", 20),
+        ("moving_averages", 20),
+        ("rsi", 15),
+        ("macd", 15),
+        ("volume", 15),
+        ("support_resistance", 15),
+    ):
+        value = min(remaining, maximum)
+        breakdown[field] = value
+        remaining -= value
+    return breakdown
+
+
+def _signal(score: float) -> str:
+    if score >= 85:
+        return "Güçlü Al"
+    if score >= 70:
+        return "Al"
+    if score >= 55:
+        return "İzle"
+    if score >= 40:
+        return "Bekle"
+    return "Kaçın"
+
+
 def _company(symbol: str, margin: float = 15) -> FinancialMetrics:
     return FinancialMetrics(
         symbol=symbol,
@@ -97,10 +126,10 @@ def _technical_history(
         price_date=price_date,
         source="Yahoo Finance",
         total_score=score,
-        signal="Al",
+        signal=_signal(score),
         rsi_value=55,
         atr_percent=3,
-        score_breakdown={},
+        score_breakdown=_score_breakdown(score),
         alignment_status=alignment_status,
         methodology_version="technical-2026.1",
         created_at=datetime(2026, 7, 18, 10, identifier),

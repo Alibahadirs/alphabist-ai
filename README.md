@@ -69,6 +69,7 @@ yerel Streamlit uygulaması.
 - Şirket karşılaştırmada temel lider ve doğrulanmış birleşik lider ayrımı
 - Portföyde pozisyon kesişimine dayalı birleşik hazırlık ve değer kapsamı
 - Teknik kayıtlarda güncellik, metodoloji, hizalama ve kaynak sağlık kontrolü
+- Teknik toplam puan, kategori kırılımı ve sinyal bütünlüğü doğrulaması
 - SQLite ile yerel veri saklama
 
 ## Çalıştırma

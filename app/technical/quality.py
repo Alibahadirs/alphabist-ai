@@ -1,6 +1,7 @@
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
+from math import isfinite
 
 from app.core.settings import settings
 from app.market_data.freshness import assess_price_freshness
@@ -19,6 +20,7 @@ DATE_ERROR_STATUS = "Tarih hatası"
 METHODOLOGY_ERROR_STATUS = "Eski teknik metodoloji"
 ALIGNMENT_ERROR_STATUS = "Hizalama doğrulanmadı"
 SOURCE_ERROR_STATUS = "Kaynak doğrulanmadı"
+SCORE_INTEGRITY_ERROR_STATUS = "Teknik puan tutarsız"
 TECHNICAL_STATUS_OPTIONS = [
     CURRENT_STATUS,
     STALE_STATUS,
@@ -27,12 +29,22 @@ TECHNICAL_STATUS_OPTIONS = [
     METHODOLOGY_ERROR_STATUS,
     ALIGNMENT_ERROR_STATUS,
     SOURCE_ERROR_STATUS,
+    SCORE_INTEGRITY_ERROR_STATUS,
 ]
 VERIFIED_ALIGNMENT_STATUSES = {
     "Fiyat ve grafik verisi uyumlu",
     "Doğrulandı",
 }
 INVALID_SOURCES = {"", "bilinmiyor", "unknown"}
+SCORE_FIELD_LIMITS = {
+    "trend": 20.0,
+    "moving_averages": 20.0,
+    "rsi": 15.0,
+    "macd": 15.0,
+    "volume": 15.0,
+    "support_resistance": 15.0,
+}
+SCORE_TOLERANCE = 0.01
 
 
 @dataclass(frozen=True)
@@ -43,6 +55,44 @@ class TechnicalRecordHealth:
     methodology_current: bool
     alignment_verified: bool
     source_verified: bool
+    score_integrity_verified: bool
+
+
+def _expected_signal(total_score: float) -> str:
+    if total_score >= 85:
+        return "Güçlü Al"
+    if total_score >= 70:
+        return "Al"
+    if total_score >= 55:
+        return "İzle"
+    if total_score >= 40:
+        return "Bekle"
+    return "Kaçın"
+
+
+def verify_technical_score_integrity(
+    entry: TechnicalHistoryEntry,
+) -> bool:
+    if set(entry.score_breakdown) != set(SCORE_FIELD_LIMITS):
+        return False
+
+    values: list[float] = []
+    for field, maximum in SCORE_FIELD_LIMITS.items():
+        raw_value = entry.score_breakdown.get(field)
+        if isinstance(raw_value, bool):
+            return False
+        try:
+            value = float(raw_value)
+        except (TypeError, ValueError):
+            return False
+        if not isfinite(value) or not 0 <= value <= maximum:
+            return False
+        values.append(value)
+
+    return (
+        abs(sum(values) - entry.total_score) <= SCORE_TOLERANCE
+        and entry.signal == _expected_signal(entry.total_score)
+    )
 
 
 def assess_technical_record(
@@ -57,6 +107,7 @@ def assess_technical_record(
             methodology_current=False,
             alignment_verified=False,
             source_verified=False,
+            score_integrity_verified=False,
         )
 
     freshness = assess_price_freshness(
@@ -70,6 +121,7 @@ def assess_technical_record(
         entry.alignment_status in VERIFIED_ALIGNMENT_STATUSES
     )
     source_verified = entry.source.strip().casefold() not in INVALID_SOURCES
+    score_integrity_verified = verify_technical_score_integrity(entry)
 
     if not freshness.current:
         status = freshness.status
@@ -79,6 +131,8 @@ def assess_technical_record(
         status = ALIGNMENT_ERROR_STATUS
     elif not source_verified:
         status = SOURCE_ERROR_STATUS
+    elif not score_integrity_verified:
+        status = SCORE_INTEGRITY_ERROR_STATUS
     else:
         status = CURRENT_STATUS
 
@@ -90,10 +144,12 @@ def assess_technical_record(
             and methodology_current
             and alignment_verified
             and source_verified
+            and score_integrity_verified
         ),
         methodology_current=methodology_current,
         alignment_verified=alignment_verified,
         source_verified=source_verified,
+        score_integrity_verified=score_integrity_verified,
     )
 
 
@@ -143,6 +199,7 @@ def build_technical_quality_summary(
                 methodology_current=health.methodology_current,
                 alignment_verified=health.alignment_verified,
                 source_verified=health.source_verified,
+                score_integrity_verified=health.score_integrity_verified,
             )
         )
 
@@ -162,6 +219,9 @@ def build_technical_quality_summary(
         source_error_count=sum(
             row.status == SOURCE_ERROR_STATUS for row in rows
         ),
+        score_integrity_error_count=sum(
+            row.status == SCORE_INTEGRITY_ERROR_STATUS for row in rows
+        ),
     )
 
 
@@ -177,8 +237,9 @@ def select_technical_refresh_candidates(
         METHODOLOGY_ERROR_STATUS: 1,
         ALIGNMENT_ERROR_STATUS: 2,
         SOURCE_ERROR_STATUS: 3,
-        MISSING_STATUS: 4,
-        STALE_STATUS: 5,
+        SCORE_INTEGRITY_ERROR_STATUS: 4,
+        MISSING_STATUS: 5,
+        STALE_STATUS: 6,
     }
     candidates = [
         row for row in summary.rows
