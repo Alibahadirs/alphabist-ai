@@ -2552,8 +2552,15 @@ def render_watchlist() -> None:
     latest_audits = {
         audit.symbol: audit for audit in list_latest_company_data_audits()
     }
+    technical_histories = {
+        entry.symbol: list_technical_score_history(entry.symbol)
+        for entry in entries
+    }
     summary = build_watchlist_summary(
-        entries, company_by_symbol, latest_audits
+        entries,
+        company_by_symbol,
+        latest_audits,
+        technical_histories,
     )
     if not summary.rows:
         st.info("Takip listeniz henüz boş.")
@@ -2594,6 +2601,16 @@ def render_watchlist() -> None:
             f"{current_quote_count}/{len(summary.rows)}",
             border=True,
         )
+        st.metric(
+            "Güncel teknik kayıt",
+            f"{summary.current_technical_count}/{len(summary.rows)}",
+            border=True,
+        )
+        st.metric(
+            "Teknik güçlenen",
+            summary.technical_strengthening_count,
+            border=True,
+        )
 
     rows = [
         {
@@ -2617,6 +2634,13 @@ def render_watchlist() -> None:
                 else "-"
             ),
             "Fiyat durumu": watchlist_quotes[row.symbol][1].status,
+            "Teknik puan": row.technical_score,
+            "Teknik değişim": row.technical_delta,
+            "Teknik sinyal": (
+                row.technical_signal if row.technical_current else "-"
+            ),
+            "Teknik fiyat tarihi": row.technical_price_date,
+            "Teknik kayıt durumu": row.technical_status,
             "Durum": "Hedefte" if row.target_reached else "Hedef altında",
             "Not": row.grade,
             "Karar": row.decision,
@@ -2652,6 +2676,20 @@ def render_watchlist() -> None:
                 ),
                 "Fiyat tarihi": st.column_config.DateColumn(
                     "Fiyat tarihi",
+                    format="DD.MM.YYYY",
+                ),
+                "Teknik puan": st.column_config.ProgressColumn(
+                    "Teknik puan",
+                    min_value=0,
+                    max_value=100,
+                    format="%.1f",
+                ),
+                "Teknik değişim": st.column_config.NumberColumn(
+                    "Teknik değişim",
+                    format="%+.1f",
+                ),
+                "Teknik fiyat tarihi": st.column_config.DateColumn(
+                    "Teknik fiyat tarihi",
                     format="DD.MM.YYYY",
                 ),
             },

@@ -55,6 +55,7 @@ yerel Streamlit uygulaması.
 - Son fiyat ile teknik grafik tarihi ve kapanış değeri çapraz kontrolü
 - Karşılaştırmada şirket bazlı doğrulanmış teknik puan kapsamı
 - Yinelenmeyen, kaynak ve metodoloji izli teknik puan geçmişi
+- Takip listesinde güncel teknik puan, değişim ve güçlenme takibi
 - SQLite ile yerel veri saklama
 
 ## Çalıştırma

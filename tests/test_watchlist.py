@@ -1,7 +1,10 @@
+from datetime import date, datetime
+
 from app.database import repository
 from app.scoring.models import FinancialMetrics
 from app.watchlist.models import WatchlistEntry
 from app.watchlist.service import build_watchlist_summary
+from app.technical.models import TechnicalHistoryEntry
 
 
 def _company(symbol: str, margin: float = 15) -> FinancialMetrics:
@@ -77,3 +80,69 @@ def test_watchlist_uses_confidence_gated_decision_when_audits_are_supplied():
     assert summary.rows[0].decision_ready is False
     assert summary.rows[0].target_reached is False
     assert summary.decision_ready_count == 0
+
+
+def _technical_history(
+    identifier: int,
+    score: float,
+    price_date: date,
+) -> TechnicalHistoryEntry:
+    return TechnicalHistoryEntry(
+        id=identifier,
+        symbol="SAFE",
+        price_date=price_date,
+        source="Yahoo Finance",
+        total_score=score,
+        signal="Al",
+        rsi_value=55,
+        atr_percent=3,
+        score_breakdown={},
+        alignment_status="Fiyat ve grafik verisi uyumlu",
+        methodology_version="technical-2026.1",
+        created_at=datetime(2026, 7, 18, 10, identifier),
+    )
+
+
+def test_watchlist_tracks_current_technical_score_change():
+    company = _company("SAFE", margin=25)
+    summary = build_watchlist_summary(
+        [WatchlistEntry(symbol="SAFE")],
+        {"SAFE": company},
+        technical_histories={
+            "SAFE": [
+                _technical_history(1, 65, date(2026, 7, 16)),
+                _technical_history(2, 72, date(2026, 7, 17)),
+            ]
+        },
+        reference_date=date(2026, 7, 18),
+    )
+
+    row = summary.rows[0]
+    assert row.technical_score == 72
+    assert row.technical_delta == 7
+    assert row.technical_signal == "Al"
+    assert row.technical_current is True
+    assert row.technical_status == "Güncel günlük veri"
+    assert summary.current_technical_count == 1
+    assert summary.technical_strengthening_count == 1
+
+
+def test_watchlist_does_not_count_stale_technical_signal():
+    company = _company("SAFE", margin=25)
+    summary = build_watchlist_summary(
+        [WatchlistEntry(symbol="SAFE")],
+        {"SAFE": company},
+        technical_histories={
+            "SAFE": [
+                _technical_history(1, 65, date(2026, 7, 1)),
+                _technical_history(2, 72, date(2026, 7, 2)),
+            ]
+        },
+        reference_date=date(2026, 7, 18),
+    )
+
+    row = summary.rows[0]
+    assert row.technical_current is False
+    assert row.technical_status == "Eski fiyat"
+    assert summary.current_technical_count == 0
+    assert summary.technical_strengthening_count == 0
