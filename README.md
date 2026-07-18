@@ -47,6 +47,7 @@ yerel Streamlit uygulaması.
 - Geri yükleme öncesi güvenlik kopyalarını listeleme ve yeniden indirme
 - Portföy pozisyon ve şirket profili yoğunlaşma analizi
 - Ağırlık bazlı yoğunlaşma endeksi ve etkin pozisyon sayısı
+- Portföy için mekanik fiyat şoku stres senaryoları
 - SQLite ile yerel veri saklama
 
 ## Çalıştırma

@@ -2714,6 +2714,57 @@ def render_portfolio() -> None:
                 horizontal=True,
             )
 
+    if summary.stress_scenarios:
+        stress_frame = pd.DataFrame(
+            [
+                {
+                    "Senaryo": scenario.label,
+                    "Fiyat şoku (%)": scenario.shock_percent,
+                    "Tahmini portföy değeri (TL)": (
+                        scenario.projected_market_value
+                    ),
+                    "Değer değişimi (TL)": scenario.value_change,
+                    "Tahmini kâr / zarar (TL)": (
+                        scenario.projected_profit_loss
+                    ),
+                    "Maliyete göre getiri (%)": (
+                        scenario.projected_return_percent
+                    ),
+                }
+                for scenario in summary.stress_scenarios
+            ]
+        )
+        with st.container(border=True):
+            st.subheader("Basit fiyat stres testi")
+            st.caption(
+                "Tüm pozisyonlara aynı fiyat hareketi uygulanır. Sonuçlar "
+                "mekanik senaryodur; şirket duyarlılığı, korelasyon veya "
+                "gelecek fiyat tahmini içermez."
+            )
+            st.dataframe(
+                stress_frame,
+                hide_index=True,
+                width="stretch",
+                column_config={
+                    "Fiyat şoku (%)": st.column_config.NumberColumn(
+                        "Fiyat şoku (%)",
+                        format="%+.1f",
+                    ),
+                    "Tahmini portföy değeri (TL)": (
+                        st.column_config.NumberColumn(format="localized")
+                    ),
+                    "Değer değişimi (TL)": st.column_config.NumberColumn(
+                        format="localized"
+                    ),
+                    "Tahmini kâr / zarar (TL)": (
+                        st.column_config.NumberColumn(format="localized")
+                    ),
+                    "Maliyete göre getiri (%)": (
+                        st.column_config.NumberColumn(format="%+.2f")
+                    ),
+                },
+            )
+
     with st.form("portfolio_remove_form"):
         remove_symbol = st.selectbox(
             "Portföyden çıkarılacak hisse",

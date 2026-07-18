@@ -33,6 +33,15 @@ class PortfolioRow(BaseModel):
     weight_percent: float = Field(default=0, ge=0, le=100)
 
 
+class PortfolioStressScenario(BaseModel):
+    label: str
+    shock_percent: float
+    projected_market_value: float
+    value_change: float
+    projected_profit_loss: float
+    projected_return_percent: float
+
+
 class PortfolioSummary(BaseModel):
     rows: list[PortfolioRow]
     total_cost: float
@@ -53,3 +62,6 @@ class PortfolioSummary(BaseModel):
     concentration_index: float = Field(default=0, ge=0, le=100)
     effective_position_count: float = Field(default=0, ge=0)
     diversification_status: str = "Veri yok"
+    stress_scenarios: list[PortfolioStressScenario] = Field(
+        default_factory=list
+    )

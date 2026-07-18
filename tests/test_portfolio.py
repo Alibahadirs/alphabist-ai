@@ -78,6 +78,40 @@ def test_portfolio_summary_calculates_return_and_weighted_alpha():
     assert summary.concentration_index == 100
     assert summary.effective_position_count == 1
     assert summary.diversification_status == "Yoğun"
+    scenarios = {
+        scenario.shock_percent: scenario
+        for scenario in summary.stress_scenarios
+    }
+    assert set(scenarios) == {-20, -10, 10}
+    assert scenarios[-20].label == "%20 düşüş"
+    assert scenarios[-20].projected_market_value == 200
+    assert scenarios[-20].value_change == -50
+    assert scenarios[-20].projected_profit_loss == 0
+    assert scenarios[-20].projected_return_percent == 0
+    assert scenarios[-10].projected_market_value == 225
+    assert scenarios[-10].value_change == -25
+    assert scenarios[-10].projected_profit_loss == 25
+    assert scenarios[-10].projected_return_percent == 12.5
+    assert scenarios[10].label == "%10 yükseliş"
+    assert scenarios[10].projected_market_value == 275
+    assert scenarios[10].value_change == 25
+    assert scenarios[10].projected_profit_loss == 75
+    assert scenarios[10].projected_return_percent == 37.5
+
+
+def test_portfolio_stress_return_handles_zero_cost():
+    company = _company()
+    summary = build_portfolio_summary(
+        [PortfolioPosition(symbol="TEST", quantity=10, average_cost=0)],
+        {"TEST": company},
+        {"TEST": 25},
+    )
+
+    assert summary.total_cost == 0
+    assert all(
+        scenario.projected_return_percent == 0
+        for scenario in summary.stress_scenarios
+    )
 
 
 def test_portfolio_exposes_unverified_position_value_and_confidence():

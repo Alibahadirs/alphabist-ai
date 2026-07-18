@@ -2,7 +2,12 @@ from collections.abc import Mapping, Sequence
 
 from app.audit.models import CompanyDataAudit
 from app.confidence.service import calculate_analysis_confidence
-from app.portfolio.models import PortfolioPosition, PortfolioRow, PortfolioSummary
+from app.portfolio.models import (
+    PortfolioPosition,
+    PortfolioRow,
+    PortfolioStressScenario,
+    PortfolioSummary,
+)
 from app.scoring.engine import calculate_alpha_score
 from app.scoring.models import FinancialMetrics
 from app.sector.profiles import CompanyProfile
@@ -10,6 +15,7 @@ from app.sector.profiles import CompanyProfile
 
 MAX_POSITION_WEIGHT = 35.0
 MAX_PROFILE_WEIGHT = 60.0
+STRESS_SHOCKS = (-20.0, -10.0, 10.0)
 
 
 def _diversification_status(concentration_index: float) -> str:
@@ -18,6 +24,38 @@ def _diversification_status(concentration_index: float) -> str:
     if concentration_index <= 35:
         return "Orta yoğun"
     return "Yoğun"
+
+
+def _build_stress_scenarios(
+    total_market_value: float,
+    total_cost: float,
+) -> list[PortfolioStressScenario]:
+    scenarios: list[PortfolioStressScenario] = []
+    for shock_percent in STRESS_SHOCKS:
+        projected_market_value = total_market_value * (
+            1 + shock_percent / 100
+        )
+        value_change = projected_market_value - total_market_value
+        projected_profit_loss = projected_market_value - total_cost
+        projected_return_percent = (
+            projected_profit_loss / total_cost * 100
+            if total_cost
+            else 0
+        )
+        direction = "düşüş" if shock_percent < 0 else "yükseliş"
+        scenarios.append(
+            PortfolioStressScenario(
+                label=f"%{abs(shock_percent):.0f} {direction}",
+                shock_percent=shock_percent,
+                projected_market_value=round(projected_market_value, 2),
+                value_change=round(value_change, 2),
+                projected_profit_loss=round(projected_profit_loss, 2),
+                projected_return_percent=round(
+                    projected_return_percent, 2
+                ),
+            )
+        )
+    return scenarios
 
 
 def build_portfolio_summary(
@@ -200,5 +238,9 @@ def build_portfolio_summary(
             _diversification_status(concentration_index)
             if rows
             else "Veri yok"
+        ),
+        stress_scenarios=_build_stress_scenarios(
+            total_market_value,
+            total_cost,
         ),
     )
