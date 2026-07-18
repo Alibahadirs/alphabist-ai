@@ -4,12 +4,17 @@ from app.database import repository
 from app.portfolio.models import PortfolioPosition
 from app.portfolio.service import build_portfolio_summary
 from app.scoring.models import FinancialMetrics
+from app.sector.profiles import CompanyProfile
 
 
-def _company() -> FinancialMetrics:
+def _company(
+    symbol: str = "TEST",
+    profile: CompanyProfile = CompanyProfile.STANDARD,
+) -> FinancialMetrics:
     return FinancialMetrics(
-        symbol="TEST",
-        company_name="Test Şirketi",
+        symbol=symbol,
+        company_name=f"{symbol} Test Şirketi",
+        company_profile=profile,
         revenue_growth=20,
         net_profit_growth=25,
         net_margin=15,
@@ -65,6 +70,11 @@ def test_portfolio_summary_calculates_return_and_weighted_alpha():
     assert summary.decision_ready_count == 1
     assert summary.verification_required_count == 0
     assert summary.decision_ready_value_percent == 100
+    assert summary.rows[0].weight_percent == 100
+    assert summary.largest_position_symbol == "TEST"
+    assert summary.largest_position_percent == 100
+    assert summary.profile_exposure == {"standard": 100}
+    assert summary.concentration_warnings
 
 
 def test_portfolio_exposes_unverified_position_value_and_confidence():
@@ -85,3 +95,35 @@ def test_portfolio_exposes_unverified_position_value_and_confidence():
     assert summary.decision_ready_count == 0
     assert summary.verification_required_count == 1
     assert summary.decision_ready_value_percent == 0
+
+
+def test_portfolio_calculates_position_and_profile_concentration():
+    standard = _company("STND", CompanyProfile.STANDARD)
+    bank = _company("BANK", CompanyProfile.BANK)
+    summary = build_portfolio_summary(
+        [
+            PortfolioPosition(
+                symbol="STND", quantity=1, average_cost=70
+            ),
+            PortfolioPosition(
+                symbol="BANK", quantity=1, average_cost=30
+            ),
+        ],
+        {"STND": standard, "BANK": bank},
+        {"STND": 70, "BANK": 30},
+    )
+
+    rows = {row.symbol: row for row in summary.rows}
+    assert rows["STND"].weight_percent == 70
+    assert rows["BANK"].weight_percent == 30
+    assert summary.largest_position_symbol == "STND"
+    assert summary.largest_position_percent == 70
+    assert summary.profile_exposure == {
+        "standard": 70,
+        "bank": 30,
+    }
+    assert any("STND" in warning for warning in summary.concentration_warnings)
+    assert any(
+        "standard" in warning
+        for warning in summary.concentration_warnings
+    )

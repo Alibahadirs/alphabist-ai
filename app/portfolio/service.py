@@ -5,6 +5,11 @@ from app.confidence.service import calculate_analysis_confidence
 from app.portfolio.models import PortfolioPosition, PortfolioRow, PortfolioSummary
 from app.scoring.engine import calculate_alpha_score
 from app.scoring.models import FinancialMetrics
+from app.sector.profiles import CompanyProfile
+
+
+MAX_POSITION_WEIGHT = 35.0
+MAX_PROFILE_WEIGHT = 60.0
 
 
 def build_portfolio_summary(
@@ -62,6 +67,9 @@ def build_portfolio_summary(
                     if confidence
                     else "Kayıt yok"
                 ),
+                company_profile=CompanyProfile(
+                    company.company_profile
+                ).value,
             )
         )
 
@@ -70,6 +78,18 @@ def build_portfolio_summary(
     total_profit_loss = total_market_value - total_cost
     total_return_percent = total_profit_loss / total_cost * 100 if total_cost else 0
     weight_base = total_market_value or total_cost
+    rows = [
+        row.model_copy(
+            update={
+                "weight_percent": (
+                    round(row.market_value / weight_base * 100, 2)
+                    if weight_base
+                    else 0
+                )
+            }
+        )
+        for row in rows
+    ]
     weighted_alpha_score = (
         sum(row.alpha_score * row.market_value for row in rows) / weight_base
         if weight_base
@@ -93,6 +113,35 @@ def build_portfolio_summary(
     decision_ready_value_percent = (
         decision_ready_value / weight_base * 100 if weight_base else 0
     )
+    profile_exposure: dict[str, float] = {}
+    for row in rows:
+        profile_exposure[row.company_profile] = (
+            profile_exposure.get(row.company_profile, 0)
+            + row.weight_percent
+        )
+    profile_exposure = {
+        profile: round(weight, 2)
+        for profile, weight in profile_exposure.items()
+    }
+    largest_position = max(
+        rows,
+        key=lambda row: row.weight_percent,
+        default=None,
+    )
+    concentration_warnings: list[str] = []
+    if (
+        largest_position is not None
+        and largest_position.weight_percent > MAX_POSITION_WEIGHT
+    ):
+        concentration_warnings.append(
+            f"{largest_position.symbol} portföyün "
+            f"%{largest_position.weight_percent:.1f}'ini oluşturuyor."
+        )
+    for profile, weight in profile_exposure.items():
+        if weight > MAX_PROFILE_WEIGHT:
+            concentration_warnings.append(
+                f"{profile} profili portföyün %{weight:.1f}'ini oluşturuyor."
+            )
 
     return PortfolioSummary(
         rows=rows,
@@ -113,4 +162,12 @@ def build_portfolio_summary(
         decision_ready_value_percent=round(
             decision_ready_value_percent, 2
         ),
+        largest_position_symbol=(
+            largest_position.symbol if largest_position else ""
+        ),
+        largest_position_percent=(
+            largest_position.weight_percent if largest_position else 0
+        ),
+        profile_exposure=profile_exposure,
+        concentration_warnings=concentration_warnings,
     )

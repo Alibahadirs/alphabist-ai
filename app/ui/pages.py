@@ -2601,6 +2601,16 @@ def render_portfolio() -> None:
             f"%{summary.decision_ready_value_percent:.1f}",
             border=True,
         )
+        st.metric(
+            "En büyük pozisyon",
+            summary.largest_position_symbol or "-",
+            (
+                f"%{summary.largest_position_percent:.1f}"
+                if summary.largest_position_symbol
+                else None
+            ),
+            border=True,
+        )
 
     if summary.verification_required_count:
         pending_symbols = [
@@ -2611,6 +2621,8 @@ def render_portfolio() -> None:
             "gerektiriyor: "
             + ", ".join(pending_symbols)
         )
+    for warning in summary.concentration_warnings:
+        st.warning(warning)
 
     rows = [
         {
@@ -2623,6 +2635,7 @@ def render_portfolio() -> None:
             "Kâr / zarar (TL)": row.profit_loss,
             "Getiri (%)": row.return_percent,
             "Alpha": row.alpha_score,
+            "Portföy ağırlığı (%)": row.weight_percent,
             "Analiz güveni (%)": row.confidence_score,
             "Güven durumu": row.confidence_status,
             "Karar": row.decision,
@@ -2650,6 +2663,12 @@ def render_portfolio() -> None:
                 "Alpha": st.column_config.ProgressColumn(
                     "Alpha", min_value=0, max_value=100, format="%.1f"
                 ),
+                "Portföy ağırlığı (%)": st.column_config.ProgressColumn(
+                    "Portföy ağırlığı (%)",
+                    min_value=0,
+                    max_value=100,
+                    format="%.1f",
+                ),
                 "Analiz güveni (%)": st.column_config.ProgressColumn(
                     "Analiz güveni (%)",
                     min_value=0,
@@ -2658,6 +2677,27 @@ def render_portfolio() -> None:
                 ),
             },
         )
+
+    if summary.profile_exposure:
+        exposure_frame = pd.DataFrame(
+            [
+                {
+                    "Profil": PROFILE_LABELS[
+                        CompanyProfile(profile)
+                    ],
+                    "Ağırlık (%)": weight,
+                }
+                for profile, weight in summary.profile_exposure.items()
+            ]
+        ).sort_values("Ağırlık (%)", ascending=False)
+        with st.container(border=True):
+            st.subheader("Şirket profili dağılımı")
+            st.bar_chart(
+                exposure_frame,
+                x="Profil",
+                y="Ağırlık (%)",
+                horizontal=True,
+            )
 
     with st.form("portfolio_remove_form"):
         remove_symbol = st.selectbox(

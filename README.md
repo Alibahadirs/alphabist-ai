@@ -45,6 +45,7 @@ yerel Streamlit uygulaması.
 - Kullanıcıya özel SQLite verisini kaynak kodu commitlerinden ayırma
 - SQLite yedeğini bütünlük kontrolüyle indirme ve güvenli geri yükleme
 - Geri yükleme öncesi güvenlik kopyalarını listeleme ve yeniden indirme
+- Portföy pozisyon ve şirket profili yoğunlaşma analizi
 - SQLite ile yerel veri saklama
 
 ## Çalıştırma
