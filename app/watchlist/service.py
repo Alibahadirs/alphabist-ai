@@ -55,6 +55,10 @@ def build_watchlist_summary(
             latest_technical.price_date if latest_technical else None,
             reference_date,
         )
+        technical_current = (
+            bool(latest_technical)
+            and technical_freshness.current
+        )
         rows.append(
             WatchlistRow(
                 symbol=company.symbol,
@@ -76,6 +80,9 @@ def build_watchlist_summary(
                     else "Kayıt yok"
                 ),
                 decision_ready=decision_ready,
+                combined_decision_ready=(
+                    decision_ready and technical_current
+                ),
                 technical_score=(
                     latest_technical.total_score
                     if latest_technical
@@ -100,10 +107,7 @@ def build_watchlist_summary(
                     if latest_technical
                     else "Kayıt yok"
                 ),
-                technical_current=(
-                    bool(latest_technical)
-                    and technical_freshness.current
-                ),
+                technical_current=technical_current,
             )
         )
 
@@ -117,6 +121,9 @@ def build_watchlist_summary(
         ),
         targets_reached=sum(row.target_reached for row in rows),
         decision_ready_count=sum(row.decision_ready for row in rows),
+        combined_decision_ready_count=sum(
+            row.combined_decision_ready for row in rows
+        ),
         current_technical_count=sum(
             row.technical_current for row in rows
         ),

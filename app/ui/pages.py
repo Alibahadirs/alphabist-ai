@@ -2923,8 +2923,13 @@ def render_watchlist() -> None:
         )
         st.metric("Hedefe ulaşan", summary.targets_reached, border=True)
         st.metric(
-            "Karara hazır",
+            "Finansal olarak hazır",
             summary.decision_ready_count,
+            border=True,
+        )
+        st.metric(
+            "Birleşik olarak hazır",
+            summary.combined_decision_ready_count,
             border=True,
         )
         st.metric(
@@ -2978,8 +2983,13 @@ def render_watchlist() -> None:
             "Analiz güveni (%)": row.confidence_score,
             "Güven durumu": row.confidence_status,
             "Hesap kontrolü": row.calculation_check_status,
-            "Karar hazırlığı": (
+            "Finansal hazırlık": (
                 "Hazır" if row.decision_ready else "Doğrulama gerekli"
+            ),
+            "Birleşik hazırlık": (
+                "Hazır"
+                if row.combined_decision_ready
+                else "Doğrulama gerekli"
             ),
             "Kullanıcı notu": row.note,
         }

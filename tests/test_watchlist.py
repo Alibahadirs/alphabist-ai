@@ -78,8 +78,10 @@ def test_watchlist_uses_confidence_gated_decision_when_audits_are_supplied():
     assert summary.rows[0].confidence_score is not None
     assert summary.rows[0].confidence_status == "Düşük"
     assert summary.rows[0].decision_ready is False
+    assert summary.rows[0].combined_decision_ready is False
     assert summary.rows[0].target_reached is False
     assert summary.decision_ready_count == 0
+    assert summary.combined_decision_ready_count == 0
 
 
 def _technical_history(
@@ -122,8 +124,10 @@ def test_watchlist_tracks_current_technical_score_change():
     assert row.technical_delta == 7
     assert row.technical_signal == "Al"
     assert row.technical_current is True
+    assert row.combined_decision_ready is True
     assert row.technical_status == "Güncel günlük veri"
     assert summary.current_technical_count == 1
+    assert summary.combined_decision_ready_count == 1
     assert summary.technical_strengthening_count == 1
 
 
@@ -143,6 +147,8 @@ def test_watchlist_does_not_count_stale_technical_signal():
 
     row = summary.rows[0]
     assert row.technical_current is False
+    assert row.combined_decision_ready is False
     assert row.technical_status == "Eski fiyat"
     assert summary.current_technical_count == 0
+    assert summary.combined_decision_ready_count == 0
     assert summary.technical_strengthening_count == 0
