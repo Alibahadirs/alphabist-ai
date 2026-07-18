@@ -4,6 +4,7 @@ from app.ui.pages import (
     _format_turkish_amount,
     _pdf_source_fields,
     _subjective_score_confirmation_error,
+    _validation_warning_confirmation_error,
 )
 
 
@@ -43,3 +44,14 @@ def test_metric_snapshot_values_follow_field_type():
 def test_subjective_score_inputs_require_explicit_confirmation():
     assert _subjective_score_confirmation_error(True) is None
     assert "doğrulamadan" in _subjective_score_confirmation_error(False)
+
+
+def test_validation_warnings_require_confirmation_only_when_present():
+    warnings = ["Kredi / mevduat oranını kontrol edin."]
+
+    assert _validation_warning_confirmation_error([], False) is None
+    assert _validation_warning_confirmation_error(warnings, True) is None
+    assert "kaydedilemez" in _validation_warning_confirmation_error(
+        warnings,
+        False,
+    )

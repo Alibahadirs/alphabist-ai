@@ -155,6 +155,18 @@ def _subjective_score_confirmation_error(
     )
 
 
+def _validation_warning_confirmation_error(
+    warnings: list[str],
+    confirmed: bool,
+) -> str | None:
+    if not warnings or confirmed:
+        return None
+    return (
+        "Doğrulama uyarıları resmi finansal/faaliyet raporlarıyla kontrol "
+        "edilmeden analiz kaydedilemez."
+    )
+
+
 AMOUNT_METRIC_FIELDS = {
     "operating_cash_flow",
     "free_cash_flow",
@@ -1335,6 +1347,10 @@ def _render_quality_correction_form() -> None:
             "Değerleme, yönetim ve risk puanlarını güncel verilerle kontrol ettim",
             key=f"quality_{symbol}_subjective_confirmed",
         )
+        validation_warnings_confirmed = st.checkbox(
+            "Doğrulama uyarılarını resmi raporlarla kontrol ettim",
+            key=f"quality_{symbol}_validation_warnings_confirmed",
+        )
         submitted = st.form_submit_button(
             "Doğrula ve kaydet",
             type="primary",
@@ -1370,6 +1386,15 @@ def _render_quality_correction_form() -> None:
     if validation.errors:
         for error in validation.errors:
             st.error(error)
+        return
+    warning_confirmation_error = _validation_warning_confirmation_error(
+        validation.warnings,
+        validation_warnings_confirmed,
+    )
+    if warning_confirmation_error:
+        st.error(warning_confirmation_error)
+        for warning in validation.warnings:
+            st.warning(warning)
         return
     previous_audit = get_latest_company_data_audit(corrected.symbol)
     previous_period_end = (
@@ -1421,6 +1446,9 @@ def _render_quality_correction_form() -> None:
             previous_audit.comparison_period_confirmed
             if previous_audit
             else False
+        ),
+        validation_warnings_confirmed=bool(
+            validation.warnings and validation_warnings_confirmed
         ),
         completeness=validation.completeness,
         alpha_score=score.total,
@@ -2472,6 +2500,10 @@ def _render_pdf_company_form() -> None:
             "Değerleme, yönetim ve risk puanlarını güncel verilerle kontrol ettim",
             key="pdf_field_subjective_confirmed",
         )
+        validation_warnings_confirmed = st.checkbox(
+            "Doğrulama uyarılarını resmi raporlarla kontrol ettim",
+            key="pdf_field_validation_warnings_confirmed",
+        )
         submitted = st.form_submit_button(
             "Kontrol et ve kaydet",
             type="primary",
@@ -2488,6 +2520,13 @@ def _render_pdf_company_form() -> None:
             "PDF'den çıkarılan kaynak tutarlarda kritik tutarsızlık bulundu. "
             "Rapor birimini veya PDF eşleşmesini düzeltmeden kayıt yapılamaz."
         )
+        return
+    source_warning_confirmation_error = _validation_warning_confirmation_error(
+        source_validation.warnings,
+        validation_warnings_confirmed,
+    )
+    if source_warning_confirmation_error:
+        st.error(source_warning_confirmation_error)
         return
     if not comparison_confirmed:
         st.error(
@@ -2549,6 +2588,7 @@ def _render_pdf_company_form() -> None:
         management=management,
         risk=risk,
         subjective_inputs_confirmed=subjective_inputs_confirmed,
+        validation_warnings_confirmed=validation_warnings_confirmed,
         company_profile=company_profile,
         sector_metrics=sector_metrics,
         source_type=DataSourceType.PDF,
@@ -2675,6 +2715,10 @@ def _render_manual_company_form() -> None:
             "Değerleme, yönetim ve risk puanlarını güncel verilerle kontrol ettim",
             key="manual_subjective_confirmed",
         )
+        validation_warnings_confirmed = st.checkbox(
+            "Doğrulama uyarılarını resmi raporlarla kontrol ettim",
+            key="manual_validation_warnings_confirmed",
+        )
 
         submitted = st.form_submit_button(
             "Hesapla ve kaydet",
@@ -2714,6 +2758,7 @@ def _render_manual_company_form() -> None:
         management=management,
         risk=risk,
         subjective_inputs_confirmed=subjective_inputs_confirmed,
+        validation_warnings_confirmed=validation_warnings_confirmed,
         company_profile=company_profile,
         sector_metrics=sector_metrics,
         period_months=period_months,
@@ -2738,6 +2783,7 @@ def _validate_and_save_company(
     management: float,
     risk: float,
     subjective_inputs_confirmed: bool,
+    validation_warnings_confirmed: bool,
     company_profile: CompanyProfile = CompanyProfile.STANDARD,
     sector_metrics: dict[str, float | None] | None = None,
     source_type: DataSourceType = DataSourceType.MANUAL,
@@ -2846,6 +2892,15 @@ def _validate_and_save_company(
         for error in validation.errors:
             st.error(error)
         return
+    warning_confirmation_error = _validation_warning_confirmation_error(
+        validation.warnings,
+        validation_warnings_confirmed,
+    )
+    if warning_confirmation_error:
+        st.error(warning_confirmation_error)
+        for warning in validation.warnings:
+            st.warning(warning)
+        return
     for warning in validation.warnings:
         st.warning(warning)
 
@@ -2872,6 +2927,9 @@ def _validate_and_save_company(
         financial_report_scale=financial_report_scale,
         comparison_period_end=comparison_period_end,
         comparison_period_confirmed=comparison_period_confirmed,
+        validation_warnings_confirmed=bool(
+            validation.warnings and validation_warnings_confirmed
+        ),
         completeness=score.data_completeness,
         alpha_score=score.total,
         field_sources=field_sources,

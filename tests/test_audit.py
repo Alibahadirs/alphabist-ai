@@ -43,6 +43,7 @@ def _audit(symbol: str, score: float, source: DataSourceType) -> CompanyDataAudi
         financial_report_scale=1_000,
         comparison_period_end=date(2025, 3, 31),
         comparison_period_confirmed=True,
+        validation_warnings_confirmed=True,
         completeness=92.5,
         alpha_score=score,
         grade="A",
@@ -92,6 +93,7 @@ def test_audit_repository_returns_latest_record(tmp_path, monkeypatch):
     assert latest.financial_report_scale == 1_000
     assert latest.comparison_period_end == date(2025, 3, 31)
     assert latest.comparison_period_confirmed is True
+    assert latest.validation_warnings_confirmed is True
     assert latest.report_period_end == date(2026, 3, 31)
     assert (
         latest.field_sources["revenue_growth"]
@@ -186,6 +188,7 @@ def test_init_db_migrates_existing_audit_table(tmp_path, monkeypatch):
         "financial_report_scale",
         "comparison_period_end",
         "comparison_period_confirmed",
+        "validation_warnings_confirmed",
     }.issubset(columns)
     assert {
         "idx_company_data_audit_financial_hash",
