@@ -2775,11 +2775,21 @@ def render_comparison() -> None:
             )
         st.metric("Karşılaştırılan", len(summary.rows), border=True)
         st.metric(
-            "Karara hazır",
+            "Finansal olarak hazır",
             summary.decision_ready_count,
             border=True,
         )
         if include_technical:
+            st.metric(
+                "Birleşik lider",
+                summary.combined_leader_symbol,
+                border=True,
+            )
+            st.metric(
+                "Birleşik olarak hazır",
+                summary.combined_decision_ready_count,
+                border=True,
+            )
             st.metric(
                 "Teknik doğrulanan",
                 f"{summary.technical_ready_count}/{len(summary.rows)}",
@@ -2801,8 +2811,16 @@ def render_comparison() -> None:
                 "Analiz güveni (%)": row.confidence_score,
                 "Güven durumu": row.confidence_status,
                 "Hesap kontrolü": row.calculation_check_status,
-                "Karar hazırlığı": (
+                "Finansal hazırlık": (
                     "Hazır" if row.decision_ready else "Doğrulama gerekli"
+                ),
+                "Teknik hazırlık": (
+                    "Hazır" if row.technical_ready else "Doğrulama gerekli"
+                ),
+                "Birleşik hazırlık": (
+                    "Hazır"
+                    if row.combined_decision_ready
+                    else "Doğrulama gerekli"
                 ),
                 "Teknik sinyal": row.technical_signal,
                 "ATR (%)": row.atr_percent,

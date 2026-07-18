@@ -66,6 +66,7 @@ yerel Streamlit uygulaması.
 - Finansal ve teknik doğrulamayı birleştiren şirket bazlı karara hazırlık kuyruğu
 - Hisse tarayıcıda finansal ve birleşik karara hazırlık filtreleri
 - Takip listesinde finansal ve birleşik karara hazırlık görünümü
+- Şirket karşılaştırmada temel lider ve doğrulanmış birleşik lider ayrımı
 - SQLite ile yerel veri saklama
 
 ## Çalıştırma

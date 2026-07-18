@@ -42,6 +42,9 @@ def build_comparison(
         technical_ready = (
             technical is not None and market_data_status == "Doğrulandı"
         )
+        financial_decision_ready = (
+            confidence.decision_ready if confidence else True
+        )
         rows.append(
             CompanyComparisonRow(
                 symbol=company.symbol,
@@ -70,11 +73,12 @@ def build_comparison(
                     if confidence
                     else "Kayıt yok"
                 ),
-                decision_ready=(
-                    confidence.decision_ready if confidence else True
-                ),
+                decision_ready=financial_decision_ready,
                 market_data_status=market_data_status,
                 technical_ready=technical_ready,
+                combined_decision_ready=(
+                    financial_decision_ready and technical_ready
+                ),
             )
         )
 
@@ -96,6 +100,14 @@ def build_comparison(
             (row.symbol for row in rows if row.decision_ready),
             "-",
         ),
+        combined_leader_symbol=next(
+            (
+                row.symbol
+                for row in rows
+                if row.combined_decision_ready
+            ),
+            "-",
+        ),
         average_alpha_score=round(
             sum(row.alpha_score for row in rows) / len(rows),
             2,
@@ -107,4 +119,7 @@ def build_comparison(
         ),
         decision_ready_count=sum(row.decision_ready for row in rows),
         technical_ready_count=sum(row.technical_ready for row in rows),
+        combined_decision_ready_count=sum(
+            row.combined_decision_ready for row in rows
+        ),
     )

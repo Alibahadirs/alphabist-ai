@@ -82,6 +82,8 @@ def test_comparison_ranks_by_combined_score_with_technical_data():
     )
     assert result.average_combined_score == expected
     assert result.technical_ready_count == 2
+    assert result.combined_decision_ready_count == 2
+    assert result.combined_leader_symbol == result.rows[0].symbol
 
 
 def test_comparison_excludes_unverified_technical_score():
@@ -97,12 +99,16 @@ def test_comparison_excludes_unverified_technical_score():
 
     rows = {row.symbol: row for row in result.rows}
     assert rows["GOOD"].technical_ready is True
+    assert rows["GOOD"].combined_decision_ready is True
     assert rows["GOOD"].combined_score is not None
     assert rows["STALE"].technical_ready is False
+    assert rows["STALE"].combined_decision_ready is False
     assert rows["STALE"].technical_score is None
     assert rows["STALE"].combined_score is None
     assert rows["STALE"].market_data_status == "Eski fiyat"
     assert result.technical_ready_count == 1
+    assert result.combined_decision_ready_count == 1
+    assert result.combined_leader_symbol == "GOOD"
 
 
 def test_comparison_uses_confidence_gated_decisions_when_audits_are_supplied():
@@ -117,5 +123,26 @@ def test_comparison_uses_confidence_gated_decisions_when_audits_are_supplied():
     assert all(row.confidence_score is not None for row in result.rows)
     assert all(row.confidence_status == "Düşük" for row in result.rows)
     assert all(row.decision_ready is False for row in result.rows)
+    assert all(
+        row.combined_decision_ready is False for row in result.rows
+    )
     assert result.decision_ready_count == 0
+    assert result.combined_decision_ready_count == 0
     assert result.leader_symbol == "-"
+    assert result.combined_leader_symbol == "-"
+
+
+def test_comparison_combined_readiness_requires_financial_confidence():
+    result = build_comparison(
+        [_company("AAA", 20, 30), _company("BBB", 10, 15)],
+        {"AAA": _technical(80), "BBB": _technical(70)},
+        latest_audits={},
+        market_data_statuses={
+            "AAA": "Doğrulandı",
+            "BBB": "Doğrulandı",
+        },
+    )
+
+    assert result.technical_ready_count == 2
+    assert result.combined_decision_ready_count == 0
+    assert result.combined_leader_symbol == "-"
