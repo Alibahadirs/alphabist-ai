@@ -261,6 +261,13 @@ def test_portfolio_marks_current_and_stale_market_prices():
     assert summary.price_warning_count == 1
     assert summary.current_price_value_percent == pytest.approx(53.19)
     assert summary.stress_test_ready is False
+    issues = {
+        issue.symbol: issue
+        for issue in summary.score_readiness_issues
+    }
+    assert issues["FRESH"].price_status == "Tamam"
+    assert issues["FRESH"].technical_status == "Kayıt yok"
+    assert issues["STALE"].price_status == "Eski fiyat"
 
 
 def test_portfolio_stress_is_ready_with_sufficient_current_price_coverage():
@@ -360,3 +367,4 @@ def test_portfolio_builds_combined_score_from_verified_coverage():
         round(summary.weighted_alpha_score * 0.7 + 75 * 0.3, 2)
     )
     assert summary.portfolio_score_ready is True
+    assert summary.score_readiness_issues == []

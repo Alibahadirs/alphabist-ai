@@ -3062,6 +3062,41 @@ def render_portfolio() -> None:
             "kayıt ve finansal karar kapsamlarının her biri en az %90 "
             "olmalıdır."
         )
+        if summary.score_readiness_issues:
+            with st.container(border=True):
+                st.subheader("Birleşik puan doğrulama listesi")
+                st.dataframe(
+                    pd.DataFrame(
+                        [
+                            {
+                                "Hisse": issue.symbol,
+                                "Portföy ağırlığı (%)": (
+                                    issue.weight_percent
+                                ),
+                                "Fiyat": issue.price_status,
+                                "Teknik kayıt": (
+                                    issue.technical_status
+                                ),
+                                "Finansal analiz": (
+                                    issue.financial_status
+                                ),
+                            }
+                            for issue in summary.score_readiness_issues
+                        ]
+                    ),
+                    hide_index=True,
+                    width="stretch",
+                    column_config={
+                        "Portföy ağırlığı (%)": (
+                            st.column_config.ProgressColumn(
+                                "Portföy ağırlığı (%)",
+                                min_value=0,
+                                max_value=100,
+                                format="%.1f",
+                            )
+                        ),
+                    },
+                )
 
     st.caption(
         "Ağırlık bazlı yoğunlaşma endeksi: "

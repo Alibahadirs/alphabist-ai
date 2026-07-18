@@ -7,6 +7,7 @@ from app.market_data.freshness import assess_price_freshness
 from app.portfolio.models import (
     PortfolioMarketPrice,
     PortfolioPosition,
+    PortfolioReadinessIssue,
     PortfolioRow,
     PortfolioStressScenario,
     PortfolioSummary,
@@ -365,6 +366,31 @@ def build_portfolio_summary(
         and decision_ready_value_percent
         >= MIN_PORTFOLIO_SCORE_COVERAGE
     )
+    score_readiness_issues = [
+        PortfolioReadinessIssue(
+            symbol=row.symbol,
+            weight_percent=row.weight_percent,
+            price_status=(
+                "Tamam" if row.price_current else row.price_status
+            ),
+            technical_status=(
+                "Tamam"
+                if row.technical_current
+                else row.technical_status
+            ),
+            financial_status=(
+                "Tamam"
+                if row.decision_ready
+                else "Doğrulama gerekli"
+            ),
+        )
+        for row in rows
+        if (
+            not row.price_current
+            or not row.technical_current
+            or not row.decision_ready
+        )
+    ]
     weighted_combined_score = (
         calculate_combined_score(
             weighted_alpha_score,
@@ -449,6 +475,7 @@ def build_portfolio_summary(
             current_technical_value_percent, 2
         ),
         portfolio_score_ready=portfolio_score_ready,
+        score_readiness_issues=score_readiness_issues,
         stress_scenarios=_build_stress_scenarios(
             total_market_value,
             total_cost,

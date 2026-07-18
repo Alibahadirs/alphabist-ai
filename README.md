@@ -60,6 +60,7 @@ yerel Streamlit uygulaması.
 - Kayıtlı şirketler için doğrulamalı toplu teknik puan güncellemesi
 - En fazla 20 hisselik, takip listesi ve portföy öncelikli teknik güncelleme
 - Portföy için doğrulama kapsamlı, değer ağırlıklı teknik ve birleşik puan
+- Birleşik portföy puanını engelleyen şirket bazlı doğrulama listesi
 - SQLite ile yerel veri saklama
 
 ## Çalıştırma

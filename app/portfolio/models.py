@@ -61,6 +61,14 @@ class PortfolioStressScenario(BaseModel):
     projected_return_percent: float
 
 
+class PortfolioReadinessIssue(BaseModel):
+    symbol: str
+    weight_percent: float = Field(ge=0, le=100)
+    price_status: str
+    technical_status: str
+    financial_status: str
+
+
 class PortfolioSummary(BaseModel):
     rows: list[PortfolioRow]
     total_cost: float
@@ -97,6 +105,9 @@ class PortfolioSummary(BaseModel):
         default=0, ge=0, le=100
     )
     portfolio_score_ready: bool = False
+    score_readiness_issues: list[PortfolioReadinessIssue] = Field(
+        default_factory=list
+    )
     stress_scenarios: list[PortfolioStressScenario] = Field(
         default_factory=list
     )
