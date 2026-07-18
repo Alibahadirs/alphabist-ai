@@ -146,3 +146,5 @@ def test_comparison_combined_readiness_requires_financial_confidence():
     assert result.technical_ready_count == 2
     assert result.combined_decision_ready_count == 0
     assert result.combined_leader_symbol == "-"
+    assert all(row.combined_score is None for row in result.rows)
+    assert result.average_combined_score is None

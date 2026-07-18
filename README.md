@@ -72,6 +72,7 @@ yerel Streamlit uygulaması.
 - Teknik toplam puan, kategori kırılımı ve sinyal bütünlüğü doğrulaması
 - Teknik güçlenmede aynı metodolojili ve doğrulanmış geçmiş kayıt karşılaştırması
 - Aynı piyasa günündeki bozuk teknik kaydı doğrulanmış veriyle yerinde onarma
+- Birleşik AI puanında finansal ve teknik karara hazırlık kapısı
 - SQLite ile yerel veri saklama
 
 ## Çalıştırma

@@ -192,3 +192,20 @@ def calculate_combined_score(
         raise TechnicalAnalysisError("Temel analiz ağırlığı 0 ile 1 arasında olmalıdır.")
     combined = alpha_score * alpha_weight + technical_score * (1 - alpha_weight)
     return round(max(0, min(combined, 100)), 2)
+
+
+def calculate_verified_combined_score(
+    alpha_score: float,
+    technical_score: float,
+    *,
+    financial_ready: bool,
+    technical_ready: bool,
+    alpha_weight: float = 0.70,
+) -> float | None:
+    if not financial_ready or not technical_ready:
+        return None
+    return calculate_combined_score(
+        alpha_score,
+        technical_score,
+        alpha_weight,
+    )

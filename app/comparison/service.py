@@ -5,7 +5,7 @@ from app.comparison.models import CompanyComparisonRow, ComparisonSummary
 from app.confidence.service import calculate_analysis_confidence
 from app.scoring.engine import calculate_alpha_score
 from app.scoring.models import FinancialMetrics
-from app.technical.engine import calculate_combined_score
+from app.technical.engine import calculate_verified_combined_score
 from app.technical.models import TechnicalScoreBreakdown
 
 
@@ -59,8 +59,13 @@ def build_comparison(
                     technical.signal if technical_ready else None
                 ),
                 combined_score=(
-                    calculate_combined_score(alpha.total, technical.total)
-                    if technical_ready
+                    calculate_verified_combined_score(
+                        alpha.total,
+                        technical.total,
+                        financial_ready=financial_decision_ready,
+                        technical_ready=technical_ready,
+                    )
+                    if technical is not None
                     else None
                 ),
                 atr_percent=(

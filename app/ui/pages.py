@@ -86,13 +86,17 @@ from app.scoring.models import FinancialMetrics, ScoreBreakdown
 from app.sector.profiles import CompanyProfile, PROFILE_LABELS
 from app.scanner.models import ScannerFilters
 from app.scanner.service import scan_companies
-from app.technical.engine import calculate_combined_score, calculate_technical_score
+from app.technical.engine import (
+    calculate_technical_score,
+    calculate_verified_combined_score,
+)
 from app.technical.models import (
     TechnicalRefreshSummary,
     TechnicalScoreBreakdown,
 )
 from app.technical.quality import (
     TECHNICAL_STATUS_OPTIONS,
+    assess_technical_record,
     build_technical_quality_summary,
     select_technical_refresh_candidates,
 )
@@ -991,9 +995,11 @@ def render_dashboard() -> None:
                         settings.technical_methodology_version
                     ),
                 )
-            combined_score = calculate_combined_score(
+            combined_score = calculate_verified_combined_score(
                 score.total,
                 technical_score.total,
+                financial_ready=confidence.decision_ready,
+                technical_ready=market_data_ready,
             )
 
         with st.container(horizontal=True):
@@ -1015,11 +1021,15 @@ def render_dashboard() -> None:
             )
             st.metric(
                 "Birleşik AI puanı",
-                f"{combined_score:.1f}/100",
+                (
+                    f"{combined_score:.1f}/100"
+                    if combined_score is not None
+                    else "Doğrulama gerekli"
+                ),
                 (
                     "Temel %70 + teknik %30"
-                    if market_data_ready
-                    else "Doğrulama gerekli"
+                    if combined_score is not None
+                    else "Karar puanı üretilmedi"
                 ),
                 border=True,
             )
@@ -1035,10 +1045,20 @@ def render_dashboard() -> None:
             f"Durum: {quote_freshness.status} | "
             f"Fiyat-grafik kontrolü: {market_alignment.status}"
         )
-        if not market_data_ready:
+        if not market_data_ready and not confidence.decision_ready:
             st.warning(
-                "Teknik puan ve birleşik AI puanı güncelliği veya grafik "
-                "uyumu doğrulanamayan piyasa verisine dayanıyor."
+                "Finansal analiz ve teknik piyasa verisi doğrulanmadan "
+                "birleşik AI puanı üretilmez."
+            )
+        elif not market_data_ready:
+            st.warning(
+                "Teknik piyasa verisi doğrulanmadan birleşik AI puanı "
+                "üretilmez."
+            )
+        elif not confidence.decision_ready:
+            st.warning(
+                "Finansal analiz karara hazır olmadan birleşik AI puanı "
+                "üretilmez."
             )
 
         st.line_chart(history[["Close", "EMA_20", "EMA_50", "EMA_200"]])
@@ -1081,12 +1101,20 @@ def render_dashboard() -> None:
                         "Kaynak": entry.source,
                         "Veri kontrolü": entry.alignment_status,
                         "Metodoloji": entry.methodology_version,
+                        "Kayıt sağlığı": assess_technical_record(
+                            entry
+                        ).status,
+                        "Kararda kullanılır": (
+                            "Evet"
+                            if assess_technical_record(entry).current
+                            else "Hayır"
+                        ),
                     }
                     for entry in technical_history
                 ]
             )
             with st.container(border=True):
-                st.subheader("Doğrulanmış teknik puan geçmişi")
+                st.subheader("Teknik puan geçmişi ve kayıt sağlığı")
                 st.line_chart(
                     history_frame,
                     x="Fiyat tarihi",

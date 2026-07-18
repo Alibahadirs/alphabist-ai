@@ -15,7 +15,7 @@ from app.portfolio.models import (
 from app.scoring.engine import calculate_alpha_score
 from app.scoring.models import FinancialMetrics
 from app.sector.profiles import CompanyProfile
-from app.technical.engine import calculate_combined_score
+from app.technical.engine import calculate_verified_combined_score
 from app.technical.models import TechnicalHistoryEntry
 from app.technical.quality import (
     assess_technical_record,
@@ -257,11 +257,13 @@ def build_portfolio_summary(
                 ),
                 technical_current=technical_current,
                 combined_score=(
-                    calculate_combined_score(
+                    calculate_verified_combined_score(
                         score.total,
                         latest_technical.total_score,
+                        financial_ready=financial_decision_ready,
+                        technical_ready=technical_current,
                     )
-                    if combined_decision_ready and latest_technical
+                    if latest_technical
                     else None
                 ),
                 confidence_score=confidence.total if confidence else None,

@@ -6,6 +6,7 @@ from app.core.exceptions import TechnicalAnalysisError
 from app.technical.engine import (
     calculate_combined_score,
     calculate_technical_score,
+    calculate_verified_combined_score,
     enrich_history,
 )
 
@@ -57,3 +58,24 @@ def test_combined_score_uses_seventy_thirty_weighting():
 def test_invalid_combined_weight_is_rejected():
     with pytest.raises(TechnicalAnalysisError):
         calculate_combined_score(90, 60, alpha_weight=1.1)
+
+
+def test_verified_combined_score_requires_both_readiness_gates():
+    assert calculate_verified_combined_score(
+        90,
+        60,
+        financial_ready=True,
+        technical_ready=True,
+    ) == pytest.approx(81)
+    assert calculate_verified_combined_score(
+        90,
+        60,
+        financial_ready=False,
+        technical_ready=True,
+    ) is None
+    assert calculate_verified_combined_score(
+        90,
+        60,
+        financial_ready=True,
+        technical_ready=False,
+    ) is None
