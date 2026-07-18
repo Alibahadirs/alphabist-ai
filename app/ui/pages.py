@@ -968,15 +968,23 @@ def render_dashboard() -> None:
                 quote,
                 history,
             )
+            technical_source = str(quote.get("source") or "").strip()
+            technical_source_ready = technical_source.casefold() not in {
+                "",
+                "bilinmiyor",
+                "unknown",
+            }
             market_data_ready = (
-                quote_freshness.current and market_alignment.valid
+                quote_freshness.current
+                and market_alignment.valid
+                and technical_source_ready
             )
             technical_score = calculate_technical_score(history)
             if market_data_ready and quote_date is not None:
                 add_technical_score_history(
                     symbol=symbol,
                     price_date=quote_date,
-                    source=str(quote.get("source") or "Bilinmiyor"),
+                    source=technical_source,
                     score=technical_score,
                     alignment_status=market_alignment.status,
                     methodology_version=(

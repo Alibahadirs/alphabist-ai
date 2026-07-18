@@ -27,6 +27,7 @@ def test_refresh_saves_only_current_aligned_technical_scores():
         "NEW": _price_frame("2026-07-17"),
         "SAME": _price_frame("2026-07-17"),
         "STALE": _price_frame("2026-07-01"),
+        "NOSOURCE": _price_frame("2026-07-17"),
     }
 
     def loader(symbol):
@@ -37,7 +38,7 @@ def test_refresh_saves_only_current_aligned_technical_scores():
             {
                 "last": float(frame["Close"].iloc[-1]),
                 "as_of_date": frame.index[-1].date().isoformat(),
-                "source": "Yahoo Finance",
+                "source": "" if symbol == "NOSOURCE" else "Yahoo Finance",
             },
             frame,
         )
@@ -49,7 +50,7 @@ def test_refresh_saves_only_current_aligned_technical_scores():
         return symbol == "NEW"
 
     summary = refresh_technical_scores(
-        ["NEW", "SAME", "STALE", "BROKEN"],
+        ["NEW", "SAME", "STALE", "NOSOURCE", "BROKEN"],
         loader,
         saver,
         "technical-2026.1",
@@ -61,13 +62,14 @@ def test_refresh_saves_only_current_aligned_technical_scores():
         "NEW": "Kaydedildi",
         "SAME": "Değişmedi",
         "STALE": "Reddedildi",
+        "NOSOURCE": "Reddedildi",
         "BROKEN": "Hata",
     }
     assert saved_symbols == ["NEW", "SAME"]
-    assert summary.total == 4
+    assert summary.total == 5
     assert summary.saved == 1
     assert summary.unchanged == 1
-    assert summary.rejected == 1
+    assert summary.rejected == 2
     assert summary.failed == 1
 
 

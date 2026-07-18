@@ -249,27 +249,78 @@ def add_technical_score_history(
     breakdown = score.model_dump(
         exclude={"total", "signal", "rsi_value", "atr_percent"}
     )
+    normalized_symbol = symbol.upper().strip()
+    normalized_source = source.strip()
+    normalized_methodology = methodology_version.strip()
+    if normalized_source.casefold() in {"", "bilinmiyor", "unknown"}:
+        raise ValueError("Teknik veri kaynağı doğrulanmadı.")
+    if not normalized_methodology:
+        raise ValueError("Teknik metodoloji sürümü eksik.")
+    price_date_value = price_date.isoformat()
+    breakdown_value = json.dumps(breakdown, sort_keys=True)
+    payload = (
+        score.total,
+        score.signal,
+        score.rsi_value,
+        score.atr_percent,
+        breakdown_value,
+        alignment_status,
+    )
     with connect() as conn:
-        cursor = conn.execute(
-            """INSERT OR IGNORE INTO technical_score_history(
+        existing = conn.execute(
+            """SELECT id, total_score, signal, rsi_value, atr_percent,
+            score_breakdown, alignment_status
+            FROM technical_score_history
+            WHERE symbol=? AND price_date=? AND source=?
+            AND methodology_version=?""",
+            (
+                normalized_symbol,
+                price_date_value,
+                normalized_source,
+                normalized_methodology,
+            ),
+        ).fetchone()
+        if existing is not None:
+            existing_payload = (
+                existing["total_score"],
+                existing["signal"],
+                existing["rsi_value"],
+                existing["atr_percent"],
+                existing["score_breakdown"],
+                existing["alignment_status"],
+            )
+            if existing_payload == payload:
+                return False
+            conn.execute(
+                """UPDATE technical_score_history
+                SET total_score=?, signal=?, rsi_value=?, atr_percent=?,
+                score_breakdown=?, alignment_status=?,
+                created_at=CURRENT_TIMESTAMP
+                WHERE id=?""",
+                (*payload, existing["id"]),
+            )
+            return True
+
+        conn.execute(
+            """INSERT INTO technical_score_history(
             symbol, price_date, source, total_score, signal, rsi_value,
             atr_percent, score_breakdown, alignment_status,
             methodology_version)
             VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
-                symbol.upper().strip(),
-                price_date.isoformat(),
-                source,
+                normalized_symbol,
+                price_date_value,
+                normalized_source,
                 score.total,
                 score.signal,
                 score.rsi_value,
                 score.atr_percent,
-                json.dumps(breakdown, sort_keys=True),
+                breakdown_value,
                 alignment_status,
-                methodology_version,
+                normalized_methodology,
             ),
         )
-    return cursor.rowcount == 1
+    return True
 
 
 def list_technical_score_history(

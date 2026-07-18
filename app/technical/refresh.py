@@ -71,11 +71,23 @@ def refresh_technical_scores(
                 )
                 continue
 
+            source = str(quote.get("source") or "").strip()
+            if source.casefold() in {"", "bilinmiyor", "unknown"}:
+                items.append(
+                    TechnicalRefreshItem(
+                        symbol=symbol,
+                        status="Reddedildi",
+                        detail="Teknik veri kaynağı doğrulanmadı.",
+                        price_date=quote_date,
+                    )
+                )
+                continue
+
             score = calculate_technical_score(history)
-            inserted = snapshot_saver(
+            changed = snapshot_saver(
                 symbol,
                 quote_date,
-                str(quote.get("source") or "Bilinmiyor"),
+                source,
                 score,
                 alignment.status,
                 methodology_version,
@@ -83,11 +95,11 @@ def refresh_technical_scores(
             items.append(
                 TechnicalRefreshItem(
                     symbol=symbol,
-                    status="Kaydedildi" if inserted else "Değişmedi",
+                    status="Kaydedildi" if changed else "Değişmedi",
                     detail=(
-                        "Yeni doğrulanmış teknik kayıt oluşturuldu."
-                        if inserted
-                        else "Aynı piyasa günü ve metodoloji zaten kayıtlı."
+                        "Doğrulanmış teknik kayıt oluşturuldu veya onarıldı."
+                        if changed
+                        else "Aynı doğrulanmış teknik kayıt zaten mevcut."
                     ),
                     price_date=quote_date,
                     technical_score=score.total,
