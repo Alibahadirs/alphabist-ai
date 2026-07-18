@@ -15,6 +15,7 @@ def select_previous_comparable_audit(
             audit
             for audit in reversed(history[:-1])
             if audit.methodology_version == current.methodology_version
+            and audit.company_profile == current.company_profile
         ),
         None,
     )

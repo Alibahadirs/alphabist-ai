@@ -125,4 +125,7 @@ class AnalysisSnapshotComparison(BaseModel):
     previous_methodology: str = "legacy"
     current_methodology: str = "legacy"
     methodology_changed: bool = False
+    previous_profile: CompanyProfile = CompanyProfile.STANDARD
+    current_profile: CompanyProfile = CompanyProfile.STANDARD
+    profile_changed: bool = False
     category_deltas: dict[str, float] = Field(default_factory=dict)

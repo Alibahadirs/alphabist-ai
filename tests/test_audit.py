@@ -496,6 +496,62 @@ def test_audit_history_selects_previous_same_methodology():
     assert selected == first_current
 
 
+def test_snapshot_comparison_stops_when_company_profile_changes():
+    previous = _audit("TEST", 78, DataSourceType.PDF).model_copy(
+        update={
+            "company_profile": CompanyProfile.STANDARD,
+            "confidence_score": 80,
+            "score_breakdown": {"cash_flow": 10},
+        }
+    )
+    current = _audit("TEST", 84, DataSourceType.PDF).model_copy(
+        update={
+            "company_profile": CompanyProfile.BANK,
+            "confidence_score": 90,
+            "score_breakdown": {"cash_flow": 13},
+        }
+    )
+
+    comparison = compare_analysis_snapshots(previous, current)
+
+    assert comparison.methodology_changed is False
+    assert comparison.profile_changed is True
+    assert comparison.previous_profile == CompanyProfile.STANDARD
+    assert comparison.current_profile == CompanyProfile.BANK
+    assert comparison.score_delta is None
+    assert comparison.confidence_delta is None
+    assert comparison.category_deltas == {}
+
+
+def test_audit_history_selects_previous_same_profile_and_methodology():
+    first_bank = _audit("TEST", 70, DataSourceType.PDF).model_copy(
+        update={"company_profile": CompanyProfile.BANK}
+    )
+    intervening_standard = _audit("TEST", 75, DataSourceType.PDF)
+    latest_bank = _audit("TEST", 80, DataSourceType.PDF).model_copy(
+        update={"company_profile": CompanyProfile.BANK}
+    )
+
+    selected = select_previous_comparable_audit(
+        [first_bank, intervening_standard, latest_bank]
+    )
+
+    assert selected == first_bank
+
+
+def test_audit_history_has_no_comparison_for_new_profile():
+    previous_standard = _audit("TEST", 75, DataSourceType.PDF)
+    latest_bank = _audit("TEST", 80, DataSourceType.PDF).model_copy(
+        update={"company_profile": CompanyProfile.BANK}
+    )
+
+    selected = select_previous_comparable_audit(
+        [previous_standard, latest_bank]
+    )
+
+    assert selected is None
+
+
 def test_snapshot_comparison_rejects_different_companies():
     with pytest.raises(ValueError, match="aynı şirkete"):
         compare_analysis_snapshots(

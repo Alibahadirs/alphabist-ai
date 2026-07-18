@@ -148,9 +148,11 @@ def compare_analysis_snapshots(
     methodology_changed = (
         previous.methodology_version != current.methodology_version
     )
+    profile_changed = previous.company_profile != current.company_profile
+    comparison_basis_changed = methodology_changed or profile_changed
     confidence_delta = None
     if (
-        not methodology_changed
+        not comparison_basis_changed
         and previous.confidence_score is not None
         and current.confidence_score is not None
     ):
@@ -159,7 +161,7 @@ def compare_analysis_snapshots(
             2,
         )
 
-    category_deltas = {} if methodology_changed else {
+    category_deltas = {} if comparison_basis_changed else {
         category: round(
             current.score_breakdown[category]
             - previous.score_breakdown[category],
@@ -175,7 +177,7 @@ def compare_analysis_snapshots(
         current_score=current.alpha_score,
         score_delta=(
             None
-            if methodology_changed
+            if comparison_basis_changed
             else round(current.alpha_score - previous.alpha_score, 2)
         ),
         previous_confidence=previous.confidence_score,
@@ -188,6 +190,9 @@ def compare_analysis_snapshots(
         previous_methodology=previous.methodology_version,
         current_methodology=current.methodology_version,
         methodology_changed=methodology_changed,
+        previous_profile=previous.company_profile,
+        current_profile=current.company_profile,
+        profile_changed=profile_changed,
         category_deltas=category_deltas,
     )
 

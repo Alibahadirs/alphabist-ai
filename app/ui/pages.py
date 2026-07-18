@@ -644,7 +644,7 @@ def _render_snapshot_comparison(
     current: CompanyDataAudit,
 ) -> None:
     with st.container(border=True):
-        st.subheader("Son analize göre değişim")
+        st.subheader("Önceki karşılaştırılabilir analize göre değişim")
         with st.container(horizontal=True):
             st.metric(
                 "Alpha Score",
@@ -699,6 +699,13 @@ def _render_snapshot_comparison(
                 f"{comparison.previous_methodology} → "
                 f"{comparison.current_methodology}. Puan ve kategori farkı "
                 "hesaplanmadı."
+            )
+        if comparison.profile_changed:
+            st.warning(
+                "Şirket profili değişmiş: "
+                f"{PROFILE_LABELS[comparison.previous_profile]} → "
+                f"{PROFILE_LABELS[comparison.current_profile]}. Kategoriler "
+                "farklı göstergelere dayandığı için puan farkı hesaplanmadı."
             )
 
         if comparison.category_deltas:
@@ -781,7 +788,7 @@ def render_dashboard() -> None:
     score_delta = None
     if snapshot_comparison is not None:
         score_delta = snapshot_comparison.score_delta
-    else:
+    elif not audit_history:
         score_delta = calculate_latest_comparable_score_delta(
             score_history,
             settings.scoring_methodology_version,
@@ -814,6 +821,15 @@ def render_dashboard() -> None:
         f"{'Hazır' if confidence.decision_ready else 'Doğrulama gerekli'}"
     )
     _render_data_source_caption(latest_audit)
+    if (
+        len(audit_history) >= 2
+        and previous_comparable_audit is None
+    ):
+        st.info(
+            "Önceki kayıt aynı puanlama metodolojisi ve şirket profilinde "
+            "değil. Yanıltıcı bir değişim göstermemek için puan farkı "
+            "hesaplanmadı."
+        )
     with st.expander("Analiz güveni ayrıntıları"):
         st.caption(
             f"Hesap kontrolü: {confidence.calculation_check_status}"
