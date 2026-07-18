@@ -1,6 +1,8 @@
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from datetime import date
 
+from app.core.settings import settings
 from app.market_data.freshness import assess_price_freshness
 from app.technical.models import (
     TechnicalHistoryEntry,
@@ -14,12 +16,85 @@ CURRENT_STATUS = "Güncel günlük veri"
 STALE_STATUS = "Eski fiyat"
 MISSING_STATUS = "Kayıt yok"
 DATE_ERROR_STATUS = "Tarih hatası"
+METHODOLOGY_ERROR_STATUS = "Eski teknik metodoloji"
+ALIGNMENT_ERROR_STATUS = "Hizalama doğrulanmadı"
+SOURCE_ERROR_STATUS = "Kaynak doğrulanmadı"
 TECHNICAL_STATUS_OPTIONS = [
     CURRENT_STATUS,
     STALE_STATUS,
     MISSING_STATUS,
     DATE_ERROR_STATUS,
+    METHODOLOGY_ERROR_STATUS,
+    ALIGNMENT_ERROR_STATUS,
+    SOURCE_ERROR_STATUS,
 ]
+VERIFIED_ALIGNMENT_STATUSES = {
+    "Fiyat ve grafik verisi uyumlu",
+    "Doğrulandı",
+}
+INVALID_SOURCES = {"", "bilinmiyor", "unknown"}
+
+
+@dataclass(frozen=True)
+class TechnicalRecordHealth:
+    status: str
+    age_days: int | None
+    current: bool
+    methodology_current: bool
+    alignment_verified: bool
+    source_verified: bool
+
+
+def assess_technical_record(
+    entry: TechnicalHistoryEntry | None,
+    reference_date: date | None = None,
+) -> TechnicalRecordHealth:
+    if entry is None:
+        return TechnicalRecordHealth(
+            status=MISSING_STATUS,
+            age_days=None,
+            current=False,
+            methodology_current=False,
+            alignment_verified=False,
+            source_verified=False,
+        )
+
+    freshness = assess_price_freshness(
+        entry.price_date,
+        reference_date=reference_date,
+    )
+    methodology_current = (
+        entry.methodology_version == settings.technical_methodology_version
+    )
+    alignment_verified = (
+        entry.alignment_status in VERIFIED_ALIGNMENT_STATUSES
+    )
+    source_verified = entry.source.strip().casefold() not in INVALID_SOURCES
+
+    if not freshness.current:
+        status = freshness.status
+    elif not methodology_current:
+        status = METHODOLOGY_ERROR_STATUS
+    elif not alignment_verified:
+        status = ALIGNMENT_ERROR_STATUS
+    elif not source_verified:
+        status = SOURCE_ERROR_STATUS
+    else:
+        status = CURRENT_STATUS
+
+    return TechnicalRecordHealth(
+        status=status,
+        age_days=freshness.age_days,
+        current=(
+            freshness.current
+            and methodology_current
+            and alignment_verified
+            and source_verified
+        ),
+        methodology_current=methodology_current,
+        alignment_verified=alignment_verified,
+        source_verified=source_verified,
+    )
 
 
 def build_technical_quality_summary(
@@ -52,10 +127,7 @@ def build_technical_quality_summary(
             continue
 
         latest = max(history, key=lambda entry: entry.id)
-        freshness = assess_price_freshness(
-            latest.price_date,
-            reference_date=reference_date,
-        )
+        health = assess_technical_record(latest, reference_date)
         rows.append(
             TechnicalQualityRow(
                 symbol=symbol,
@@ -64,9 +136,13 @@ def build_technical_quality_summary(
                 price_date=latest.price_date,
                 source=latest.source,
                 methodology_version=latest.methodology_version,
-                status=freshness.status,
-                age_days=freshness.age_days,
-                current=freshness.current,
+                alignment_status=latest.alignment_status,
+                status=health.status,
+                age_days=health.age_days,
+                current=health.current,
+                methodology_current=health.methodology_current,
+                alignment_verified=health.alignment_verified,
+                source_verified=health.source_verified,
             )
         )
 
@@ -77,6 +153,15 @@ def build_technical_quality_summary(
         stale_count=sum(row.status == STALE_STATUS for row in rows),
         missing_count=sum(row.status == MISSING_STATUS for row in rows),
         date_error_count=sum(row.status == DATE_ERROR_STATUS for row in rows),
+        methodology_error_count=sum(
+            row.status == METHODOLOGY_ERROR_STATUS for row in rows
+        ),
+        alignment_error_count=sum(
+            row.status == ALIGNMENT_ERROR_STATUS for row in rows
+        ),
+        source_error_count=sum(
+            row.status == SOURCE_ERROR_STATUS for row in rows
+        ),
     )
 
 
@@ -89,8 +174,11 @@ def select_technical_refresh_candidates(
 
     priority = {
         DATE_ERROR_STATUS: 0,
-        MISSING_STATUS: 1,
-        STALE_STATUS: 2,
+        METHODOLOGY_ERROR_STATUS: 1,
+        ALIGNMENT_ERROR_STATUS: 2,
+        SOURCE_ERROR_STATUS: 3,
+        MISSING_STATUS: 4,
+        STALE_STATUS: 5,
     }
     candidates = [
         row for row in summary.rows

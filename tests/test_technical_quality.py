@@ -12,19 +12,23 @@ def _history_entry(
     symbol: str,
     price_date: date,
     score: float,
+    *,
+    source: str = "Yahoo Finance",
+    alignment_status: str = "Doğrulandı",
+    methodology_version: str = "technical-2026.1",
 ) -> TechnicalHistoryEntry:
     return TechnicalHistoryEntry(
         id=entry_id,
         symbol=symbol,
         price_date=price_date,
-        source="Yahoo Finance",
+        source=source,
         total_score=score,
         signal="Al",
         rsi_value=55,
         atr_percent=2.4,
         score_breakdown={"trend": 15.0},
-        alignment_status="Doğrulandı",
-        methodology_version="technical-2026.1",
+        alignment_status=alignment_status,
+        methodology_version=methodology_version,
         created_at=datetime(2026, 7, 18, 9, 0),
     )
 
@@ -102,3 +106,67 @@ def test_refresh_candidates_prioritize_errors_missing_and_oldest_stale():
         "MISSING",
     ]
     assert select_technical_refresh_candidates(summary, max_batch_size=0) == []
+
+
+def test_technical_quality_rejects_unverified_record_metadata():
+    summary = build_technical_quality_summary(
+        ["METHOD", "ALIGN", "SOURCE", "HEALTHY"],
+        {
+            "METHOD": [
+                _history_entry(
+                    1,
+                    "METHOD",
+                    date(2026, 7, 17),
+                    80,
+                    methodology_version="technical-legacy",
+                )
+            ],
+            "ALIGN": [
+                _history_entry(
+                    2,
+                    "ALIGN",
+                    date(2026, 7, 17),
+                    75,
+                    alignment_status="Fiyat tarihleri 3 gün farklı",
+                )
+            ],
+            "SOURCE": [
+                _history_entry(
+                    3,
+                    "SOURCE",
+                    date(2026, 7, 17),
+                    70,
+                    source="Bilinmiyor",
+                )
+            ],
+            "HEALTHY": [
+                _history_entry(
+                    4,
+                    "HEALTHY",
+                    date(2026, 7, 17),
+                    85,
+                    alignment_status="Fiyat ve grafik verisi uyumlu",
+                )
+            ],
+        },
+        reference_date=date(2026, 7, 18),
+    )
+
+    rows = {row.symbol: row for row in summary.rows}
+    assert rows["METHOD"].status == "Eski teknik metodoloji"
+    assert rows["ALIGN"].status == "Hizalama doğrulanmadı"
+    assert rows["ALIGN"].alignment_status == "Fiyat tarihleri 3 gün farklı"
+    assert rows["ALIGN"].alignment_verified is False
+    assert rows["SOURCE"].status == "Kaynak doğrulanmadı"
+    assert rows["SOURCE"].source_verified is False
+    assert rows["HEALTHY"].current is True
+    assert rows["HEALTHY"].methodology_current is True
+    assert summary.current_count == 1
+    assert summary.methodology_error_count == 1
+    assert summary.alignment_error_count == 1
+    assert summary.source_error_count == 1
+    assert select_technical_refresh_candidates(summary) == [
+        "METHOD",
+        "ALIGN",
+        "SOURCE",
+    ]

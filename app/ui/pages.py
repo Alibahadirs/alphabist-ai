@@ -1368,6 +1368,21 @@ def render_data_quality() -> None:
             technical_quality.date_error_count,
             border=True,
         )
+        st.metric(
+            "Eski metodoloji",
+            technical_quality.methodology_error_count,
+            border=True,
+        )
+        st.metric(
+            "Hizalama hatası",
+            technical_quality.alignment_error_count,
+            border=True,
+        )
+        st.metric(
+            "Kaynak hatası",
+            technical_quality.source_error_count,
+            border=True,
+        )
 
     with st.container(horizontal=True):
         st.metric(
@@ -1397,8 +1412,9 @@ def render_data_quality() -> None:
     with st.container(border=True):
         st.subheader("Teknik veri sorunlarını düzelt")
         st.caption(
-            "Eski, eksik veya tarih hatalı kayıtlar önceliklendirilir. "
-            "Yalnız güncel ve fiyat-grafik uyumu doğrulanan sonuçlar kaydedilir."
+            "Eski, eksik, tarih hatalı, eski metodolojili, hizalaması veya "
+            "kaynağı doğrulanmamış kayıtlar önceliklendirilir. Yalnız güncel "
+            "ve fiyat-grafik uyumu doğrulanan sonuçlar kaydedilir."
         )
         refresh_symbols = st.multiselect(
             "Yenilenecek hisseler",
@@ -1507,6 +1523,24 @@ def render_data_quality() -> None:
                 "Teknik kaynak": technical_by_symbol[row.symbol].source or "-",
                 "Teknik metodoloji": (
                     technical_by_symbol[row.symbol].methodology_version or "-"
+                ),
+                "Metodoloji kontrolü": (
+                    "Güncel"
+                    if technical_by_symbol[row.symbol].methodology_current
+                    else "Yenileme gerekli"
+                ),
+                "Hizalama kaydı": (
+                    technical_by_symbol[row.symbol].alignment_status or "-"
+                ),
+                "Hizalama kontrolü": (
+                    "Doğrulandı"
+                    if technical_by_symbol[row.symbol].alignment_verified
+                    else "Doğrulama gerekli"
+                ),
+                "Kaynak kontrolü": (
+                    "Doğrulandı"
+                    if technical_by_symbol[row.symbol].source_verified
+                    else "Doğrulama gerekli"
                 ),
                 "Karara hazırlık": readiness_by_symbol[row.symbol].status,
                 "Önerilen işlem": (

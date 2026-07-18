@@ -17,6 +17,7 @@ from app.scoring.models import FinancialMetrics
 from app.sector.profiles import CompanyProfile
 from app.technical.engine import calculate_combined_score
 from app.technical.models import TechnicalHistoryEntry
+from app.technical.quality import assess_technical_record
 
 
 MAX_POSITION_WEIGHT = 35.0
@@ -203,14 +204,11 @@ def build_portfolio_summary(
         latest_technical = (
             technical_history[-1] if technical_history else None
         )
-        technical_freshness = assess_price_freshness(
-            latest_technical.price_date if latest_technical else None,
+        technical_health = assess_technical_record(
+            latest_technical,
             effective_reference_date,
         )
-        technical_current = (
-            bool(latest_technical)
-            and technical_freshness.current
-        )
+        technical_current = technical_health.current
         financial_decision_ready = (
             confidence.decision_ready if confidence else True
         )
@@ -250,9 +248,9 @@ def build_portfolio_summary(
                     else None
                 ),
                 technical_status=(
-                    technical_freshness.status
+                    technical_health.status
                     if latest_technical
-                    else "Kayıt yok"
+                    else technical_health.status
                 ),
                 technical_current=technical_current,
                 combined_score=(

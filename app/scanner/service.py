@@ -3,12 +3,12 @@ from datetime import date
 
 from app.audit.models import CompanyDataAudit
 from app.confidence.service import calculate_analysis_confidence
-from app.market_data.freshness import assess_price_freshness
 from app.scanner.models import ScannerFilters, ScannerRow, ScannerSummary
 from app.scoring.engine import calculate_alpha_score
 from app.scoring.models import FinancialMetrics
 from app.sector.profiles import CompanyProfile
 from app.technical.models import TechnicalHistoryEntry
+from app.technical.quality import assess_technical_record
 
 
 def scan_companies(
@@ -46,13 +46,11 @@ def scan_companies(
             if len(technical_history) >= 2
             else None
         )
-        technical_freshness = assess_price_freshness(
-            latest_technical.price_date if latest_technical else None,
+        technical_health = assess_technical_record(
+            latest_technical,
             reference_date,
         )
-        technical_current = (
-            bool(latest_technical) and technical_freshness.current
-        )
+        technical_current = technical_health.current
         technical_delta = (
             latest_technical.total_score - previous_technical.total_score
             if latest_technical and previous_technical
@@ -146,9 +144,9 @@ def scan_companies(
                     else None
                 ),
                 technical_status=(
-                    technical_freshness.status
+                    technical_health.status
                     if latest_technical
-                    else "Kayıt yok"
+                    else technical_health.status
                 ),
                 technical_current=technical_current,
             )

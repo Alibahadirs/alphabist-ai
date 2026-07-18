@@ -99,6 +99,8 @@ def _technical_history(
     identifier: int,
     score: float,
     price_date: date,
+    *,
+    methodology_version: str = "technical-2026.1",
 ) -> TechnicalHistoryEntry:
     return TechnicalHistoryEntry(
         id=identifier,
@@ -111,7 +113,7 @@ def _technical_history(
         atr_percent=3,
         score_breakdown={},
         alignment_status="Fiyat ve grafik verisi uyumlu",
-        methodology_version="technical-2026.1",
+        methodology_version=methodology_version,
         created_at=datetime(2026, 7, 18, 10, identifier),
     )
 
@@ -225,3 +227,30 @@ def test_scanner_combined_readiness_requires_financial_confidence():
 
     assert summary.rows == []
     assert summary.combined_decision_ready_count == 0
+
+
+def test_scanner_rejects_current_record_from_old_methodology():
+    company = _company("LEGACY", 25, 30, 0.4, 100)
+    summary = scan_companies(
+        [company],
+        ScannerFilters(
+            minimum_alpha_score=0,
+            positive_operating_cash_flow_only=False,
+            current_technical_only=True,
+        ),
+        technical_histories={
+            "LEGACY": [
+                _technical_history(
+                    "LEGACY",
+                    1,
+                    90,
+                    date(2026, 7, 17),
+                    methodology_version="technical-legacy",
+                )
+            ]
+        },
+        reference_date=date(2026, 7, 18),
+    )
+
+    assert summary.rows == []
+    assert summary.current_technical_count == 0

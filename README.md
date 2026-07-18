@@ -68,6 +68,7 @@ yerel Streamlit uygulaması.
 - Takip listesinde finansal ve birleşik karara hazırlık görünümü
 - Şirket karşılaştırmada temel lider ve doğrulanmış birleşik lider ayrımı
 - Portföyde pozisyon kesişimine dayalı birleşik hazırlık ve değer kapsamı
+- Teknik kayıtlarda güncellik, metodoloji, hizalama ve kaynak sağlık kontrolü
 - SQLite ile yerel veri saklama
 
 ## Çalıştırma

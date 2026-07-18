@@ -88,6 +88,8 @@ def _technical_history(
     identifier: int,
     score: float,
     price_date: date,
+    *,
+    alignment_status: str = "Fiyat ve grafik verisi uyumlu",
 ) -> TechnicalHistoryEntry:
     return TechnicalHistoryEntry(
         id=identifier,
@@ -99,7 +101,7 @@ def _technical_history(
         rsi_value=55,
         atr_percent=3,
         score_breakdown={},
-        alignment_status="Fiyat ve grafik verisi uyumlu",
+        alignment_status=alignment_status,
         methodology_version="technical-2026.1",
         created_at=datetime(2026, 7, 18, 10, identifier),
     )
@@ -152,3 +154,28 @@ def test_watchlist_does_not_count_stale_technical_signal():
     assert summary.current_technical_count == 0
     assert summary.combined_decision_ready_count == 0
     assert summary.technical_strengthening_count == 0
+
+
+def test_watchlist_rejects_unverified_market_alignment():
+    company = _company("SAFE", margin=25)
+    summary = build_watchlist_summary(
+        [WatchlistEntry(symbol="SAFE")],
+        {"SAFE": company},
+        technical_histories={
+            "SAFE": [
+                _technical_history(
+                    1,
+                    88,
+                    date(2026, 7, 17),
+                    alignment_status="Fiyat tarihleri 3 gün farklı",
+                )
+            ]
+        },
+        reference_date=date(2026, 7, 18),
+    )
+
+    row = summary.rows[0]
+    assert row.technical_current is False
+    assert row.combined_decision_ready is False
+    assert row.technical_status == "Hizalama doğrulanmadı"
+    assert summary.current_technical_count == 0

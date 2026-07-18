@@ -55,9 +55,13 @@ class TechnicalQualityRow(BaseModel):
     price_date: date | None = None
     source: str = ""
     methodology_version: str = ""
+    alignment_status: str = ""
     status: str
     age_days: int | None = Field(default=None, ge=0)
     current: bool = False
+    methodology_current: bool = False
+    alignment_verified: bool = False
+    source_verified: bool = False
 
 
 class TechnicalQualitySummary(BaseModel):
@@ -67,3 +71,6 @@ class TechnicalQualitySummary(BaseModel):
     stale_count: int = Field(ge=0)
     missing_count: int = Field(ge=0)
     date_error_count: int = Field(ge=0)
+    methodology_error_count: int = Field(default=0, ge=0)
+    alignment_error_count: int = Field(default=0, ge=0)
+    source_error_count: int = Field(default=0, ge=0)
