@@ -46,6 +46,7 @@ yerel Streamlit uygulaması.
 - SQLite yedeğini bütünlük kontrolüyle indirme ve güvenli geri yükleme
 - Geri yükleme öncesi güvenlik kopyalarını listeleme ve yeniden indirme
 - Portföy pozisyon ve şirket profili yoğunlaşma analizi
+- Ağırlık bazlı yoğunlaşma endeksi ve etkin pozisyon sayısı
 - SQLite ile yerel veri saklama
 
 ## Çalıştırma

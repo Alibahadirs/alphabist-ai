@@ -50,3 +50,6 @@ class PortfolioSummary(BaseModel):
     largest_position_percent: float = Field(default=0, ge=0, le=100)
     profile_exposure: dict[str, float] = Field(default_factory=dict)
     concentration_warnings: list[str] = Field(default_factory=list)
+    concentration_index: float = Field(default=0, ge=0, le=100)
+    effective_position_count: float = Field(default=0, ge=0)
+    diversification_status: str = "Veri yok"

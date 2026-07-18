@@ -12,6 +12,14 @@ MAX_POSITION_WEIGHT = 35.0
 MAX_PROFILE_WEIGHT = 60.0
 
 
+def _diversification_status(concentration_index: float) -> str:
+    if concentration_index <= 20:
+        return "Dengeli"
+    if concentration_index <= 35:
+        return "Orta yoğun"
+    return "Yoğun"
+
+
 def build_portfolio_summary(
     positions: Sequence[PortfolioPosition],
     companies: Mapping[str, FinancialMetrics],
@@ -123,6 +131,20 @@ def build_portfolio_summary(
         profile: round(weight, 2)
         for profile, weight in profile_exposure.items()
     }
+    weight_fractions = [
+        row.market_value / weight_base
+        for row in rows
+        if weight_base
+    ]
+    concentration_fraction = sum(
+        weight**2 for weight in weight_fractions
+    )
+    concentration_index = round(concentration_fraction * 100, 2)
+    effective_position_count = (
+        1 / concentration_fraction
+        if concentration_fraction
+        else 0
+    )
     largest_position = max(
         rows,
         key=lambda row: row.weight_percent,
@@ -170,4 +192,13 @@ def build_portfolio_summary(
         ),
         profile_exposure=profile_exposure,
         concentration_warnings=concentration_warnings,
+        concentration_index=concentration_index,
+        effective_position_count=round(
+            effective_position_count, 2
+        ),
+        diversification_status=(
+            _diversification_status(concentration_index)
+            if rows
+            else "Veri yok"
+        ),
     )

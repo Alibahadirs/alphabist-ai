@@ -2611,6 +2611,21 @@ def render_portfolio() -> None:
             ),
             border=True,
         )
+        st.metric(
+            "Çeşitlendirme",
+            summary.diversification_status,
+            border=True,
+        )
+        st.metric(
+            "Etkin pozisyon",
+            f"{summary.effective_position_count:.1f}",
+            border=True,
+        )
+
+    st.caption(
+        "Ağırlık bazlı yoğunlaşma endeksi: "
+        f"{summary.concentration_index:.1f}/100"
+    )
 
     if summary.verification_required_count:
         pending_symbols = [

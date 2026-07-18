@@ -75,6 +75,9 @@ def test_portfolio_summary_calculates_return_and_weighted_alpha():
     assert summary.largest_position_percent == 100
     assert summary.profile_exposure == {"standard": 100}
     assert summary.concentration_warnings
+    assert summary.concentration_index == 100
+    assert summary.effective_position_count == 1
+    assert summary.diversification_status == "Yoğun"
 
 
 def test_portfolio_exposes_unverified_position_value_and_confidence():
@@ -127,3 +130,31 @@ def test_portfolio_calculates_position_and_profile_concentration():
         "standard" in warning
         for warning in summary.concentration_warnings
     )
+    assert summary.concentration_index == pytest.approx(58)
+    assert summary.effective_position_count == pytest.approx(1.72)
+    assert summary.diversification_status == "Yoğun"
+
+
+def test_equal_weight_portfolio_is_classified_as_diversified():
+    symbols = ["AAA", "BBB", "CCC", "DDD", "EEE"]
+    companies = {
+        symbol: _company(symbol) for symbol in symbols
+    }
+    positions = [
+        PortfolioPosition(
+            symbol=symbol,
+            quantity=1,
+            average_cost=20,
+        )
+        for symbol in symbols
+    ]
+
+    summary = build_portfolio_summary(
+        positions,
+        companies,
+        {symbol: 20 for symbol in symbols},
+    )
+
+    assert summary.concentration_index == pytest.approx(20)
+    assert summary.effective_position_count == pytest.approx(5)
+    assert summary.diversification_status == "Dengeli"
