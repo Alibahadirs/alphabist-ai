@@ -2719,6 +2719,7 @@ def render_portfolio() -> None:
             [
                 {
                     "Senaryo": scenario.label,
+                    "Etkilenen": scenario.affected_scope,
                     "Fiyat şoku (%)": scenario.shock_percent,
                     "Tahmini portföy değeri (TL)": (
                         scenario.projected_market_value
@@ -2737,8 +2738,9 @@ def render_portfolio() -> None:
         with st.container(border=True):
             st.subheader("Basit fiyat stres testi")
             st.caption(
-                "Tüm pozisyonlara aynı fiyat hareketi uygulanır. Sonuçlar "
-                "mekanik senaryodur; şirket duyarlılığı, korelasyon veya "
+                "İlk üç senaryo tüm portföye, yoğunlaşma senaryoları ise "
+                "yalnızca belirtilen pozisyon veya şirket profiline "
+                "uygulanır. Sonuçlar mekanik senaryodur; korelasyon veya "
                 "gelecek fiyat tahmini içermez."
             )
             st.dataframe(

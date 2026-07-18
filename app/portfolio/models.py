@@ -35,6 +35,7 @@ class PortfolioRow(BaseModel):
 
 class PortfolioStressScenario(BaseModel):
     label: str
+    affected_scope: str
     shock_percent: float
     projected_market_value: float
     value_change: float

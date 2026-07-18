@@ -16,6 +16,8 @@ from app.sector.profiles import CompanyProfile
 MAX_POSITION_WEIGHT = 35.0
 MAX_PROFILE_WEIGHT = 60.0
 STRESS_SHOCKS = (-20.0, -10.0, 10.0)
+LARGEST_POSITION_SHOCK = -25.0
+LARGEST_PROFILE_SHOCK = -15.0
 
 
 def _diversification_status(concentration_index: float) -> str:
@@ -29,11 +31,19 @@ def _diversification_status(concentration_index: float) -> str:
 def _build_stress_scenarios(
     total_market_value: float,
     total_cost: float,
+    rows: Sequence[PortfolioRow],
 ) -> list[PortfolioStressScenario]:
     scenarios: list[PortfolioStressScenario] = []
-    for shock_percent in STRESS_SHOCKS:
-        projected_market_value = total_market_value * (
-            1 + shock_percent / 100
+
+    def add_scenario(
+        label: str,
+        affected_scope: str,
+        shock_percent: float,
+        affected_market_value: float,
+    ) -> None:
+        projected_market_value = (
+            total_market_value
+            + affected_market_value * shock_percent / 100
         )
         value_change = projected_market_value - total_market_value
         projected_profit_loss = projected_market_value - total_cost
@@ -42,10 +52,10 @@ def _build_stress_scenarios(
             if total_cost
             else 0
         )
-        direction = "düşüş" if shock_percent < 0 else "yükseliş"
         scenarios.append(
             PortfolioStressScenario(
-                label=f"%{abs(shock_percent):.0f} {direction}",
+                label=label,
+                affected_scope=affected_scope,
                 shock_percent=shock_percent,
                 projected_market_value=round(projected_market_value, 2),
                 value_change=round(value_change, 2),
@@ -55,6 +65,42 @@ def _build_stress_scenarios(
                 ),
             )
         )
+
+    for shock_percent in STRESS_SHOCKS:
+        direction = "düşüş" if shock_percent < 0 else "yükseliş"
+        add_scenario(
+            label=f"%{abs(shock_percent):.0f} {direction}",
+            affected_scope="Tüm portföy",
+            shock_percent=shock_percent,
+            affected_market_value=total_market_value,
+        )
+
+    if rows and total_market_value > 0:
+        largest_position = max(rows, key=lambda row: row.market_value)
+        add_scenario(
+            label="En büyük pozisyon düşüşü",
+            affected_scope=largest_position.symbol,
+            shock_percent=LARGEST_POSITION_SHOCK,
+            affected_market_value=largest_position.market_value,
+        )
+
+        profile_values: dict[str, float] = {}
+        for row in rows:
+            profile_values[row.company_profile] = (
+                profile_values.get(row.company_profile, 0)
+                + row.market_value
+            )
+        largest_profile, largest_profile_value = max(
+            profile_values.items(),
+            key=lambda item: item[1],
+        )
+        add_scenario(
+            label="En büyük profil düşüşü",
+            affected_scope=f"{largest_profile} profili",
+            shock_percent=LARGEST_PROFILE_SHOCK,
+            affected_market_value=largest_profile_value,
+        )
+
     return scenarios
 
 
@@ -242,5 +288,6 @@ def build_portfolio_summary(
         stress_scenarios=_build_stress_scenarios(
             total_market_value,
             total_cost,
+            rows,
         ),
     )

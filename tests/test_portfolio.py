@@ -79,24 +79,29 @@ def test_portfolio_summary_calculates_return_and_weighted_alpha():
     assert summary.effective_position_count == 1
     assert summary.diversification_status == "Yoğun"
     scenarios = {
-        scenario.shock_percent: scenario
+        scenario.label: scenario
         for scenario in summary.stress_scenarios
     }
-    assert set(scenarios) == {-20, -10, 10}
-    assert scenarios[-20].label == "%20 düşüş"
-    assert scenarios[-20].projected_market_value == 200
-    assert scenarios[-20].value_change == -50
-    assert scenarios[-20].projected_profit_loss == 0
-    assert scenarios[-20].projected_return_percent == 0
-    assert scenarios[-10].projected_market_value == 225
-    assert scenarios[-10].value_change == -25
-    assert scenarios[-10].projected_profit_loss == 25
-    assert scenarios[-10].projected_return_percent == 12.5
-    assert scenarios[10].label == "%10 yükseliş"
-    assert scenarios[10].projected_market_value == 275
-    assert scenarios[10].value_change == 25
-    assert scenarios[10].projected_profit_loss == 75
-    assert scenarios[10].projected_return_percent == 37.5
+    assert set(scenarios) == {
+        "%20 düşüş",
+        "%10 düşüş",
+        "%10 yükseliş",
+        "En büyük pozisyon düşüşü",
+        "En büyük profil düşüşü",
+    }
+    assert scenarios["%20 düşüş"].affected_scope == "Tüm portföy"
+    assert scenarios["%20 düşüş"].projected_market_value == 200
+    assert scenarios["%20 düşüş"].value_change == -50
+    assert scenarios["%20 düşüş"].projected_profit_loss == 0
+    assert scenarios["%20 düşüş"].projected_return_percent == 0
+    assert scenarios["%10 düşüş"].projected_market_value == 225
+    assert scenarios["%10 düşüş"].value_change == -25
+    assert scenarios["%10 düşüş"].projected_profit_loss == 25
+    assert scenarios["%10 düşüş"].projected_return_percent == 12.5
+    assert scenarios["%10 yükseliş"].projected_market_value == 275
+    assert scenarios["%10 yükseliş"].value_change == 25
+    assert scenarios["%10 yükseliş"].projected_profit_loss == 75
+    assert scenarios["%10 yükseliş"].projected_return_percent == 37.5
 
 
 def test_portfolio_stress_return_handles_zero_cost():
@@ -167,6 +172,24 @@ def test_portfolio_calculates_position_and_profile_concentration():
     assert summary.concentration_index == pytest.approx(58)
     assert summary.effective_position_count == pytest.approx(1.72)
     assert summary.diversification_status == "Yoğun"
+    scenarios = {
+        scenario.label: scenario
+        for scenario in summary.stress_scenarios
+    }
+    position_stress = scenarios["En büyük pozisyon düşüşü"]
+    assert position_stress.affected_scope == "STND"
+    assert position_stress.shock_percent == -25
+    assert position_stress.projected_market_value == 82.5
+    assert position_stress.value_change == -17.5
+    assert position_stress.projected_profit_loss == -17.5
+    assert position_stress.projected_return_percent == -17.5
+    profile_stress = scenarios["En büyük profil düşüşü"]
+    assert profile_stress.affected_scope == "standard profili"
+    assert profile_stress.shock_percent == -15
+    assert profile_stress.projected_market_value == 89.5
+    assert profile_stress.value_change == -10.5
+    assert profile_stress.projected_profit_loss == -10.5
+    assert profile_stress.projected_return_percent == -10.5
 
 
 def test_equal_weight_portfolio_is_classified_as_diversified():
