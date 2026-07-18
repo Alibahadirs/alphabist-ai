@@ -42,10 +42,12 @@ class PortfolioRow(BaseModel):
     technical_price_date: date | None = None
     technical_status: str = "Kayıt yok"
     technical_current: bool = False
+    combined_score: float | None = Field(default=None, ge=0, le=100)
     confidence_score: float | None = Field(default=None, ge=0, le=100)
     confidence_status: str = ""
     decision: str = ""
     decision_ready: bool = True
+    combined_decision_ready: bool = False
     calculation_check_status: str = "Kayıt yok"
     company_profile: str = "standard"
     weight_percent: float = Field(default=0, ge=0, le=100)
@@ -88,6 +90,11 @@ class PortfolioSummary(BaseModel):
     decision_ready_count: int = Field(default=0, ge=0)
     verification_required_count: int = Field(default=0, ge=0)
     decision_ready_value_percent: float = Field(default=0, ge=0, le=100)
+    combined_decision_ready_count: int = Field(default=0, ge=0)
+    combined_verification_required_count: int = Field(default=0, ge=0)
+    combined_decision_ready_value_percent: float = Field(
+        default=0, ge=0, le=100
+    )
     largest_position_symbol: str = ""
     largest_position_percent: float = Field(default=0, ge=0, le=100)
     profile_exposure: dict[str, float] = Field(default_factory=dict)

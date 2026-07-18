@@ -3217,8 +3217,18 @@ def render_portfolio() -> None:
             border=True,
         )
         st.metric(
-            "Karara hazır değer",
+            "Finansal hazır değer",
             f"%{summary.decision_ready_value_percent:.1f}",
+            border=True,
+        )
+        st.metric(
+            "Birleşik hazır değer",
+            f"%{summary.combined_decision_ready_value_percent:.1f}",
+            border=True,
+        )
+        st.metric(
+            "Birleşik hazır pozisyon",
+            f"{summary.combined_decision_ready_count}/{len(summary.rows)}",
             border=True,
         )
         st.metric(
@@ -3259,9 +3269,9 @@ def render_portfolio() -> None:
 
     if not summary.portfolio_score_ready:
         st.warning(
-            "Birleşik portföy puanı için güncel fiyat, güncel teknik "
-            "kayıt ve finansal karar kapsamlarının her biri en az %90 "
-            "olmalıdır."
+            "Birleşik portföy puanı için güncel fiyat kapsamı ve aynı "
+            "pozisyonda finansal-teknik doğrulamayı geçen birleşik kapsam "
+            "en az %90 olmalıdır."
         )
         if summary.score_readiness_issues:
             with st.container(border=True):
@@ -3313,6 +3323,17 @@ def render_portfolio() -> None:
             "gerektiriyor: "
             + ", ".join(pending_symbols)
         )
+    if summary.combined_verification_required_count:
+        combined_pending_symbols = [
+            row.symbol
+            for row in summary.rows
+            if not row.combined_decision_ready
+        ]
+        st.warning(
+            f"{summary.combined_verification_required_count} pozisyon "
+            "birleşik doğrulama gerektiriyor: "
+            + ", ".join(combined_pending_symbols)
+        )
     for warning in summary.concentration_warnings:
         st.warning(warning)
 
@@ -3334,12 +3355,18 @@ def render_portfolio() -> None:
             "Analiz güveni (%)": row.confidence_score,
             "Güven durumu": row.confidence_status,
             "Karar": row.decision,
-            "Karar hazırlığı": (
+            "Finansal hazırlık": (
                 "Hazır" if row.decision_ready else "Doğrulama gerekli"
+            ),
+            "Birleşik hazırlık": (
+                "Hazır"
+                if row.combined_decision_ready
+                else "Doğrulama gerekli"
             ),
             "Hesap kontrolü": row.calculation_check_status,
             "Fiyat durumu": row.price_status,
             "Teknik puan": row.technical_score,
+            "Birleşik puan": row.combined_score,
             "Teknik sinyal": (
                 row.technical_signal if row.technical_current else "-"
             ),
@@ -3386,6 +3413,12 @@ def render_portfolio() -> None:
                 ),
                 "Teknik puan": st.column_config.ProgressColumn(
                     "Teknik puan",
+                    min_value=0,
+                    max_value=100,
+                    format="%.1f",
+                ),
+                "Birleşik puan": st.column_config.ProgressColumn(
+                    "Birleşik puan",
                     min_value=0,
                     max_value=100,
                     format="%.1f",

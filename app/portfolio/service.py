@@ -207,6 +207,16 @@ def build_portfolio_summary(
             latest_technical.price_date if latest_technical else None,
             effective_reference_date,
         )
+        technical_current = (
+            bool(latest_technical)
+            and technical_freshness.current
+        )
+        financial_decision_ready = (
+            confidence.decision_ready if confidence else True
+        )
+        combined_decision_ready = (
+            financial_decision_ready and technical_current
+        )
 
         rows.append(
             PortfolioRow(
@@ -244,16 +254,20 @@ def build_portfolio_summary(
                     if latest_technical
                     else "Kayıt yok"
                 ),
-                technical_current=(
-                    bool(latest_technical)
-                    and technical_freshness.current
+                technical_current=technical_current,
+                combined_score=(
+                    calculate_combined_score(
+                        score.total,
+                        latest_technical.total_score,
+                    )
+                    if combined_decision_ready and latest_technical
+                    else None
                 ),
                 confidence_score=confidence.total if confidence else None,
                 confidence_status=confidence.status if confidence else "",
                 decision=confidence.decision if confidence else score.decision,
-                decision_ready=(
-                    confidence.decision_ready if confidence else True
-                ),
+                decision_ready=financial_decision_ready,
+                combined_decision_ready=combined_decision_ready,
                 calculation_check_status=(
                     confidence.calculation_check_status
                     if confidence
@@ -327,6 +341,18 @@ def build_portfolio_summary(
     decision_ready_value_percent = (
         decision_ready_value / weight_base * 100 if weight_base else 0
     )
+    combined_ready_rows = [
+        row for row in rows
+        if row.combined_decision_ready and row.combined_score is not None
+    ]
+    combined_decision_ready_value = sum(
+        row.market_value for row in combined_ready_rows
+    )
+    combined_decision_ready_value_percent = (
+        combined_decision_ready_value / weight_base * 100
+        if weight_base
+        else 0
+    )
     current_price_value = sum(
         row.market_value for row in rows if row.price_current
     )
@@ -361,9 +387,7 @@ def build_portfolio_summary(
         bool(rows)
         and current_price_value_percent
         >= MIN_PORTFOLIO_SCORE_COVERAGE
-        and current_technical_value_percent
-        >= MIN_PORTFOLIO_SCORE_COVERAGE
-        and decision_ready_value_percent
+        and combined_decision_ready_value_percent
         >= MIN_PORTFOLIO_SCORE_COVERAGE
     )
     score_readiness_issues = [
@@ -392,12 +416,16 @@ def build_portfolio_summary(
         )
     ]
     weighted_combined_score = (
-        calculate_combined_score(
-            weighted_alpha_score,
-            weighted_technical_score,
+        round(
+            sum(
+                float(row.combined_score) * row.market_value
+                for row in combined_ready_rows
+            )
+            / combined_decision_ready_value,
+            2,
         )
         if portfolio_score_ready
-        and weighted_technical_score is not None
+        and combined_decision_ready_value
         else None
     )
     largest_position = max(
@@ -444,6 +472,15 @@ def build_portfolio_summary(
         ),
         decision_ready_value_percent=round(
             decision_ready_value_percent, 2
+        ),
+        combined_decision_ready_count=sum(
+            row.combined_decision_ready for row in rows
+        ),
+        combined_verification_required_count=sum(
+            not row.combined_decision_ready for row in rows
+        ),
+        combined_decision_ready_value_percent=round(
+            combined_decision_ready_value_percent, 2
         ),
         largest_position_symbol=(
             largest_position.symbol if largest_position else ""

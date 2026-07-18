@@ -1,13 +1,21 @@
+from calendar import monthrange
 from datetime import date, datetime
 
 import pytest
 
+from app.audit.models import (
+    CompanyDataAudit,
+    DataSourceType,
+    MetricSourceType,
+)
+from app.core.settings import settings
 from app.database import repository
 from app.portfolio.models import PortfolioMarketPrice, PortfolioPosition
 from app.portfolio.service import build_portfolio_summary
 from app.scoring.models import FinancialMetrics
 from app.sector.profiles import CompanyProfile
 from app.technical.models import TechnicalHistoryEntry
+from app.validation.service import PROFILE_REQUIREMENTS
 
 
 def _company(
@@ -30,6 +38,41 @@ def _company(
         valuation_score_input=75,
         management_score_input=80,
         risk_score_input=70,
+    )
+
+
+def _verified_audit(symbol: str) -> CompanyDataAudit:
+    today = date.today()
+    quarter_ends = [
+        date(today.year - 1, 12, 31),
+        *[
+            date(today.year, month, monthrange(today.year, month)[1])
+            for month in (3, 6, 9, 12)
+        ],
+    ]
+    report_period_end = max(
+        value for value in quarter_ends if value <= today
+    )
+    required = PROFILE_REQUIREMENTS[CompanyProfile.STANDARD]
+    return CompanyDataAudit(
+        symbol=symbol,
+        source_type=DataSourceType.PDF,
+        company_profile=CompanyProfile.STANDARD,
+        period_months=report_period_end.month,
+        report_period_end=report_period_end,
+        financial_report_name=f"{symbol}.pdf",
+        financial_report_hash="a" * 64,
+        comparison_period_end=report_period_end.replace(
+            year=report_period_end.year - 1
+        ),
+        comparison_period_confirmed=True,
+        completeness=100,
+        alpha_score=80,
+        methodology_version=settings.scoring_methodology_version,
+        field_sources={
+            field: MetricSourceType.FINANCIAL_REPORT
+            for field in required
+        },
     )
 
 
@@ -73,6 +116,8 @@ def test_portfolio_summary_calculates_return_and_weighted_alpha():
     assert summary.decision_ready_count == 1
     assert summary.verification_required_count == 0
     assert summary.decision_ready_value_percent == 100
+    assert summary.combined_decision_ready_value_percent == 0
+    assert summary.rows[0].combined_decision_ready is False
     assert summary.rows[0].weight_percent == 100
     assert summary.largest_position_symbol == "TEST"
     assert summary.largest_position_percent == 100
@@ -140,6 +185,7 @@ def test_portfolio_exposes_unverified_position_value_and_confidence():
     assert summary.decision_ready_count == 0
     assert summary.verification_required_count == 1
     assert summary.decision_ready_value_percent == 0
+    assert summary.combined_decision_ready_value_percent == 0
 
 
 def test_portfolio_calculates_position_and_profile_concentration():
@@ -362,9 +408,62 @@ def test_portfolio_builds_combined_score_from_verified_coverage():
     assert summary.current_price_value_percent == 100
     assert summary.current_technical_value_percent == 100
     assert summary.decision_ready_value_percent == 100
+    assert summary.combined_decision_ready_value_percent == 100
+    assert summary.combined_decision_ready_count == 2
+    assert all(row.combined_decision_ready for row in summary.rows)
+    assert all(row.combined_score is not None for row in summary.rows)
     assert summary.weighted_technical_score == 75
     assert summary.weighted_combined_score == pytest.approx(
         round(summary.weighted_alpha_score * 0.7 + 75 * 0.3, 2)
     )
     assert summary.portfolio_score_ready is True
     assert summary.score_readiness_issues == []
+
+
+def test_portfolio_combined_coverage_uses_same_positions():
+    companies = {
+        symbol: _company(symbol)
+        for symbol in ("FINON", "TECHON", "BOTH")
+    }
+    positions = [
+        PortfolioPosition(
+            symbol="FINON", quantity=1, average_cost=10
+        ),
+        PortfolioPosition(
+            symbol="TECHON", quantity=1, average_cost=10
+        ),
+        PortfolioPosition(
+            symbol="BOTH", quantity=8, average_cost=10
+        ),
+    ]
+    prices = {
+        position.symbol: PortfolioMarketPrice(
+            value=10,
+            as_of_date=date(2026, 7, 17),
+            source="Yahoo Finance",
+        )
+        for position in positions
+    }
+    summary = build_portfolio_summary(
+        positions,
+        companies,
+        prices,
+        latest_audits={
+            "FINON": _verified_audit("FINON"),
+            "BOTH": _verified_audit("BOTH"),
+        },
+        technical_histories={
+            "TECHON": [
+                _technical_history("TECHON", 1, 70)
+            ],
+            "BOTH": [_technical_history("BOTH", 2, 80)],
+        },
+        reference_date=date(2026, 7, 18),
+    )
+
+    assert summary.decision_ready_value_percent == 90
+    assert summary.current_technical_value_percent == 90
+    assert summary.combined_decision_ready_value_percent == 80
+    assert summary.combined_decision_ready_count == 1
+    assert summary.portfolio_score_ready is False
+    assert summary.weighted_combined_score is None
