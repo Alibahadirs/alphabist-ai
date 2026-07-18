@@ -70,6 +70,7 @@ yerel Streamlit uygulaması.
 - Portföyde pozisyon kesişimine dayalı birleşik hazırlık ve değer kapsamı
 - Teknik kayıtlarda güncellik, metodoloji, hizalama ve kaynak sağlık kontrolü
 - Teknik toplam puan, kategori kırılımı ve sinyal bütünlüğü doğrulaması
+- Teknik güçlenmede aynı metodolojili ve doğrulanmış geçmiş kayıt karşılaştırması
 - SQLite ile yerel veri saklama
 
 ## Çalıştırma

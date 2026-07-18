@@ -6,7 +6,11 @@ from app.confidence.service import calculate_analysis_confidence
 from app.scoring.engine import calculate_alpha_score
 from app.scoring.models import FinancialMetrics
 from app.technical.models import TechnicalHistoryEntry
-from app.technical.quality import assess_technical_record
+from app.technical.quality import (
+    assess_technical_record,
+    select_latest_technical_record,
+    select_previous_comparable_record,
+)
 from app.watchlist.models import WatchlistEntry, WatchlistRow, WatchlistSummary
 
 
@@ -43,13 +47,12 @@ def build_watchlist_summary(
             confidence.decision_ready if confidence else True
         )
         technical_history = histories.get(company.symbol.upper(), [])
-        latest_technical = (
-            technical_history[-1] if technical_history else None
+        latest_technical = select_latest_technical_record(
+            technical_history
         )
-        previous_technical = (
-            technical_history[-2]
-            if len(technical_history) >= 2
-            else None
+        previous_technical = select_previous_comparable_record(
+            technical_history,
+            latest_technical,
         )
         technical_health = assess_technical_record(
             latest_technical,
@@ -88,7 +91,7 @@ def build_watchlist_summary(
                 technical_delta=(
                     latest_technical.total_score
                     - previous_technical.total_score
-                    if latest_technical and previous_technical
+                    if technical_current and previous_technical
                     else None
                 ),
                 technical_signal=(

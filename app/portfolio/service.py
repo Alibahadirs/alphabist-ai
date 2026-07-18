@@ -17,7 +17,10 @@ from app.scoring.models import FinancialMetrics
 from app.sector.profiles import CompanyProfile
 from app.technical.engine import calculate_combined_score
 from app.technical.models import TechnicalHistoryEntry
-from app.technical.quality import assess_technical_record
+from app.technical.quality import (
+    assess_technical_record,
+    select_latest_technical_record,
+)
 
 
 MAX_POSITION_WEIGHT = 35.0
@@ -201,8 +204,8 @@ def build_portfolio_summary(
             else None
         )
         technical_history = histories.get(company.symbol.upper(), [])
-        latest_technical = (
-            technical_history[-1] if technical_history else None
+        latest_technical = select_latest_technical_record(
+            technical_history
         )
         technical_health = assess_technical_record(
             latest_technical,

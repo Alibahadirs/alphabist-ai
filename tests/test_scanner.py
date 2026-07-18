@@ -283,3 +283,43 @@ def test_scanner_rejects_current_record_from_old_methodology():
 
     assert summary.rows == []
     assert summary.current_technical_count == 0
+
+
+def test_scanner_strengthening_skips_invalid_intermediate_record():
+    company = _company("RISING", 25, 30, 0.4, 100)
+    invalid_middle = _technical_history(
+        "RISING",
+        2,
+        95,
+        date(2026, 7, 16),
+    ).model_copy(
+        update={
+            "score_breakdown": {
+                **_score_breakdown(95),
+                "trend": 0,
+            }
+        }
+    )
+    summary = scan_companies(
+        [company],
+        ScannerFilters(
+            minimum_alpha_score=0,
+            positive_operating_cash_flow_only=False,
+            technical_strengthening_only=True,
+        ),
+        technical_histories={
+            "RISING": [
+                _technical_history(
+                    "RISING", 1, 60, date(2026, 7, 15)
+                ),
+                invalid_middle,
+                _technical_history(
+                    "RISING", 3, 70, date(2026, 7, 17)
+                ),
+            ]
+        },
+        reference_date=date(2026, 7, 18),
+    )
+
+    assert [row.symbol for row in summary.rows] == ["RISING"]
+    assert summary.rows[0].technical_delta == 10

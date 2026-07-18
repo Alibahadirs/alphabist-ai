@@ -8,7 +8,11 @@ from app.scoring.engine import calculate_alpha_score
 from app.scoring.models import FinancialMetrics
 from app.sector.profiles import CompanyProfile
 from app.technical.models import TechnicalHistoryEntry
-from app.technical.quality import assess_technical_record
+from app.technical.quality import (
+    assess_technical_record,
+    select_latest_technical_record,
+    select_previous_comparable_record,
+)
 
 
 def scan_companies(
@@ -38,13 +42,12 @@ def scan_companies(
             else None
         )
         technical_history = histories.get(company.symbol.upper(), [])
-        latest_technical = (
-            technical_history[-1] if technical_history else None
+        latest_technical = select_latest_technical_record(
+            technical_history
         )
-        previous_technical = (
-            technical_history[-2]
-            if len(technical_history) >= 2
-            else None
+        previous_technical = select_previous_comparable_record(
+            technical_history,
+            latest_technical,
         )
         technical_health = assess_technical_record(
             latest_technical,
@@ -53,7 +56,7 @@ def scan_companies(
         technical_current = technical_health.current
         technical_delta = (
             latest_technical.total_score - previous_technical.total_score
-            if latest_technical and previous_technical
+            if technical_current and previous_technical
             else None
         )
         financial_decision_ready = (

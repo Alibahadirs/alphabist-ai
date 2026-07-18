@@ -3,6 +3,8 @@ from datetime import date, datetime
 from app.technical.models import TechnicalHistoryEntry
 from app.technical.quality import (
     build_technical_quality_summary,
+    select_latest_technical_record,
+    select_previous_comparable_record,
     select_technical_refresh_candidates,
 )
 
@@ -228,3 +230,34 @@ def test_technical_quality_rejects_score_breakdown_mismatch():
     assert row.score_integrity_verified is False
     assert summary.score_integrity_error_count == 1
     assert select_technical_refresh_candidates(summary) == ["BROKEN"]
+
+
+def test_previous_record_selection_skips_invalid_and_same_day_entries():
+    valid_old = _history_entry(
+        1,
+        "TEST",
+        date(2026, 7, 15),
+        60,
+    )
+    invalid_middle = _history_entry(
+        2,
+        "TEST",
+        date(2026, 7, 16),
+        95,
+    ).model_copy(update={"score_breakdown": _score_breakdown(50)})
+    same_day = _history_entry(
+        3,
+        "TEST",
+        date(2026, 7, 17),
+        68,
+    )
+    latest = _history_entry(
+        4,
+        "TEST",
+        date(2026, 7, 17),
+        70,
+    )
+    history = [valid_old, invalid_middle, same_day, latest]
+
+    assert select_latest_technical_record(history) == latest
+    assert select_previous_comparable_record(history, latest) == valid_old

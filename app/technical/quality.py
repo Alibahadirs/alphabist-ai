@@ -95,6 +95,36 @@ def verify_technical_score_integrity(
     )
 
 
+def select_latest_technical_record(
+    history: Sequence[TechnicalHistoryEntry],
+) -> TechnicalHistoryEntry | None:
+    return max(history, key=lambda entry: entry.id, default=None)
+
+
+def select_previous_comparable_record(
+    history: Sequence[TechnicalHistoryEntry],
+    latest: TechnicalHistoryEntry | None,
+) -> TechnicalHistoryEntry | None:
+    if latest is None:
+        return None
+
+    candidates = [
+        entry
+        for entry in history
+        if entry.id != latest.id
+        and entry.price_date < latest.price_date
+        and entry.methodology_version == latest.methodology_version
+        and entry.alignment_status in VERIFIED_ALIGNMENT_STATUSES
+        and entry.source.strip().casefold() not in INVALID_SOURCES
+        and verify_technical_score_integrity(entry)
+    ]
+    return max(
+        candidates,
+        key=lambda entry: (entry.price_date, entry.id),
+        default=None,
+    )
+
+
 def assess_technical_record(
     entry: TechnicalHistoryEntry | None,
     reference_date: date | None = None,
@@ -182,7 +212,9 @@ def build_technical_quality_summary(
             )
             continue
 
-        latest = max(history, key=lambda entry: entry.id)
+        latest = select_latest_technical_record(history)
+        if latest is None:
+            continue
         health = assess_technical_record(latest, reference_date)
         rows.append(
             TechnicalQualityRow(
