@@ -20,6 +20,7 @@ yerel Streamlit uygulaması.
 - Banka, sigorta, GYO ve finansal hizmet şirketleri için sektöre özgü doğrulama
 - Sektör puanlaması ile zorunlu göstergeleri birebir eşleştiren tamlık kontrolü
 - Finansal hizmetlerde sermaye yeterliliği veya borç / özkaynak alternatifi
+- Puan tablolarında sektöre özgü kategori adı ve hesap dayanağı
 - Veri yeterliliği ve kaynak kanıtına göre bağımsız analiz güveni puanı
 - Düşük güvenli kayıtlarda yatırım kararını otomatik doğrulama seviyesine çekme
 - Her analiz için metodoloji, kategori puanları, güven ve karar anlık görüntüsü

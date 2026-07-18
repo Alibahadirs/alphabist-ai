@@ -86,6 +86,7 @@ from app.portfolio.service import build_portfolio_summary
 from app.reporting.models import REPORT_FRESHNESS_LABELS, ReportFreshnessStatus
 from app.reporting.service import assess_report_period, report_period_regresses
 from app.scoring.engine import calculate_alpha_score
+from app.scoring.labels import get_category_evidence, get_category_label
 from app.scoring.models import FinancialMetrics, ScoreBreakdown
 from app.sector.profiles import (
     CompanyProfile,
@@ -120,18 +121,6 @@ from app.validation.service import (
     validate_financial_metrics,
 )
 
-
-CATEGORY_LABELS = {
-    "profitability": "Karlılık",
-    "growth": "Büyüme",
-    "leverage": "Borçluluk",
-    "liquidity": "Likidite",
-    "cash_flow": "Nakit akışı",
-    "efficiency": "Verimlilik",
-    "valuation": "Değerleme",
-    "risk": "Risk dayanıklılığı",
-    "management": "Yönetim",
-}
 
 TECHNICAL_LABELS = {
     "trend": ("Trend", 20),
@@ -244,11 +233,13 @@ def _quote_date(quote: dict) -> date | None:
 
 
 def _score_table(score: ScoreBreakdown) -> pd.DataFrame:
+    profile = CompanyProfile(score.company_profile)
     rows = []
     for category, maximum in CATEGORY_MAX_POINTS.items():
         rows.append(
             {
-                "Kategori": CATEGORY_LABELS[category],
+                "Kategori": get_category_label(profile, category),
+                "Dayanak": get_category_evidence(profile, category),
                 "Puan": getattr(score, category),
                 "Maksimum": maximum,
             }
@@ -718,7 +709,10 @@ def _render_snapshot_comparison(
                 delta = comparison.category_deltas[category]
                 rows.append(
                     {
-                        "Kategori": CATEGORY_LABELS[category],
+                        "Kategori": get_category_label(
+                            current.company_profile,
+                            category,
+                        ),
                         "Önceki": previous.score_breakdown[category],
                         "Güncel": current.score_breakdown[category],
                         "Değişim": delta,
@@ -911,9 +905,10 @@ def render_dashboard() -> None:
                                 else "-"
                             ),
                             **{
-                                CATEGORY_LABELS[category]: audit.score_breakdown.get(
-                                    category
-                                )
+                                get_category_label(
+                                    audit.company_profile,
+                                    category,
+                                ): audit.score_breakdown.get(category)
                                 for category in CATEGORY_MAX_POINTS
                             },
                         }
