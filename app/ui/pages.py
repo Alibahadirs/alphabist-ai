@@ -57,6 +57,7 @@ from app.database.backup import (
 from app.data_quality.service import FIELD_LABELS, build_data_quality_summary
 from app.market_data.provider import get_history, get_quote
 from app.market_data.freshness import assess_price_freshness
+from app.market_data.validation import validate_quote_history_alignment
 from app.parser.converter import to_financial_metrics
 from app.parser.extractor import (
     extract_activity_report,
@@ -909,6 +910,13 @@ def render_dashboard() -> None:
             quote, history = _load_market_data(symbol)
             quote_date = _quote_date(quote)
             quote_freshness = assess_price_freshness(quote_date)
+            market_alignment = validate_quote_history_alignment(
+                quote,
+                history,
+            )
+            market_data_ready = (
+                quote_freshness.current and market_alignment.valid
+            )
             technical_score = calculate_technical_score(history)
             combined_score = calculate_combined_score(
                 score.total,
@@ -927,15 +935,19 @@ def render_dashboard() -> None:
                 f"{technical_score.total:.1f}/100",
                 (
                     technical_score.signal
-                    if quote_freshness.current
-                    else "Fiyat doğrulanmalı"
+                    if market_data_ready
+                    else "Veri doğrulanmalı"
                 ),
                 border=True,
             )
             st.metric(
                 "Birleşik AI puanı",
                 f"{combined_score:.1f}/100",
-                "Temel %70 + teknik %30",
+                (
+                    "Temel %70 + teknik %30"
+                    if market_data_ready
+                    else "Doğrulama gerekli"
+                ),
                 border=True,
             )
             st.metric(
@@ -947,12 +959,13 @@ def render_dashboard() -> None:
             f"Kaynak: {quote.get('source') or 'Bilinmiyor'} | "
             "Fiyat tarihi: "
             f"{quote_date.strftime('%d.%m.%Y') if quote_date else '-'} | "
-            f"Durum: {quote_freshness.status}"
+            f"Durum: {quote_freshness.status} | "
+            f"Fiyat-grafik kontrolü: {market_alignment.status}"
         )
-        if not quote_freshness.current:
+        if not market_data_ready:
             st.warning(
-                "Teknik puan ve birleşik AI puanı güncel olduğu "
-                "doğrulanamayan fiyat verisine dayanıyor."
+                "Teknik puan ve birleşik AI puanı güncelliği veya grafik "
+                "uyumu doğrulanamayan piyasa verisine dayanıyor."
             )
 
         st.line_chart(history[["Close", "EMA_20", "EMA_50", "EMA_200"]])

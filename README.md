@@ -52,6 +52,7 @@ yerel Streamlit uygulaması.
 - Portföy fiyatları için kaynak, tarih ve güncellik doğrulaması
 - Stres testi için değer ağırlıklı güncel fiyat kapsamı eşiği
 - Genel bakış, takip listesi ve portföyde ortak fiyat güncelliği kuralı
+- Son fiyat ile teknik grafik tarihi ve kapanış değeri çapraz kontrolü
 - SQLite ile yerel veri saklama
 
 ## Çalıştırma

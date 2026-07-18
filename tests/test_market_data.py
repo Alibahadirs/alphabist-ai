@@ -3,6 +3,7 @@ from datetime import date
 
 from app.market_data import provider
 from app.market_data.freshness import assess_price_freshness
+from app.market_data.validation import validate_quote_history_alignment
 
 
 class _Ticker:
@@ -49,3 +50,40 @@ def test_price_freshness_uses_shared_five_day_rule():
     assert future.current is False
     assert future.status == "Tarih hatası"
     assert future.age_days == 0
+
+
+def test_quote_and_history_alignment_accepts_matching_market_data():
+    history = pd.DataFrame(
+        {"Close": [109.8, 110.0]},
+        index=pd.to_datetime(["2026-07-16", "2026-07-17"]),
+    )
+    result = validate_quote_history_alignment(
+        {"last": 110.0, "as_of_date": "2026-07-17"},
+        history,
+    )
+
+    assert result.valid is True
+    assert result.status == "Fiyat ve grafik verisi uyumlu"
+    assert result.quote_date == date(2026, 7, 17)
+    assert result.history_date == date(2026, 7, 17)
+    assert result.price_difference_percent == 0
+
+
+def test_quote_and_history_alignment_rejects_date_or_price_mismatch():
+    history = pd.DataFrame(
+        {"Close": [100.0]},
+        index=pd.to_datetime(["2026-07-14"]),
+    )
+    date_mismatch = validate_quote_history_alignment(
+        {"last": 100.0, "as_of_date": "2026-07-17"},
+        history,
+    )
+    price_mismatch = validate_quote_history_alignment(
+        {"last": 110.0, "as_of_date": "2026-07-14"},
+        history,
+    )
+
+    assert date_mismatch.valid is False
+    assert "3 gün farklı" in date_mismatch.status
+    assert price_mismatch.valid is False
+    assert "%9.09 farklı" in price_mismatch.status
