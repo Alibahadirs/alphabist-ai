@@ -84,7 +84,10 @@ from app.scanner.models import ScannerFilters
 from app.scanner.service import scan_companies
 from app.technical.engine import calculate_combined_score, calculate_technical_score
 from app.technical.models import TechnicalScoreBreakdown
-from app.technical.refresh import refresh_technical_scores
+from app.technical.refresh import (
+    MAX_TECHNICAL_REFRESH_BATCH,
+    refresh_technical_scores,
+)
 from app.watchlist.models import WatchlistEntry
 from app.watchlist.service import build_watchlist_summary
 from app.validation.service import (
@@ -1373,17 +1376,50 @@ def render_scanner() -> None:
         audit.symbol: audit for audit in list_latest_company_data_audits()
     }
 
+    company_symbols = [company.symbol for company in companies]
+    priority_symbols = list(
+        dict.fromkeys(
+            [
+                entry.symbol for entry in list_watchlist_entries()
+            ]
+            + [
+                position.symbol
+                for position in list_portfolio_positions()
+            ]
+        )
+    )
+    default_refresh_symbols = [
+        symbol
+        for symbol in priority_symbols
+        if symbol in company_symbols
+    ][:MAX_TECHNICAL_REFRESH_BATCH]
+    if not default_refresh_symbols:
+        default_refresh_symbols = company_symbols[
+            : min(10, len(company_symbols))
+        ]
+    refresh_symbols = st.multiselect(
+        "Teknik verisi güncellenecek hisseler",
+        company_symbols,
+        default=default_refresh_symbols,
+        max_selections=MAX_TECHNICAL_REFRESH_BATCH,
+        help=(
+            "Veri sağlayıcı yükünü sınırlamak için tek seferde en fazla "
+            f"{MAX_TECHNICAL_REFRESH_BATCH} hisse güncellenir. Takip "
+            "listesi ve portföy hisseleri öncelikli seçilir."
+        ),
+    )
     if st.button(
         "Teknik kayıtları güncelle",
         icon=":material/sync:",
+        disabled=not refresh_symbols,
         help=(
-            "Kayıtlı şirketlerin gecikmeli piyasa verisini doğrular ve "
+            "Seçilen şirketlerin gecikmeli piyasa verisini doğrular ve "
             "yalnız güncel, fiyat-grafik uyumlu teknik puanları kaydeder."
         ),
     ):
         with st.spinner("Teknik veriler doğrulanıp kaydediliyor..."):
             refresh_summary = refresh_technical_scores(
-                [company.symbol for company in companies],
+                refresh_symbols,
                 _load_market_data,
                 add_technical_score_history,
                 settings.technical_methodology_version,

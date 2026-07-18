@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 
 from app.technical.refresh import refresh_technical_scores
+import pytest
 
 
 def _price_frame(end_date: str) -> pd.DataFrame:
@@ -68,3 +69,42 @@ def test_refresh_saves_only_current_aligned_technical_scores():
     assert summary.unchanged == 1
     assert summary.rejected == 1
     assert summary.failed == 1
+
+
+def test_refresh_normalizes_duplicates_and_limits_batch_size():
+    frame = _price_frame("2026-07-17")
+    loaded_symbols = []
+
+    def loader(symbol):
+        loaded_symbols.append(symbol)
+        return (
+            {
+                "last": float(frame["Close"].iloc[-1]),
+                "as_of_date": "2026-07-17",
+                "source": "Yahoo Finance",
+            },
+            frame,
+        )
+
+    def saver(*args):
+        return True
+
+    summary = refresh_technical_scores(
+        [" test ", "TEST"],
+        loader,
+        saver,
+        "technical-2026.1",
+        reference_date=date(2026, 7, 18),
+    )
+
+    assert summary.total == 1
+    assert loaded_symbols == ["TEST"]
+
+    with pytest.raises(ValueError, match="en fazla 20"):
+        refresh_technical_scores(
+            [f"S{index}" for index in range(21)],
+            loader,
+            saver,
+            "technical-2026.1",
+            reference_date=date(2026, 7, 18),
+        )

@@ -18,6 +18,7 @@ SnapshotSaver = Callable[
     [str, date, str, TechnicalScoreBreakdown, str, str],
     bool,
 ]
+MAX_TECHNICAL_REFRESH_BATCH = 20
 
 
 def refresh_technical_scores(
@@ -26,10 +27,23 @@ def refresh_technical_scores(
     snapshot_saver: SnapshotSaver,
     methodology_version: str,
     reference_date: date | None = None,
+    max_batch_size: int = MAX_TECHNICAL_REFRESH_BATCH,
 ) -> TechnicalRefreshSummary:
+    normalized_symbols = list(
+        dict.fromkeys(
+            symbol.upper().strip()
+            for symbol in symbols
+            if symbol.strip()
+        )
+    )
+    if len(normalized_symbols) > max_batch_size:
+        raise ValueError(
+            "Teknik güncelleme tek seferde en fazla "
+            f"{max_batch_size} hisse kabul eder."
+        )
+
     items: list[TechnicalRefreshItem] = []
-    for raw_symbol in symbols:
-        symbol = raw_symbol.upper().strip()
+    for symbol in normalized_symbols:
         try:
             quote, history = market_loader(symbol)
             quote_date_value = quote.get("as_of_date")

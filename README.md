@@ -58,6 +58,7 @@ yerel Streamlit uygulaması.
 - Takip listesinde güncel teknik puan, değişim ve güçlenme takibi
 - Hisse tarayıcıda güncel teknik puan ve güçlenme filtreleri
 - Kayıtlı şirketler için doğrulamalı toplu teknik puan güncellemesi
+- En fazla 20 hisselik, takip listesi ve portföy öncelikli teknik güncelleme
 - SQLite ile yerel veri saklama
 
 ## Çalıştırma
