@@ -64,6 +64,7 @@ yerel Streamlit uygulaması.
 - Veri kalite merkezinde teknik kayıt güncelliği, kaynak ve metodoloji görünümü
 - Veri kalite merkezinden sorunlu teknik kayıtları doğrulamalı toplu yenileme
 - Finansal ve teknik doğrulamayı birleştiren şirket bazlı karara hazırlık kuyruğu
+- Hisse tarayıcıda finansal ve birleşik karara hazırlık filtreleri
 - SQLite ile yerel veri saklama
 
 ## Çalıştırma

@@ -10,6 +10,7 @@ class ScannerFilters(BaseModel):
     maximum_debt_to_equity: float = Field(default=3, ge=0)
     positive_operating_cash_flow_only: bool = True
     decision_ready_only: bool = False
+    combined_decision_ready_only: bool = False
     minimum_technical_score: float | None = Field(
         default=None, ge=0, le=100
     )
@@ -35,6 +36,7 @@ class ScannerRow(BaseModel):
     confidence_status: str = ""
     calculation_check_status: str = "Kayıt yok"
     decision_ready: bool = True
+    combined_decision_ready: bool = False
     technical_score: float | None = Field(default=None, ge=0, le=100)
     technical_delta: float | None = None
     technical_signal: str = ""
@@ -49,3 +51,4 @@ class ScannerSummary(BaseModel):
     matched_count: int = Field(ge=0)
     average_alpha_score: float = Field(ge=0, le=100)
     current_technical_count: int = Field(default=0, ge=0)
+    combined_decision_ready_count: int = Field(default=0, ge=0)

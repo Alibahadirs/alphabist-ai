@@ -1671,10 +1671,18 @@ def render_scanner() -> None:
                 value=True,
             )
             decision_ready_only = st.toggle(
-                "Yalnızca karara hazır şirketler",
+                "Yalnızca finansal olarak karara hazır şirketler",
                 value=False,
                 help=(
                     "Güncel raporu, yeterli güveni ve hesap tutarlılığı "
+                    "bulunan şirketleri gösterir."
+                ),
+            )
+            combined_decision_ready_only = st.toggle(
+                "Yalnızca birleşik olarak karara hazır şirketler",
+                value=False,
+                help=(
+                    "Finansal doğrulamaya ek olarak güncel teknik kaydı "
                     "bulunan şirketleri gösterir."
                 ),
             )
@@ -1705,6 +1713,7 @@ def render_scanner() -> None:
             maximum_debt_to_equity=maximum_debt_to_equity,
             positive_operating_cash_flow_only=positive_cash_flow,
             decision_ready_only=decision_ready_only,
+            combined_decision_ready_only=combined_decision_ready_only,
             minimum_technical_score=(
                 float(minimum_technical)
                 if minimum_technical > 0
@@ -1737,6 +1746,11 @@ def render_scanner() -> None:
             summary.current_technical_count,
             border=True,
         )
+        st.metric(
+            "Birleşik karara hazır",
+            summary.combined_decision_ready_count,
+            border=True,
+        )
 
     if not summary.rows:
         st.info("Seçilen ölçütlere uyan şirket bulunamadı.")
@@ -1753,8 +1767,13 @@ def render_scanner() -> None:
             "Analiz güveni (%)": row.confidence_score,
             "Güven durumu": row.confidence_status,
             "Hesap kontrolü": row.calculation_check_status,
-            "Karar hazırlığı": (
+            "Finansal hazırlık": (
                 "Hazır" if row.decision_ready else "Doğrulama gerekli"
+            ),
+            "Birleşik hazırlık": (
+                "Hazır"
+                if row.combined_decision_ready
+                else "Doğrulama gerekli"
             ),
             "Ciro büyümesi (%)": row.revenue_growth,
             "Net marj (%)": row.net_margin,

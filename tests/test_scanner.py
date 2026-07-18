@@ -170,3 +170,58 @@ def test_scanner_keeps_companies_without_technical_filter():
     assert summary.matched_count == 1
     assert summary.rows[0].technical_score is None
     assert summary.rows[0].technical_status == "Kayıt yok"
+    assert summary.rows[0].combined_decision_ready is False
+
+
+def test_scanner_combined_readiness_requires_current_technical_record():
+    current = _company("CURRENT", 25, 30, 0.4, 100)
+    stale = _company("STALE", 25, 30, 0.4, 100)
+    summary = scan_companies(
+        [current, stale],
+        ScannerFilters(
+            minimum_alpha_score=0,
+            positive_operating_cash_flow_only=False,
+            combined_decision_ready_only=True,
+        ),
+        technical_histories={
+            "CURRENT": [
+                _technical_history(
+                    "CURRENT", 1, 75, date(2026, 7, 17)
+                )
+            ],
+            "STALE": [
+                _technical_history(
+                    "STALE", 2, 80, date(2026, 7, 1)
+                )
+            ],
+        },
+        reference_date=date(2026, 7, 18),
+    )
+
+    assert [row.symbol for row in summary.rows] == ["CURRENT"]
+    assert summary.rows[0].combined_decision_ready is True
+    assert summary.combined_decision_ready_count == 1
+
+
+def test_scanner_combined_readiness_requires_financial_confidence():
+    company = _company("UNVERIFIED", 25, 30, 0.4, 100)
+    summary = scan_companies(
+        [company],
+        ScannerFilters(
+            minimum_alpha_score=0,
+            positive_operating_cash_flow_only=False,
+            combined_decision_ready_only=True,
+        ),
+        latest_audits={},
+        technical_histories={
+            "UNVERIFIED": [
+                _technical_history(
+                    "UNVERIFIED", 1, 75, date(2026, 7, 17)
+                )
+            ]
+        },
+        reference_date=date(2026, 7, 18),
+    )
+
+    assert summary.rows == []
+    assert summary.combined_decision_ready_count == 0

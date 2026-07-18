@@ -58,10 +58,17 @@ def scan_companies(
             if latest_technical and previous_technical
             else None
         )
+        financial_decision_ready = (
+            confidence.decision_ready if confidence else True
+        )
+        combined_decision_ready = (
+            financial_decision_ready and technical_current
+        )
         technical_filter_active = (
             filters.current_technical_only
             or filters.minimum_technical_score is not None
             or filters.technical_strengthening_only
+            or filters.combined_decision_ready_only
         )
         if technical_filter_active and not technical_current:
             continue
@@ -79,8 +86,12 @@ def scan_companies(
             continue
         if (
             filters.decision_ready_only
-            and confidence is not None
-            and not confidence.decision_ready
+            and not financial_decision_ready
+        ):
+            continue
+        if (
+            filters.combined_decision_ready_only
+            and not combined_decision_ready
         ):
             continue
         if score.total < filters.minimum_alpha_score:
@@ -118,9 +129,8 @@ def scan_companies(
                     if confidence
                     else "Kayıt yok"
                 ),
-                decision_ready=(
-                    confidence.decision_ready if confidence else True
-                ),
+                decision_ready=financial_decision_ready,
+                combined_decision_ready=combined_decision_ready,
                 technical_score=(
                     latest_technical.total_score
                     if latest_technical
@@ -157,5 +167,8 @@ def scan_companies(
         average_alpha_score=average_alpha_score,
         current_technical_count=sum(
             row.technical_current for row in rows
+        ),
+        combined_decision_ready_count=sum(
+            row.combined_decision_ready for row in rows
         ),
     )
