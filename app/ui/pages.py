@@ -56,6 +56,7 @@ from app.database.backup import (
 )
 from app.data_quality.service import FIELD_LABELS, build_data_quality_summary
 from app.market_data.provider import get_history, get_quote
+from app.market_data.freshness import assess_price_freshness
 from app.parser.converter import to_financial_metrics
 from app.parser.extractor import (
     extract_activity_report,
@@ -168,6 +169,11 @@ def _load_market_data(symbol: str):
 @st.cache_data(ttl="15m", max_entries=100, show_spinner=False)
 def _load_quote(symbol: str):
     return get_quote(symbol)
+
+
+def _quote_date(quote: dict) -> date | None:
+    value = quote.get("as_of_date")
+    return date.fromisoformat(str(value)) if value else None
 
 
 def _score_table(score: ScoreBreakdown) -> pd.DataFrame:
@@ -901,6 +907,8 @@ def render_dashboard() -> None:
     try:
         with st.spinner("Piyasa verisi ve teknik göstergeler hesaplanıyor..."):
             quote, history = _load_market_data(symbol)
+            quote_date = _quote_date(quote)
+            quote_freshness = assess_price_freshness(quote_date)
             technical_score = calculate_technical_score(history)
             combined_score = calculate_combined_score(
                 score.total,
@@ -917,7 +925,11 @@ def render_dashboard() -> None:
             st.metric(
                 "Teknik puan",
                 f"{technical_score.total:.1f}/100",
-                technical_score.signal,
+                (
+                    technical_score.signal
+                    if quote_freshness.current
+                    else "Fiyat doğrulanmalı"
+                ),
                 border=True,
             )
             st.metric(
@@ -931,7 +943,17 @@ def render_dashboard() -> None:
                 f"%{technical_score.atr_percent:.2f}",
                 border=True,
             )
-        st.caption("Piyasa verisi gecikmeli olabilir.")
+        st.caption(
+            f"Kaynak: {quote.get('source') or 'Bilinmiyor'} | "
+            "Fiyat tarihi: "
+            f"{quote_date.strftime('%d.%m.%Y') if quote_date else '-'} | "
+            f"Durum: {quote_freshness.status}"
+        )
+        if not quote_freshness.current:
+            st.warning(
+                "Teknik puan ve birleşik AI puanı güncel olduğu "
+                "doğrulanamayan fiyat verisine dayanıyor."
+            )
 
         st.line_chart(history[["Close", "EMA_20", "EMA_50", "EMA_200"]])
         latest = history.iloc[-1]
@@ -2423,6 +2445,23 @@ def render_watchlist() -> None:
         st.info("Takip listeniz henüz boş.")
         return
 
+    watchlist_quotes: dict[str, tuple[dict | None, object]] = {}
+    with st.spinner("Takip listesi fiyatları doğrulanıyor..."):
+        for row in summary.rows:
+            try:
+                quote = _load_quote(row.symbol)
+                freshness = assess_price_freshness(_quote_date(quote))
+                watchlist_quotes[row.symbol] = (quote, freshness)
+            except Exception:
+                watchlist_quotes[row.symbol] = (
+                    None,
+                    assess_price_freshness(None),
+                )
+    current_quote_count = sum(
+        freshness.current
+        for _, freshness in watchlist_quotes.values()
+    )
+
     with st.container(horizontal=True):
         st.metric("Takip edilen", len(summary.rows), border=True)
         st.metric(
@@ -2436,6 +2475,11 @@ def render_watchlist() -> None:
             summary.decision_ready_count,
             border=True,
         )
+        st.metric(
+            "Güncel fiyat",
+            f"{current_quote_count}/{len(summary.rows)}",
+            border=True,
+        )
 
     rows = [
         {
@@ -2443,6 +2487,22 @@ def render_watchlist() -> None:
             "Şirket": row.company_name,
             "Alpha": row.alpha_score,
             "Hedef": row.target_alpha_score,
+            "Son fiyat (TL)": (
+                watchlist_quotes[row.symbol][0]["last"]
+                if watchlist_quotes[row.symbol][0]
+                else None
+            ),
+            "Fiyat tarihi": (
+                _quote_date(watchlist_quotes[row.symbol][0])
+                if watchlist_quotes[row.symbol][0]
+                else None
+            ),
+            "Fiyat kaynağı": (
+                watchlist_quotes[row.symbol][0].get("source") or "-"
+                if watchlist_quotes[row.symbol][0]
+                else "-"
+            ),
+            "Fiyat durumu": watchlist_quotes[row.symbol][1].status,
             "Durum": "Hedefte" if row.target_reached else "Hedef altında",
             "Not": row.grade,
             "Karar": row.decision,
@@ -2473,6 +2533,13 @@ def render_watchlist() -> None:
                     format="%.1f",
                 ),
                 "Hedef": st.column_config.NumberColumn(format="%.0f"),
+                "Son fiyat (TL)": st.column_config.NumberColumn(
+                    format="%.2f"
+                ),
+                "Fiyat tarihi": st.column_config.DateColumn(
+                    "Fiyat tarihi",
+                    format="DD.MM.YYYY",
+                ),
             },
         )
 

@@ -51,6 +51,7 @@ yerel Streamlit uygulaması.
 - En büyük pozisyon ve şirket profili için yoğunlaşma stres testi
 - Portföy fiyatları için kaynak, tarih ve güncellik doğrulaması
 - Stres testi için değer ağırlıklı güncel fiyat kapsamı eşiği
+- Genel bakış, takip listesi ve portföyde ortak fiyat güncelliği kuralı
 - SQLite ile yerel veri saklama
 
 ## Çalıştırma

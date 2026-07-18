@@ -3,6 +3,7 @@ from datetime import date
 
 from app.audit.models import CompanyDataAudit
 from app.confidence.service import calculate_analysis_confidence
+from app.market_data.freshness import assess_price_freshness
 from app.portfolio.models import (
     PortfolioMarketPrice,
     PortfolioPosition,
@@ -20,7 +21,6 @@ MAX_PROFILE_WEIGHT = 60.0
 STRESS_SHOCKS = (-20.0, -10.0, 10.0)
 LARGEST_POSITION_SHOCK = -25.0
 LARGEST_PROFILE_SHOCK = -15.0
-MAX_PRICE_AGE_DAYS = 5
 MIN_STRESS_PRICE_COVERAGE = 90.0
 
 
@@ -131,26 +131,18 @@ def _price_details(
             False,
         )
 
-    age_days = (reference_date - price.as_of_date).days
-    if age_days < 0:
-        return (
-            float(price.value),
-            True,
-            price.as_of_date,
-            0,
-            price.source,
-            "Tarih hatası",
-            False,
-        )
-    current = age_days <= MAX_PRICE_AGE_DAYS
+    freshness = assess_price_freshness(
+        price.as_of_date,
+        reference_date,
+    )
     return (
         float(price.value),
         True,
         price.as_of_date,
-        age_days,
+        freshness.age_days,
         price.source,
-        "Güncel günlük veri" if current else "Eski fiyat",
-        current,
+        freshness.status,
+        freshness.current,
     )
 
 
