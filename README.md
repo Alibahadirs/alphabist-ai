@@ -30,6 +30,7 @@ yerel Streamlit uygulaması.
 - Kaynak PDF'ler için ayrı SHA-256 belge kimliği ve geçmiş doğrulaması
 - Aynı PDF'nin farklı şirket veya rapor döneminde kullanılmasını engelleme
 - Finansal/faaliyet raporu, hisse kodu ve şirket unvanı çapraz doğrulaması
+- Finansal ve faaliyet raporu sektör profili çelişkisinde zorunlu kullanıcı doğrulaması
 - TL, bin TL ve milyon TL sunum birimini yalnızca parasal kalemlere uygulama
 - Büyüme sütunları için geçen yılın aynı karşılaştırma dönemi doğrulaması
 - Banka, sigorta, GYO ve finansal hizmet raporlarına özgü gelir satırı eşlemesi

@@ -2,7 +2,11 @@ import pytest
 
 from app.scoring.engine import calculate_alpha_score
 from app.scoring.models import FinancialMetrics
-from app.sector.profiles import CompanyProfile, detect_company_profile
+from app.sector.profiles import (
+    CompanyProfile,
+    detect_company_profile,
+    reconcile_company_profiles,
+)
 from app.validation.service import (
     get_profile_requirements,
     validate_financial_metrics,
@@ -197,3 +201,51 @@ def test_financial_services_prefers_capital_adequacy_when_available():
 
     assert "capital_adequacy_ratio" in required
     assert "debt_to_equity" not in required
+
+
+@pytest.mark.parametrize(
+    ("financial", "activity", "expected"),
+    [
+        (
+            CompanyProfile.STANDARD,
+            CompanyProfile.BANK,
+            CompanyProfile.BANK,
+        ),
+        (
+            CompanyProfile.INSURANCE,
+            CompanyProfile.STANDARD,
+            CompanyProfile.INSURANCE,
+        ),
+        (
+            CompanyProfile.REIT,
+            CompanyProfile.REIT,
+            CompanyProfile.REIT,
+        ),
+        (
+            CompanyProfile.FINANCIAL_SERVICES,
+            None,
+            CompanyProfile.FINANCIAL_SERVICES,
+        ),
+    ],
+)
+def test_profile_reconciliation_uses_nonstandard_evidence_without_conflict(
+    financial,
+    activity,
+    expected,
+):
+    resolution = reconcile_company_profiles(financial, activity)
+
+    assert resolution.profile == expected
+    assert resolution.has_conflict is False
+
+
+def test_profile_reconciliation_flags_two_different_sector_profiles():
+    resolution = reconcile_company_profiles(
+        CompanyProfile.BANK,
+        CompanyProfile.FINANCIAL_SERVICES,
+    )
+
+    assert resolution.profile == CompanyProfile.BANK
+    assert resolution.financial_profile == CompanyProfile.BANK
+    assert resolution.activity_profile == CompanyProfile.FINANCIAL_SERVICES
+    assert resolution.has_conflict is True

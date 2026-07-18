@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from enum import Enum
 import unicodedata
 
@@ -8,6 +9,50 @@ class CompanyProfile(str, Enum):
     INSURANCE = "insurance"
     REIT = "reit"
     FINANCIAL_SERVICES = "financial_services"
+
+
+@dataclass(frozen=True)
+class CompanyProfileResolution:
+    profile: CompanyProfile
+    financial_profile: CompanyProfile
+    activity_profile: CompanyProfile | None
+    has_conflict: bool = False
+
+
+def reconcile_company_profiles(
+    financial_profile: CompanyProfile,
+    activity_profile: CompanyProfile | None = None,
+) -> CompanyProfileResolution:
+    financial = CompanyProfile(financial_profile)
+    activity = (
+        CompanyProfile(activity_profile)
+        if activity_profile is not None
+        else None
+    )
+    if activity is None or activity == financial:
+        return CompanyProfileResolution(
+            profile=financial,
+            financial_profile=financial,
+            activity_profile=activity,
+        )
+    if financial == CompanyProfile.STANDARD:
+        return CompanyProfileResolution(
+            profile=activity,
+            financial_profile=financial,
+            activity_profile=activity,
+        )
+    if activity == CompanyProfile.STANDARD:
+        return CompanyProfileResolution(
+            profile=financial,
+            financial_profile=financial,
+            activity_profile=activity,
+        )
+    return CompanyProfileResolution(
+        profile=financial,
+        financial_profile=financial,
+        activity_profile=activity,
+        has_conflict=True,
+    )
 
 
 PROFILE_LABELS = {

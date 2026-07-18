@@ -1,3 +1,13 @@
-from app.sector.profiles import CompanyProfile, detect_company_profile
+from app.sector.profiles import (
+    CompanyProfile,
+    CompanyProfileResolution,
+    detect_company_profile,
+    reconcile_company_profiles,
+)
 
-__all__ = ["CompanyProfile", "detect_company_profile"]
+__all__ = [
+    "CompanyProfile",
+    "CompanyProfileResolution",
+    "detect_company_profile",
+    "reconcile_company_profiles",
+]

@@ -87,7 +87,11 @@ from app.reporting.models import REPORT_FRESHNESS_LABELS, ReportFreshnessStatus
 from app.reporting.service import assess_report_period, report_period_regresses
 from app.scoring.engine import calculate_alpha_score
 from app.scoring.models import FinancialMetrics, ScoreBreakdown
-from app.sector.profiles import CompanyProfile, PROFILE_LABELS
+from app.sector.profiles import (
+    CompanyProfile,
+    PROFILE_LABELS,
+    reconcile_company_profiles,
+)
 from app.scanner.models import ScannerFilters
 from app.scanner.service import scan_companies
 from app.technical.engine import (
@@ -1994,6 +1998,8 @@ def _render_pdf_company_form() -> None:
                     "pdf_monetary_scale",
                     "pdf_comparison_confirmed",
                     "pdf_company_profile",
+                    "pdf_profile_conflict_confirmed",
+                    "pdf_profile_conflict_context",
                 }
             ):
                 del st.session_state[key]
@@ -2011,18 +2017,49 @@ def _render_pdf_company_form() -> None:
         st.error(str(exc))
         return
 
-    suggested_profile = financial_result.draft.company_profile
-    if (
-        activity_result
-        and activity_result.metadata.company_profile
-        != CompanyProfile.STANDARD
-    ):
-        suggested_profile = activity_result.metadata.company_profile
+    profile_resolution = reconcile_company_profiles(
+        financial_result.draft.company_profile,
+        (
+            activity_result.metadata.company_profile
+            if activity_result
+            else None
+        ),
+    )
     company_profile = _profile_select(
         "Şirket türü / sektör profili",
-        suggested_profile,
+        profile_resolution.profile,
         "pdf_company_profile",
     )
+    if profile_resolution.has_conflict:
+        conflict_context = (
+            f"{profile_resolution.financial_profile.value}:"
+            f"{profile_resolution.activity_profile.value}:"
+            f"{company_profile.value}"
+        )
+        if (
+            st.session_state.get("pdf_profile_conflict_context")
+            != conflict_context
+        ):
+            st.session_state["pdf_profile_conflict_context"] = conflict_context
+            st.session_state["pdf_profile_conflict_confirmed"] = False
+        st.error(
+            "Finansal rapor ile faaliyet raporu farklı sektör profilleri "
+            "öneriyor. Yanlış puanlama metodolojisini önlemek için doğru "
+            "profili resmi raporlardan doğrulayın."
+        )
+        st.caption(
+            "Finansal rapor: "
+            f"{PROFILE_LABELS[profile_resolution.financial_profile]} | "
+            "Faaliyet raporu: "
+            f"{PROFILE_LABELS[profile_resolution.activity_profile]}"
+        )
+        profile_conflict_confirmed = st.checkbox(
+            "Seçtiğim sektör profilini resmi raporlardan kontrol ettim",
+            key="pdf_profile_conflict_confirmed",
+        )
+        if not profile_conflict_confirmed:
+            st.info("Doğrulama yapılmadan şirket bilgileri ve puan oluşturulmaz.")
+            return
     if company_profile != financial_result.draft.company_profile:
         financial_result = _parse_pdf(
             financial_bytes,
