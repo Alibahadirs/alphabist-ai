@@ -84,6 +84,7 @@ from app.scanner.models import ScannerFilters
 from app.scanner.service import scan_companies
 from app.technical.engine import calculate_combined_score, calculate_technical_score
 from app.technical.models import TechnicalScoreBreakdown
+from app.technical.quality import build_technical_quality_summary
 from app.technical.refresh import (
     MAX_TECHNICAL_REFRESH_BATCH,
     refresh_technical_scores,
@@ -1217,6 +1218,16 @@ def render_data_quality() -> None:
         audit.symbol: audit for audit in list_latest_company_data_audits()
     }
     summary = build_data_quality_summary(companies, latest_audits)
+    technical_quality = build_technical_quality_summary(
+        [company.symbol for company in companies],
+        {
+            company.symbol: list_technical_score_history(company.symbol)
+            for company in companies
+        },
+    )
+    technical_by_symbol = {
+        row.symbol: row for row in technical_quality.rows
+    }
     confidences = {
         company.symbol: calculate_analysis_confidence(
             company,
@@ -1281,10 +1292,38 @@ def render_data_quality() -> None:
             border=True,
         )
 
+    with st.container(horizontal=True):
+        st.metric(
+            "Güncel teknik",
+            technical_quality.current_count,
+            border=True,
+        )
+        st.metric(
+            "Eski teknik",
+            technical_quality.stale_count,
+            border=True,
+        )
+        st.metric(
+            "Teknik kayıt yok",
+            technical_quality.missing_count,
+            border=True,
+        )
+        st.metric(
+            "Teknik tarih hatası",
+            technical_quality.date_error_count,
+            border=True,
+        )
+
     profile_options = ["Tümü"] + [PROFILE_LABELS[item] for item in CompanyProfile]
     status_options = ["Doğrulandı", "Kontrol gerekli", "Eksik veri", "Hatalı"]
     freshness_options = list(REPORT_FRESHNESS_LABELS.values())
-    filter_left, filter_middle, filter_right = st.columns(3)
+    technical_status_options = [
+        "Güncel günlük veri",
+        "Eski fiyat",
+        "Kayıt yok",
+        "Tarih hatası",
+    ]
+    filter_left, filter_middle, filter_right, filter_technical = st.columns(4)
     with filter_left:
         selected_profile = st.selectbox("Sektör profili", profile_options)
     with filter_middle:
@@ -1297,12 +1336,20 @@ def render_data_quality() -> None:
             freshness_options,
             default=freshness_options,
         )
+    with filter_technical:
+        selected_technical_statuses = st.multiselect(
+            "Teknik kayıt durumu",
+            technical_status_options,
+            default=technical_status_options,
+        )
 
     filtered = [
         row for row in summary.rows
         if row.status in selected_statuses
         and REPORT_FRESHNESS_LABELS[freshness[row.symbol].status]
         in selected_freshness
+        and technical_by_symbol[row.symbol].status
+        in selected_technical_statuses
         and (
             selected_profile == "Tümü"
             or PROFILE_LABELS[row.company_profile] == selected_profile
@@ -1325,6 +1372,19 @@ def render_data_quality() -> None:
                 "Analiz güveni (%)": confidences[row.symbol].total,
                 "Güven durumu": confidences[row.symbol].status,
                 "Yeterlilik (%)": row.completeness,
+                "Teknik puan": technical_by_symbol[row.symbol].technical_score,
+                "Teknik sinyal": (
+                    technical_by_symbol[row.symbol].signal
+                    if technical_by_symbol[row.symbol].current
+                    else "-"
+                ),
+                "Teknik fiyat tarihi": technical_by_symbol[row.symbol].price_date,
+                "Teknik kayıt yaşı (gün)": technical_by_symbol[row.symbol].age_days,
+                "Teknik kayıt durumu": technical_by_symbol[row.symbol].status,
+                "Teknik kaynak": technical_by_symbol[row.symbol].source or "-",
+                "Teknik metodoloji": (
+                    technical_by_symbol[row.symbol].methodology_version or "-"
+                ),
                 "Durum": row.status,
                 "Hesap kontrolü": row.calculation_check_status,
                 "Uyuşmayan göstergeler": (
@@ -1358,6 +1418,15 @@ def render_data_quality() -> None:
                     ),
                     "Yeterlilik (%)": st.column_config.ProgressColumn(
                         "Yeterlilik (%)", min_value=0, max_value=100, format="%.1f"
+                    ),
+                    "Teknik puan": st.column_config.ProgressColumn(
+                        "Teknik puan", min_value=0, max_value=100, format="%.1f"
+                    ),
+                    "Teknik fiyat tarihi": st.column_config.DateColumn(
+                        "Teknik fiyat tarihi", format="DD.MM.YYYY"
+                    ),
+                    "Teknik kayıt yaşı (gün)": st.column_config.NumberColumn(
+                        "Teknik kayıt yaşı (gün)", format="%d"
                     ),
                 },
             )

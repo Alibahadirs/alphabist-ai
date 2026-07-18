@@ -46,3 +46,24 @@ class TechnicalRefreshSummary(BaseModel):
     rejected: int = Field(ge=0)
     failed: int = Field(ge=0)
     items: list[TechnicalRefreshItem]
+
+
+class TechnicalQualityRow(BaseModel):
+    symbol: str = Field(min_length=1, max_length=12)
+    technical_score: float | None = Field(default=None, ge=0, le=100)
+    signal: str = ""
+    price_date: date | None = None
+    source: str = ""
+    methodology_version: str = ""
+    status: str
+    age_days: int | None = Field(default=None, ge=0)
+    current: bool = False
+
+
+class TechnicalQualitySummary(BaseModel):
+    rows: list[TechnicalQualityRow]
+    total: int = Field(ge=0)
+    current_count: int = Field(ge=0)
+    stale_count: int = Field(ge=0)
+    missing_count: int = Field(ge=0)
+    date_error_count: int = Field(ge=0)
