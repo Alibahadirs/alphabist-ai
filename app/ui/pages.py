@@ -57,6 +57,10 @@ from app.database.backup import (
     validate_database_backup,
 )
 from app.data_quality.service import FIELD_LABELS, build_data_quality_summary
+from app.data_quality.readiness import (
+    READINESS_STATUS_OPTIONS,
+    build_decision_readiness_summary,
+)
 from app.market_data.provider import get_history, get_quote
 from app.market_data.freshness import assess_price_freshness
 from app.market_data.validation import validate_quote_history_alignment
@@ -1279,6 +1283,14 @@ def render_data_quality() -> None:
         )
         for company in companies
     }
+    readiness_summary = build_decision_readiness_summary(
+        companies,
+        confidences,
+        technical_quality,
+    )
+    readiness_by_symbol = {
+        row.symbol: row for row in readiness_summary.rows
+    }
     freshness = {
         company.symbol: assess_report_period(
             latest_audits[company.symbol].report_period_end,
@@ -1357,6 +1369,28 @@ def render_data_quality() -> None:
             border=True,
         )
 
+    with st.container(horizontal=True):
+        st.metric(
+            "Karara hazır",
+            readiness_summary.ready_count,
+            border=True,
+        )
+        st.metric(
+            "Finansal doğrulama",
+            readiness_summary.financial_only_count,
+            border=True,
+        )
+        st.metric(
+            "Teknik yenileme",
+            readiness_summary.technical_only_count,
+            border=True,
+        )
+        st.metric(
+            "İki alanda doğrulama",
+            readiness_summary.combined_issue_count,
+            border=True,
+        )
+
     default_refresh_symbols = select_technical_refresh_candidates(
         technical_quality
     )
@@ -1403,7 +1437,7 @@ def render_data_quality() -> None:
     profile_options = ["Tümü"] + [PROFILE_LABELS[item] for item in CompanyProfile]
     status_options = ["Doğrulandı", "Kontrol gerekli", "Eksik veri", "Hatalı"]
     freshness_options = list(REPORT_FRESHNESS_LABELS.values())
-    filter_left, filter_middle, filter_right, filter_technical = st.columns(4)
+    filter_left, filter_middle, filter_right = st.columns(3)
     with filter_left:
         selected_profile = st.selectbox("Sektör profili", profile_options)
     with filter_middle:
@@ -1416,11 +1450,18 @@ def render_data_quality() -> None:
             freshness_options,
             default=freshness_options,
         )
+    filter_technical, filter_readiness = st.columns(2)
     with filter_technical:
         selected_technical_statuses = st.multiselect(
             "Teknik kayıt durumu",
             TECHNICAL_STATUS_OPTIONS,
             default=TECHNICAL_STATUS_OPTIONS,
+        )
+    with filter_readiness:
+        selected_readiness_statuses = st.multiselect(
+            "Karara hazırlık",
+            READINESS_STATUS_OPTIONS,
+            default=READINESS_STATUS_OPTIONS,
         )
 
     filtered = [
@@ -1430,6 +1471,8 @@ def render_data_quality() -> None:
         in selected_freshness
         and technical_by_symbol[row.symbol].status
         in selected_technical_statuses
+        and readiness_by_symbol[row.symbol].status
+        in selected_readiness_statuses
         and (
             selected_profile == "Tümü"
             or PROFILE_LABELS[row.company_profile] == selected_profile
@@ -1464,6 +1507,14 @@ def render_data_quality() -> None:
                 "Teknik kaynak": technical_by_symbol[row.symbol].source or "-",
                 "Teknik metodoloji": (
                     technical_by_symbol[row.symbol].methodology_version or "-"
+                ),
+                "Karara hazırlık": readiness_by_symbol[row.symbol].status,
+                "Önerilen işlem": (
+                    readiness_by_symbol[row.symbol].recommended_action
+                ),
+                "Karar engelleri": (
+                    " | ".join(readiness_by_symbol[row.symbol].blockers)
+                    or "Yok"
                 ),
                 "Durum": row.status,
                 "Hesap kontrolü": row.calculation_check_status,

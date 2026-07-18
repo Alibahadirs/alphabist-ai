@@ -23,3 +23,22 @@ class DataQualitySummary(BaseModel):
     review_count: int = Field(ge=0)
     critical_count: int = Field(ge=0)
     average_completeness: float = Field(ge=0, le=100)
+
+
+class DecisionReadinessRow(BaseModel):
+    symbol: str
+    company_name: str
+    financial_ready: bool
+    technical_ready: bool
+    status: str
+    recommended_action: str
+    blockers: list[str] = Field(default_factory=list)
+
+
+class DecisionReadinessSummary(BaseModel):
+    rows: list[DecisionReadinessRow] = Field(default_factory=list)
+    total: int = Field(ge=0)
+    ready_count: int = Field(ge=0)
+    financial_only_count: int = Field(ge=0)
+    technical_only_count: int = Field(ge=0)
+    combined_issue_count: int = Field(ge=0)

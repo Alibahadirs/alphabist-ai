@@ -63,6 +63,7 @@ yerel Streamlit uygulaması.
 - Birleşik portföy puanını engelleyen şirket bazlı doğrulama listesi
 - Veri kalite merkezinde teknik kayıt güncelliği, kaynak ve metodoloji görünümü
 - Veri kalite merkezinden sorunlu teknik kayıtları doğrulamalı toplu yenileme
+- Finansal ve teknik doğrulamayı birleştiren şirket bazlı karara hazırlık kuyruğu
 - SQLite ile yerel veri saklama
 
 ## Çalıştırma
