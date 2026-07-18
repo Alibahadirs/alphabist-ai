@@ -18,6 +18,8 @@ yerel Streamlit uygulaması.
 - PDF, faaliyet raporu, manuel giriş ve kullanıcı düzeltmesi için veri kaynağı geçmişi
 - Her finansal göstergenin kaynağını alan bazında izleme
 - Banka, sigorta, GYO ve finansal hizmet şirketleri için sektöre özgü doğrulama
+- Sektör puanlaması ile zorunlu göstergeleri birebir eşleştiren tamlık kontrolü
+- Finansal hizmetlerde sermaye yeterliliği veya borç / özkaynak alternatifi
 - Veri yeterliliği ve kaynak kanıtına göre bağımsız analiz güveni puanı
 - Düşük güvenli kayıtlarda yatırım kararını otomatik doğrulama seviyesine çekme
 - Her analiz için metodoloji, kategori puanları, güven ve karar anlık görüntüsü

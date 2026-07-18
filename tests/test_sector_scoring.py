@@ -3,7 +3,10 @@ import pytest
 from app.scoring.engine import calculate_alpha_score
 from app.scoring.models import FinancialMetrics
 from app.sector.profiles import CompanyProfile, detect_company_profile
-from app.validation.service import validate_financial_metrics
+from app.validation.service import (
+    get_profile_requirements,
+    validate_financial_metrics,
+)
 
 
 @pytest.mark.parametrize(
@@ -111,3 +114,86 @@ def test_reit_requires_nav_and_occupancy_data():
 
     assert "nav_discount" in report.missing_fields
     assert "occupancy_rate" in report.missing_fields
+
+
+def test_bank_revenue_growth_is_required_when_growth_score_uses_it():
+    metrics = FinancialMetrics(
+        symbol="TBNK",
+        company_name="Test Bankası A.Ş.",
+        company_profile=CompanyProfile.BANK,
+        net_profit_growth=30,
+        roe=25,
+        capital_adequacy_ratio=18,
+        npl_ratio=2.5,
+        loan_to_deposit_ratio=100,
+        net_interest_margin=5,
+        cost_income_ratio=40,
+    )
+
+    report = validate_financial_metrics(metrics)
+
+    assert "revenue_growth" in report.missing_fields
+    assert report.completeness < 100
+
+
+def test_insurance_requires_every_metric_used_by_its_score():
+    metrics = FinancialMetrics(
+        symbol="TSGR",
+        company_name="Test Sigorta A.Ş.",
+        company_profile=CompanyProfile.INSURANCE,
+        net_profit_growth=25,
+        roe=24,
+        premium_growth=30,
+        combined_ratio=92,
+        solvency_ratio=160,
+    )
+
+    report = validate_financial_metrics(metrics)
+
+    assert "net_margin" in report.missing_fields
+    assert "current_ratio" in report.missing_fields
+    assert report.completeness < 100
+
+
+def test_financial_services_accepts_debt_to_equity_as_leverage_alternative():
+    metrics = FinancialMetrics(
+        symbol="TFIN",
+        company_name="Test Faktoring A.Ş.",
+        company_profile=CompanyProfile.FINANCIAL_SERVICES,
+        revenue_growth=20,
+        net_profit_growth=30,
+        net_margin=18,
+        roe=25,
+        debt_to_equity=4,
+        current_ratio=1.3,
+        npl_ratio=2.5,
+        cost_income_ratio=40,
+    )
+
+    report = validate_financial_metrics(metrics)
+
+    assert "debt_to_equity" in get_profile_requirements(metrics)
+    assert "capital_adequacy_ratio" not in get_profile_requirements(metrics)
+    assert report.completeness == 100
+
+
+def test_financial_services_prefers_capital_adequacy_when_available():
+    metrics = FinancialMetrics(
+        symbol="TFIN",
+        company_name="Test Menkul Değerler A.Ş.",
+        company_profile=CompanyProfile.FINANCIAL_SERVICES,
+        revenue_growth=20,
+        net_profit_growth=30,
+        net_margin=18,
+        roe=25,
+        debt_to_equity=4,
+        current_ratio=1.3,
+        capital_adequacy_ratio=18,
+        npl_ratio=2.5,
+        cost_income_ratio=40,
+    )
+
+    required = get_profile_requirements(metrics)
+
+    assert "capital_adequacy_ratio" in required
+    assert "debt_to_equity" not in required

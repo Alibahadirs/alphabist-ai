@@ -111,7 +111,7 @@ from app.technical.refresh import (
 from app.watchlist.models import WatchlistEntry
 from app.watchlist.service import build_watchlist_summary
 from app.validation.service import (
-    PROFILE_REQUIREMENTS,
+    get_profile_requirements,
     validate_financial_draft,
     validate_financial_metrics,
 )
@@ -1185,7 +1185,10 @@ def _render_quality_correction_form() -> None:
         CompanyProfile(company.company_profile),
         f"quality_profile_{symbol}",
     )
-    required_fields = PROFILE_REQUIREMENTS[profile]
+    profile_preview = company.model_copy(
+        update={"company_profile": profile}
+    )
+    required_fields = get_profile_requirements(profile_preview)
     amount_fields = {"operating_cash_flow", "free_cash_flow"}
     nonnegative_fields = {
         "debt_to_equity", "current_ratio", "asset_turnover",

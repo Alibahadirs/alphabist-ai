@@ -5,8 +5,10 @@ from app.core.settings import settings
 from app.reporting.models import ReportFreshnessStatus
 from app.reporting.service import assess_report_period
 from app.scoring.models import FinancialMetrics, ScoreBreakdown
-from app.sector.profiles import CompanyProfile
-from app.validation.service import PROFILE_REQUIREMENTS, validate_financial_metrics
+from app.validation.service import (
+    get_profile_requirements,
+    validate_financial_metrics,
+)
 
 
 SOURCE_WEIGHTS = {
@@ -79,8 +81,7 @@ def calculate_analysis_confidence(
     audit: CompanyDataAudit | None,
 ) -> AnalysisConfidence:
     validation = validate_financial_metrics(metrics)
-    profile = CompanyProfile(metrics.company_profile)
-    required_fields = PROFILE_REQUIREMENTS[profile]
+    required_fields = get_profile_requirements(metrics)
 
     completeness_component = round(validation.completeness * 0.55, 2)
     sourced_required = (

@@ -33,12 +33,13 @@ PROFILE_REQUIREMENTS = {
         "free_cash_flow", "asset_turnover",
     ),
     CompanyProfile.BANK: (
-        "net_profit_growth", "roe", "capital_adequacy_ratio", "npl_ratio",
-        "loan_to_deposit_ratio", "net_interest_margin", "cost_income_ratio",
+        "revenue_growth", "net_profit_growth", "roe",
+        "capital_adequacy_ratio", "npl_ratio", "loan_to_deposit_ratio",
+        "net_interest_margin", "cost_income_ratio",
     ),
     CompanyProfile.INSURANCE: (
-        "net_profit_growth", "roe", "premium_growth", "combined_ratio",
-        "solvency_ratio",
+        "net_profit_growth", "net_margin", "roe", "current_ratio",
+        "premium_growth", "combined_ratio", "solvency_ratio",
     ),
     CompanyProfile.REIT: (
         "revenue_growth", "net_profit_growth", "net_margin", "roe",
@@ -47,9 +48,33 @@ PROFILE_REQUIREMENTS = {
     ),
     CompanyProfile.FINANCIAL_SERVICES: (
         "revenue_growth", "net_profit_growth", "net_margin", "roe",
-        "capital_adequacy_ratio", "npl_ratio", "cost_income_ratio",
+        "current_ratio", "npl_ratio", "cost_income_ratio",
     ),
 }
+
+PROFILE_ALTERNATIVE_REQUIREMENTS = {
+    CompanyProfile.FINANCIAL_SERVICES: (
+        ("capital_adequacy_ratio", "debt_to_equity"),
+    ),
+}
+
+
+def get_profile_requirements(
+    metrics: FinancialMetrics,
+) -> tuple[str, ...]:
+    profile = CompanyProfile(metrics.company_profile)
+    required = list(PROFILE_REQUIREMENTS[profile])
+    for alternatives in PROFILE_ALTERNATIVE_REQUIREMENTS.get(profile, ()):
+        selected = next(
+            (
+                field
+                for field in alternatives
+                if getattr(metrics, field) is not None
+            ),
+            alternatives[0],
+        )
+        required.append(selected)
+    return tuple(required)
 
 
 def _is_materially_greater(
@@ -187,7 +212,7 @@ def validate_financial_metrics(metrics: FinancialMetrics) -> ValidationReport:
     errors: list[str] = []
     warnings: list[str] = []
     profile = CompanyProfile(metrics.company_profile)
-    required = PROFILE_REQUIREMENTS[profile]
+    required = get_profile_requirements(metrics)
     missing = [name for name in required if getattr(metrics, name) is None]
     completeness = round((len(required) - len(missing)) / len(required) * 100, 1)
 
