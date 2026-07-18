@@ -83,8 +83,15 @@ from app.sector.profiles import CompanyProfile, PROFILE_LABELS
 from app.scanner.models import ScannerFilters
 from app.scanner.service import scan_companies
 from app.technical.engine import calculate_combined_score, calculate_technical_score
-from app.technical.models import TechnicalScoreBreakdown
-from app.technical.quality import build_technical_quality_summary
+from app.technical.models import (
+    TechnicalRefreshSummary,
+    TechnicalScoreBreakdown,
+)
+from app.technical.quality import (
+    TECHNICAL_STATUS_OPTIONS,
+    build_technical_quality_summary,
+    select_technical_refresh_candidates,
+)
 from app.technical.refresh import (
     MAX_TECHNICAL_REFRESH_BATCH,
     refresh_technical_scores,
@@ -172,6 +179,42 @@ def _parse_activity_pdf(
 @st.cache_data(ttl="15m", max_entries=50, show_spinner=False)
 def _load_market_data(symbol: str):
     return get_quote(symbol), get_history(symbol)
+
+
+def _render_technical_refresh_summary(
+    refresh_summary: TechnicalRefreshSummary,
+) -> None:
+    with st.container(horizontal=True):
+        st.metric("Kaydedildi", refresh_summary.saved, border=True)
+        st.metric("Değişmedi", refresh_summary.unchanged, border=True)
+        st.metric("Reddedildi", refresh_summary.rejected, border=True)
+        st.metric("Hata", refresh_summary.failed, border=True)
+    with st.expander("Teknik güncelleme ayrıntıları"):
+        st.dataframe(
+            pd.DataFrame(
+                [
+                    {
+                        "Hisse": item.symbol,
+                        "Durum": item.status,
+                        "Fiyat tarihi": item.price_date,
+                        "Teknik puan": item.technical_score,
+                        "Açıklama": item.detail,
+                    }
+                    for item in refresh_summary.items
+                ]
+            ),
+            hide_index=True,
+            width="stretch",
+            column_config={
+                "Fiyat tarihi": st.column_config.DateColumn(
+                    "Fiyat tarihi",
+                    format="DD.MM.YYYY",
+                ),
+                "Teknik puan": st.column_config.NumberColumn(
+                    format="%.1f"
+                ),
+            },
+        )
 
 
 @st.cache_data(ttl="15m", max_entries=100, show_spinner=False)
@@ -1314,15 +1357,52 @@ def render_data_quality() -> None:
             border=True,
         )
 
+    default_refresh_symbols = select_technical_refresh_candidates(
+        technical_quality
+    )
+    with st.container(border=True):
+        st.subheader("Teknik veri sorunlarını düzelt")
+        st.caption(
+            "Eski, eksik veya tarih hatalı kayıtlar önceliklendirilir. "
+            "Yalnız güncel ve fiyat-grafik uyumu doğrulanan sonuçlar kaydedilir."
+        )
+        refresh_symbols = st.multiselect(
+            "Yenilenecek hisseler",
+            [company.symbol for company in companies],
+            default=default_refresh_symbols,
+            max_selections=MAX_TECHNICAL_REFRESH_BATCH,
+            key="quality_technical_refresh_symbols",
+            help=(
+                "Veri sağlayıcı yükünü sınırlamak için tek seferde en fazla "
+                f"{MAX_TECHNICAL_REFRESH_BATCH} hisse yenilenir."
+            ),
+        )
+        if st.button(
+            "Seçilen teknik kayıtları yenile",
+            icon=":material/sync:",
+            disabled=not refresh_symbols,
+            key="quality_technical_refresh_button",
+        ):
+            with st.spinner("Teknik veriler doğrulanıp kaydediliyor..."):
+                st.session_state["quality_technical_refresh_result"] = (
+                    refresh_technical_scores(
+                        refresh_symbols,
+                        _load_market_data,
+                        add_technical_score_history,
+                        settings.technical_methodology_version,
+                    )
+                )
+            st.rerun()
+
+        refresh_result = st.session_state.get(
+            "quality_technical_refresh_result"
+        )
+        if isinstance(refresh_result, TechnicalRefreshSummary):
+            _render_technical_refresh_summary(refresh_result)
+
     profile_options = ["Tümü"] + [PROFILE_LABELS[item] for item in CompanyProfile]
     status_options = ["Doğrulandı", "Kontrol gerekli", "Eksik veri", "Hatalı"]
     freshness_options = list(REPORT_FRESHNESS_LABELS.values())
-    technical_status_options = [
-        "Güncel günlük veri",
-        "Eski fiyat",
-        "Kayıt yok",
-        "Tarih hatası",
-    ]
     filter_left, filter_middle, filter_right, filter_technical = st.columns(4)
     with filter_left:
         selected_profile = st.selectbox("Sektör profili", profile_options)
@@ -1339,8 +1419,8 @@ def render_data_quality() -> None:
     with filter_technical:
         selected_technical_statuses = st.multiselect(
             "Teknik kayıt durumu",
-            technical_status_options,
-            default=technical_status_options,
+            TECHNICAL_STATUS_OPTIONS,
+            default=TECHNICAL_STATUS_OPTIONS,
         )
 
     filtered = [
@@ -1493,53 +1573,7 @@ def render_scanner() -> None:
                 add_technical_score_history,
                 settings.technical_methodology_version,
             )
-        with st.container(horizontal=True):
-            st.metric(
-                "Kaydedildi",
-                refresh_summary.saved,
-                border=True,
-            )
-            st.metric(
-                "Değişmedi",
-                refresh_summary.unchanged,
-                border=True,
-            )
-            st.metric(
-                "Reddedildi",
-                refresh_summary.rejected,
-                border=True,
-            )
-            st.metric(
-                "Hata",
-                refresh_summary.failed,
-                border=True,
-            )
-        with st.expander("Teknik güncelleme ayrıntıları"):
-            st.dataframe(
-                pd.DataFrame(
-                    [
-                        {
-                            "Hisse": item.symbol,
-                            "Durum": item.status,
-                            "Fiyat tarihi": item.price_date,
-                            "Teknik puan": item.technical_score,
-                            "Açıklama": item.detail,
-                        }
-                        for item in refresh_summary.items
-                    ]
-                ),
-                hide_index=True,
-                width="stretch",
-                column_config={
-                    "Fiyat tarihi": st.column_config.DateColumn(
-                        "Fiyat tarihi",
-                        format="DD.MM.YYYY",
-                    ),
-                    "Teknik puan": st.column_config.NumberColumn(
-                        format="%.1f"
-                    ),
-                },
-            )
+        _render_technical_refresh_summary(refresh_summary)
 
     with st.form("scanner_filters", border=True):
         st.subheader("Filtreler")

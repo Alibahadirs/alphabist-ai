@@ -7,12 +7,19 @@ from app.technical.models import (
     TechnicalQualityRow,
     TechnicalQualitySummary,
 )
+from app.technical.refresh import MAX_TECHNICAL_REFRESH_BATCH
 
 
 CURRENT_STATUS = "Güncel günlük veri"
 STALE_STATUS = "Eski fiyat"
 MISSING_STATUS = "Kayıt yok"
 DATE_ERROR_STATUS = "Tarih hatası"
+TECHNICAL_STATUS_OPTIONS = [
+    CURRENT_STATUS,
+    STALE_STATUS,
+    MISSING_STATUS,
+    DATE_ERROR_STATUS,
+]
 
 
 def build_technical_quality_summary(
@@ -71,3 +78,29 @@ def build_technical_quality_summary(
         missing_count=sum(row.status == MISSING_STATUS for row in rows),
         date_error_count=sum(row.status == DATE_ERROR_STATUS for row in rows),
     )
+
+
+def select_technical_refresh_candidates(
+    summary: TechnicalQualitySummary,
+    max_batch_size: int = MAX_TECHNICAL_REFRESH_BATCH,
+) -> list[str]:
+    if max_batch_size < 1:
+        return []
+
+    priority = {
+        DATE_ERROR_STATUS: 0,
+        MISSING_STATUS: 1,
+        STALE_STATUS: 2,
+    }
+    candidates = [
+        row for row in summary.rows
+        if row.status in priority
+    ]
+    candidates.sort(
+        key=lambda row: (
+            priority[row.status],
+            -(row.age_days or 0),
+            row.symbol,
+        )
+    )
+    return [row.symbol for row in candidates[:max_batch_size]]

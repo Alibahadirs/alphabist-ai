@@ -1,7 +1,10 @@
 from datetime import date, datetime
 
 from app.technical.models import TechnicalHistoryEntry
-from app.technical.quality import build_technical_quality_summary
+from app.technical.quality import (
+    build_technical_quality_summary,
+    select_technical_refresh_candidates,
+)
 
 
 def _history_entry(
@@ -66,3 +69,36 @@ def test_build_technical_quality_summary_uses_latest_inserted_record():
     assert summary.rows[0].technical_score == 88
     assert summary.rows[0].price_date == date(2026, 7, 18)
     assert summary.rows[0].current is True
+
+
+def test_refresh_candidates_prioritize_errors_missing_and_oldest_stale():
+    summary = build_technical_quality_summary(
+        ["CURRENT", "STALE_NEW", "MISSING", "FUTURE", "STALE_OLD"],
+        {
+            "CURRENT": [
+                _history_entry(1, "CURRENT", date(2026, 7, 17), 80)
+            ],
+            "STALE_NEW": [
+                _history_entry(2, "STALE_NEW", date(2026, 7, 10), 70)
+            ],
+            "FUTURE": [
+                _history_entry(3, "FUTURE", date(2026, 7, 19), 60)
+            ],
+            "STALE_OLD": [
+                _history_entry(4, "STALE_OLD", date(2026, 6, 1), 50)
+            ],
+        },
+        reference_date=date(2026, 7, 18),
+    )
+
+    assert select_technical_refresh_candidates(summary) == [
+        "FUTURE",
+        "MISSING",
+        "STALE_OLD",
+        "STALE_NEW",
+    ]
+    assert select_technical_refresh_candidates(summary, max_batch_size=2) == [
+        "FUTURE",
+        "MISSING",
+    ]
+    assert select_technical_refresh_candidates(summary, max_batch_size=0) == []
