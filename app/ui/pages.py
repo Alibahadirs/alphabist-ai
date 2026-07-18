@@ -2939,11 +2939,16 @@ def render_portfolio() -> None:
     latest_audits = {
         audit.symbol: audit for audit in list_latest_company_data_audits()
     }
+    technical_histories = {
+        position.symbol: list_technical_score_history(position.symbol)
+        for position in positions
+    }
     summary = build_portfolio_summary(
         positions,
         company_by_symbol,
         prices,
         latest_audits,
+        technical_histories,
     )
     if failed_symbols:
         st.warning(
@@ -2981,6 +2986,24 @@ def render_portfolio() -> None:
         st.metric(
             "Ağırlıklı Alpha",
             f"{summary.weighted_alpha_score:.1f}/100",
+            border=True,
+        )
+        st.metric(
+            "Ağırlıklı teknik",
+            (
+                f"{summary.weighted_technical_score:.1f}/100"
+                if summary.weighted_technical_score is not None
+                else "-"
+            ),
+            border=True,
+        )
+        st.metric(
+            "Birleşik portföy puanı",
+            (
+                f"{summary.weighted_combined_score:.1f}/100"
+                if summary.weighted_combined_score is not None
+                else "Doğrulama gerekli"
+            ),
             border=True,
         )
         st.metric(
@@ -3027,6 +3050,18 @@ def render_portfolio() -> None:
             f"%{summary.current_price_value_percent:.1f}",
             border=True,
         )
+        st.metric(
+            "Güncel teknik kapsamı",
+            f"%{summary.current_technical_value_percent:.1f}",
+            border=True,
+        )
+
+    if not summary.portfolio_score_ready:
+        st.warning(
+            "Birleşik portföy puanı için güncel fiyat, güncel teknik "
+            "kayıt ve finansal karar kapsamlarının her biri en az %90 "
+            "olmalıdır."
+        )
 
     st.caption(
         "Ağırlık bazlı yoğunlaşma endeksi: "
@@ -3068,6 +3103,12 @@ def render_portfolio() -> None:
             ),
             "Hesap kontrolü": row.calculation_check_status,
             "Fiyat durumu": row.price_status,
+            "Teknik puan": row.technical_score,
+            "Teknik sinyal": (
+                row.technical_signal if row.technical_current else "-"
+            ),
+            "Teknik fiyat tarihi": row.technical_price_date,
+            "Teknik kayıt durumu": row.technical_status,
         }
         for row in summary.rows
     ]
@@ -3106,6 +3147,16 @@ def render_portfolio() -> None:
                     min_value=0,
                     max_value=100,
                     format="%.1f",
+                ),
+                "Teknik puan": st.column_config.ProgressColumn(
+                    "Teknik puan",
+                    min_value=0,
+                    max_value=100,
+                    format="%.1f",
+                ),
+                "Teknik fiyat tarihi": st.column_config.DateColumn(
+                    "Teknik fiyat tarihi",
+                    format="DD.MM.YYYY",
                 ),
             },
         )

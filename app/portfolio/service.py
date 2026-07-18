@@ -14,6 +14,8 @@ from app.portfolio.models import (
 from app.scoring.engine import calculate_alpha_score
 from app.scoring.models import FinancialMetrics
 from app.sector.profiles import CompanyProfile
+from app.technical.engine import calculate_combined_score
+from app.technical.models import TechnicalHistoryEntry
 
 
 MAX_POSITION_WEIGHT = 35.0
@@ -22,6 +24,7 @@ STRESS_SHOCKS = (-20.0, -10.0, 10.0)
 LARGEST_POSITION_SHOCK = -25.0
 LARGEST_PROFILE_SHOCK = -15.0
 MIN_STRESS_PRICE_COVERAGE = 90.0
+MIN_PORTFOLIO_SCORE_COVERAGE = 90.0
 
 
 def _diversification_status(concentration_index: float) -> str:
@@ -151,11 +154,18 @@ def build_portfolio_summary(
     companies: Mapping[str, FinancialMetrics],
     prices: Mapping[str, float | None | PortfolioMarketPrice],
     latest_audits: Mapping[str, CompanyDataAudit] | None = None,
+    technical_histories: Mapping[
+        str, Sequence[TechnicalHistoryEntry]
+    ] | None = None,
     reference_date: date | None = None,
 ) -> PortfolioSummary:
     effective_reference_date = reference_date or date.today()
     audits = {
         symbol.upper(): audit for symbol, audit in (latest_audits or {}).items()
+    }
+    histories = {
+        symbol.upper(): list(history)
+        for symbol, history in (technical_histories or {}).items()
     }
     rows: list[PortfolioRow] = []
     for position in positions:
@@ -188,6 +198,14 @@ def build_portfolio_summary(
             if latest_audits is not None
             else None
         )
+        technical_history = histories.get(company.symbol.upper(), [])
+        latest_technical = (
+            technical_history[-1] if technical_history else None
+        )
+        technical_freshness = assess_price_freshness(
+            latest_technical.price_date if latest_technical else None,
+            effective_reference_date,
+        )
 
         rows.append(
             PortfolioRow(
@@ -207,6 +225,28 @@ def build_portfolio_summary(
                 price_source=price_source,
                 price_status=price_status,
                 price_current=price_current,
+                technical_score=(
+                    latest_technical.total_score
+                    if latest_technical
+                    else None
+                ),
+                technical_signal=(
+                    latest_technical.signal if latest_technical else ""
+                ),
+                technical_price_date=(
+                    latest_technical.price_date
+                    if latest_technical
+                    else None
+                ),
+                technical_status=(
+                    technical_freshness.status
+                    if latest_technical
+                    else "Kayıt yok"
+                ),
+                technical_current=(
+                    bool(latest_technical)
+                    and technical_freshness.current
+                ),
                 confidence_score=confidence.total if confidence else None,
                 confidence_status=confidence.status if confidence else "",
                 decision=confidence.decision if confidence else score.decision,
@@ -245,6 +285,28 @@ def build_portfolio_summary(
         sum(row.alpha_score * row.market_value for row in rows) / weight_base
         if weight_base
         else 0
+    )
+    technical_rows = [
+        row
+        for row in rows
+        if row.technical_current and row.technical_score is not None
+    ]
+    current_technical_value = sum(
+        row.market_value for row in technical_rows
+    )
+    current_technical_value_percent = (
+        current_technical_value / weight_base * 100
+        if weight_base
+        else 0
+    )
+    weighted_technical_score = (
+        sum(
+            float(row.technical_score) * row.market_value
+            for row in technical_rows
+        )
+        / current_technical_value
+        if current_technical_value
+        else None
     )
     confidence_rows = [
         row for row in rows if row.confidence_score is not None
@@ -294,6 +356,24 @@ def build_portfolio_summary(
         if concentration_fraction
         else 0
     )
+    portfolio_score_ready = (
+        bool(rows)
+        and current_price_value_percent
+        >= MIN_PORTFOLIO_SCORE_COVERAGE
+        and current_technical_value_percent
+        >= MIN_PORTFOLIO_SCORE_COVERAGE
+        and decision_ready_value_percent
+        >= MIN_PORTFOLIO_SCORE_COVERAGE
+    )
+    weighted_combined_score = (
+        calculate_combined_score(
+            weighted_alpha_score,
+            weighted_technical_score,
+        )
+        if portfolio_score_ready
+        and weighted_technical_score is not None
+        else None
+    )
     largest_position = max(
         rows,
         key=lambda row: row.weight_percent,
@@ -321,6 +401,12 @@ def build_portfolio_summary(
         total_profit_loss=round(total_profit_loss, 2),
         total_return_percent=round(total_return_percent, 2),
         weighted_alpha_score=round(weighted_alpha_score, 2),
+        weighted_technical_score=(
+            round(weighted_technical_score, 2)
+            if weighted_technical_score is not None
+            else None
+        ),
+        weighted_combined_score=weighted_combined_score,
         weighted_confidence_score=(
             round(weighted_confidence_score, 2)
             if weighted_confidence_score is not None
@@ -359,6 +445,10 @@ def build_portfolio_summary(
             bool(rows)
             and current_price_value_percent >= MIN_STRESS_PRICE_COVERAGE
         ),
+        current_technical_value_percent=round(
+            current_technical_value_percent, 2
+        ),
+        portfolio_score_ready=portfolio_score_ready,
         stress_scenarios=_build_stress_scenarios(
             total_market_value,
             total_cost,

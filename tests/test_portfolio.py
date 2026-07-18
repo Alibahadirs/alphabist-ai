@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 
 import pytest
 
@@ -7,6 +7,7 @@ from app.portfolio.models import PortfolioMarketPrice, PortfolioPosition
 from app.portfolio.service import build_portfolio_summary
 from app.scoring.models import FinancialMetrics
 from app.sector.profiles import CompanyProfile
+from app.technical.models import TechnicalHistoryEntry
 
 
 def _company(
@@ -294,3 +295,68 @@ def test_portfolio_stress_is_ready_with_sufficient_current_price_coverage():
 
     assert summary.current_price_value_percent == 100
     assert summary.stress_test_ready is True
+
+
+def _technical_history(
+    symbol: str,
+    identifier: int,
+    score: float,
+) -> TechnicalHistoryEntry:
+    return TechnicalHistoryEntry(
+        id=identifier,
+        symbol=symbol,
+        price_date=date(2026, 7, 17),
+        source="Yahoo Finance",
+        total_score=score,
+        signal="Al",
+        rsi_value=55,
+        atr_percent=3,
+        score_breakdown={},
+        alignment_status="Fiyat ve grafik verisi uyumlu",
+        methodology_version="technical-2026.1",
+        created_at=datetime(2026, 7, 18, 10, identifier),
+    )
+
+
+def test_portfolio_builds_combined_score_from_verified_coverage():
+    companies = {
+        "AAA": _company("AAA"),
+        "BBB": _company("BBB"),
+    }
+    summary = build_portfolio_summary(
+        [
+            PortfolioPosition(
+                symbol="AAA", quantity=1, average_cost=25
+            ),
+            PortfolioPosition(
+                symbol="BBB", quantity=3, average_cost=25
+            ),
+        ],
+        companies,
+        {
+            "AAA": PortfolioMarketPrice(
+                value=25,
+                as_of_date=date(2026, 7, 17),
+                source="Yahoo Finance",
+            ),
+            "BBB": PortfolioMarketPrice(
+                value=25,
+                as_of_date=date(2026, 7, 17),
+                source="Yahoo Finance",
+            ),
+        },
+        technical_histories={
+            "AAA": [_technical_history("AAA", 1, 60)],
+            "BBB": [_technical_history("BBB", 2, 80)],
+        },
+        reference_date=date(2026, 7, 18),
+    )
+
+    assert summary.current_price_value_percent == 100
+    assert summary.current_technical_value_percent == 100
+    assert summary.decision_ready_value_percent == 100
+    assert summary.weighted_technical_score == 75
+    assert summary.weighted_combined_score == pytest.approx(
+        round(summary.weighted_alpha_score * 0.7 + 75 * 0.3, 2)
+    )
+    assert summary.portfolio_score_ready is True

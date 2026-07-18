@@ -37,6 +37,11 @@ class PortfolioRow(BaseModel):
     price_source: str = ""
     price_status: str = "Fiyat yok"
     price_current: bool = False
+    technical_score: float | None = Field(default=None, ge=0, le=100)
+    technical_signal: str = ""
+    technical_price_date: date | None = None
+    technical_status: str = "Kayıt yok"
+    technical_current: bool = False
     confidence_score: float | None = Field(default=None, ge=0, le=100)
     confidence_status: str = ""
     decision: str = ""
@@ -63,6 +68,12 @@ class PortfolioSummary(BaseModel):
     total_profit_loss: float
     total_return_percent: float
     weighted_alpha_score: float = Field(ge=0, le=100)
+    weighted_technical_score: float | None = Field(
+        default=None, ge=0, le=100
+    )
+    weighted_combined_score: float | None = Field(
+        default=None, ge=0, le=100
+    )
     weighted_confidence_score: float | None = Field(
         default=None, ge=0, le=100
     )
@@ -82,6 +93,10 @@ class PortfolioSummary(BaseModel):
         default=0, ge=0, le=100
     )
     stress_test_ready: bool = False
+    current_technical_value_percent: float = Field(
+        default=0, ge=0, le=100
+    )
+    portfolio_score_ready: bool = False
     stress_scenarios: list[PortfolioStressScenario] = Field(
         default_factory=list
     )
