@@ -115,9 +115,18 @@ def calculate_analysis_confidence(
         audit.period_months if audit else None,
     )
     period_component = period_assessment.confidence_points
+    warnings_confirmed = bool(
+        validation.warnings
+        and audit
+        and audit.validation_warnings_confirmed
+        and audit.methodology_version == settings.scoring_methodology_version
+    )
+    warning_penalty = len(validation.warnings) * (
+        0.5 if warnings_confirmed else 1.5
+    )
     validation_penalty = min(
         5.0,
-        len(validation.errors) * 5 + len(validation.warnings) * 1.5,
+        len(validation.errors) * 5 + warning_penalty,
     )
     validation_component = round(5.0 - validation_penalty, 2)
     calculation_status, calculation_mismatches = _calculation_integrity(audit)
@@ -171,9 +180,15 @@ def calculate_analysis_confidence(
     if validation.errors:
         reasons.append("Kritik veri doğrulama hatası bulunuyor.")
     elif validation.warnings:
-        reasons.append(
-            f"{len(validation.warnings)} veri kontrol uyarısı bulunuyor."
-        )
+        if warnings_confirmed:
+            reasons.append(
+                f"{len(validation.warnings)} veri kontrol uyarısı resmi "
+                "raporlarla onaylanmış."
+            )
+        else:
+            reasons.append(
+                f"{len(validation.warnings)} veri kontrol uyarısı bulunuyor."
+            )
     if calculation_mismatches:
         reasons.append(
             "Ham tutarlardan yeniden hesaplanan göstergeler kayıtlı değerlerle "

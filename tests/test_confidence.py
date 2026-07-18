@@ -212,3 +212,43 @@ def test_old_methodology_calculation_snapshot_does_not_block_decision():
     assert confidence.decision_ready is True
     assert confidence.calculation_check_status == "Eski metodoloji"
     assert confidence.calculation_mismatch_fields == []
+
+
+def test_confirmed_validation_warning_has_smaller_confidence_penalty():
+    metrics = _strong_metrics().model_copy(update={"current_ratio": 50})
+    score = calculate_alpha_score(metrics)
+    unconfirmed_audit = _audit(
+        MetricSourceType.FINANCIAL_REPORT
+    ).model_copy(
+        update={"methodology_version": settings.scoring_methodology_version}
+    )
+    confirmed_audit = unconfirmed_audit.model_copy(
+        update={"validation_warnings_confirmed": True}
+    )
+
+    unconfirmed = calculate_analysis_confidence(
+        metrics,
+        score,
+        unconfirmed_audit,
+    )
+    confirmed = calculate_analysis_confidence(
+        metrics,
+        score,
+        confirmed_audit,
+    )
+
+    assert confirmed.total == unconfirmed.total + 1
+    assert any("resmi raporlarla onaylanmış" in item for item in confirmed.reasons)
+
+
+def test_old_methodology_warning_confirmation_does_not_reduce_penalty():
+    metrics = _strong_metrics().model_copy(update={"current_ratio": 50})
+    score = calculate_alpha_score(metrics)
+    audit = _audit(MetricSourceType.FINANCIAL_REPORT).model_copy(
+        update={"validation_warnings_confirmed": True}
+    )
+
+    confidence = calculate_analysis_confidence(metrics, score, audit)
+
+    assert confidence.validation_component == 3.5
+    assert any("uyarısı bulunuyor" in item for item in confidence.reasons)

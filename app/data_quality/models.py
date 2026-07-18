@@ -11,6 +11,7 @@ class DataQualityRow(BaseModel):
     status: str
     missing_fields: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    warnings_confirmed: bool = False
     errors: list[str] = Field(default_factory=list)
     calculation_check_status: str = "Kayıt yok"
     calculation_mismatch_fields: list[str] = Field(default_factory=list)

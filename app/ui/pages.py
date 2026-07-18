@@ -1778,6 +1778,11 @@ def render_data_quality() -> None:
                     or "Yok"
                 ),
                 "Durum": row.status,
+                "Uyarı onayı": (
+                    "Onaylandı"
+                    if row.warnings_confirmed
+                    else ("Gerekli" if row.warnings else "Uygulanamaz")
+                ),
                 "Hesap kontrolü": row.calculation_check_status,
                 "Uyuşmayan göstergeler": (
                     ", ".join(row.calculation_mismatch_fields) or "Yok"

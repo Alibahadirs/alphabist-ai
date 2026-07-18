@@ -32,12 +32,17 @@ FIELD_LABELS = {
 }
 
 
-def _status(completeness: float, errors: list[str], warnings: list[str]) -> str:
+def _status(
+    completeness: float,
+    errors: list[str],
+    warnings: list[str],
+    warnings_confirmed: bool = False,
+) -> str:
     if errors:
         return "Hatalı"
     if completeness < 70:
         return "Eksik veri"
-    if completeness < 100 or warnings:
+    if completeness < 100 or (warnings and not warnings_confirmed):
         return "Kontrol gerekli"
     return "Doğrulandı"
 
@@ -78,8 +83,16 @@ def build_data_quality_summary(
     rows: list[DataQualityRow] = []
     for company in companies:
         report = validate_financial_metrics(company)
+        audit = audits.get(company.symbol.upper())
+        warnings_confirmed = bool(
+            report.warnings
+            and audit
+            and audit.validation_warnings_confirmed
+            and audit.methodology_version
+            == settings.scoring_methodology_version
+        )
         calculation_status, mismatch_fields, calculation_errors = (
-            _calculation_check(audits.get(company.symbol.upper()))
+            _calculation_check(audit)
         )
         errors = [*report.errors, *calculation_errors]
         rows.append(
@@ -88,9 +101,15 @@ def build_data_quality_summary(
                 company_name=company.company_name,
                 company_profile=CompanyProfile(company.company_profile),
                 completeness=report.completeness,
-                status=_status(report.completeness, errors, report.warnings),
+                status=_status(
+                    report.completeness,
+                    errors,
+                    report.warnings,
+                    warnings_confirmed,
+                ),
                 missing_fields=[FIELD_LABELS.get(field, field) for field in report.missing_fields],
                 warnings=report.warnings,
+                warnings_confirmed=warnings_confirmed,
                 errors=errors,
                 calculation_check_status=calculation_status,
                 calculation_mismatch_fields=mismatch_fields,

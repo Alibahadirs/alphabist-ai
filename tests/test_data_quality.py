@@ -110,6 +110,59 @@ def test_extreme_bank_ratios_are_visible_in_data_quality_center():
     assert len(row.warnings) >= 3
 
 
+def test_confirmed_warning_is_verified_but_remains_visible():
+    company = FinancialMetrics(
+        symbol="OUTL", company_name="Outlier Sanayi A.Ş.", revenue_growth=10,
+        net_profit_growth=10, net_margin=150, roe=15, debt_to_equity=0.5,
+        current_ratio=1.5, operating_cash_flow=100, free_cash_flow=50,
+        asset_turnover=0.8,
+    )
+    audit = CompanyDataAudit(
+        symbol="OUTL",
+        source_type=DataSourceType.CORRECTION,
+        company_profile=CompanyProfile.STANDARD,
+        completeness=100,
+        alpha_score=70,
+        methodology_version=settings.scoring_methodology_version,
+        validation_warnings_confirmed=True,
+    )
+
+    row = build_data_quality_summary(
+        [company],
+        {company.symbol: audit},
+    ).rows[0]
+
+    assert row.status == "Doğrulandı"
+    assert row.warnings_confirmed is True
+    assert row.warnings
+
+
+def test_old_methodology_warning_confirmation_is_not_reused():
+    company = FinancialMetrics(
+        symbol="OUTL", company_name="Outlier Sanayi A.Ş.", revenue_growth=10,
+        net_profit_growth=10, net_margin=150, roe=15, debt_to_equity=0.5,
+        current_ratio=1.5, operating_cash_flow=100, free_cash_flow=50,
+        asset_turnover=0.8,
+    )
+    audit = CompanyDataAudit(
+        symbol="OUTL",
+        source_type=DataSourceType.CORRECTION,
+        company_profile=CompanyProfile.STANDARD,
+        completeness=100,
+        alpha_score=70,
+        methodology_version="alpha-2025.1",
+        validation_warnings_confirmed=True,
+    )
+
+    row = build_data_quality_summary(
+        [company],
+        {company.symbol: audit},
+    ).rows[0]
+
+    assert row.status == "Kontrol gerekli"
+    assert row.warnings_confirmed is False
+
+
 def test_matching_calculation_is_verified_in_data_quality_summary():
     company = _complete_company()
 
