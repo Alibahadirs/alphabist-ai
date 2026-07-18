@@ -1,3 +1,5 @@
+from datetime import date
+
 from pydantic import BaseModel, Field
 
 
@@ -8,6 +10,11 @@ class ScannerFilters(BaseModel):
     maximum_debt_to_equity: float = Field(default=3, ge=0)
     positive_operating_cash_flow_only: bool = True
     decision_ready_only: bool = False
+    minimum_technical_score: float | None = Field(
+        default=None, ge=0, le=100
+    )
+    current_technical_only: bool = False
+    technical_strengthening_only: bool = False
 
 
 class ScannerRow(BaseModel):
@@ -28,6 +35,12 @@ class ScannerRow(BaseModel):
     confidence_status: str = ""
     calculation_check_status: str = "Kayıt yok"
     decision_ready: bool = True
+    technical_score: float | None = Field(default=None, ge=0, le=100)
+    technical_delta: float | None = None
+    technical_signal: str = ""
+    technical_price_date: date | None = None
+    technical_status: str = "Kayıt yok"
+    technical_current: bool = False
 
 
 class ScannerSummary(BaseModel):
@@ -35,3 +48,4 @@ class ScannerSummary(BaseModel):
     total_scanned: int = Field(ge=0)
     matched_count: int = Field(ge=0)
     average_alpha_score: float = Field(ge=0, le=100)
+    current_technical_count: int = Field(default=0, ge=0)

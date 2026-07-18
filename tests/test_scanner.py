@@ -1,6 +1,9 @@
+from datetime import date, datetime
+
 from app.scanner.models import ScannerFilters
 from app.scanner.service import scan_companies
 from app.scoring.models import FinancialMetrics
+from app.technical.models import TechnicalHistoryEntry
 
 
 def _company(
@@ -89,3 +92,81 @@ def test_scanner_can_hide_companies_that_are_not_decision_ready():
 
     assert summary.rows == []
     assert summary.matched_count == 0
+
+
+def _technical_history(
+    symbol: str,
+    identifier: int,
+    score: float,
+    price_date: date,
+) -> TechnicalHistoryEntry:
+    return TechnicalHistoryEntry(
+        id=identifier,
+        symbol=symbol,
+        price_date=price_date,
+        source="Yahoo Finance",
+        total_score=score,
+        signal="Al",
+        rsi_value=55,
+        atr_percent=3,
+        score_breakdown={},
+        alignment_status="Fiyat ve grafik verisi uyumlu",
+        methodology_version="technical-2026.1",
+        created_at=datetime(2026, 7, 18, 10, identifier),
+    )
+
+
+def test_scanner_filters_by_current_and_strengthening_technical_score():
+    rising = _company("RISING", 25, 30, 0.4, 100)
+    stale = _company("STALE", 25, 30, 0.4, 100)
+    summary = scan_companies(
+        [rising, stale],
+        ScannerFilters(
+            minimum_alpha_score=0,
+            positive_operating_cash_flow_only=False,
+            minimum_technical_score=70,
+            technical_strengthening_only=True,
+        ),
+        technical_histories={
+            "RISING": [
+                _technical_history(
+                    "RISING", 1, 65, date(2026, 7, 16)
+                ),
+                _technical_history(
+                    "RISING", 2, 75, date(2026, 7, 17)
+                ),
+            ],
+            "STALE": [
+                _technical_history(
+                    "STALE", 3, 65, date(2026, 7, 1)
+                ),
+                _technical_history(
+                    "STALE", 4, 80, date(2026, 7, 2)
+                ),
+            ],
+        },
+        reference_date=date(2026, 7, 18),
+    )
+
+    assert [row.symbol for row in summary.rows] == ["RISING"]
+    assert summary.rows[0].technical_score == 75
+    assert summary.rows[0].technical_delta == 10
+    assert summary.rows[0].technical_current is True
+    assert summary.current_technical_count == 1
+
+
+def test_scanner_keeps_companies_without_technical_filter():
+    company = _company("PLAIN", 25, 30, 0.4, 100)
+    summary = scan_companies(
+        [company],
+        ScannerFilters(
+            minimum_alpha_score=0,
+            positive_operating_cash_flow_only=False,
+        ),
+        technical_histories={},
+        reference_date=date(2026, 7, 18),
+    )
+
+    assert summary.matched_count == 1
+    assert summary.rows[0].technical_score is None
+    assert summary.rows[0].technical_status == "Kayıt yok"

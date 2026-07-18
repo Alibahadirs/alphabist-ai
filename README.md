@@ -56,6 +56,7 @@ yerel Streamlit uygulaması.
 - Karşılaştırmada şirket bazlı doğrulanmış teknik puan kapsamı
 - Yinelenmeyen, kaynak ve metodoloji izli teknik puan geçmişi
 - Takip listesinde güncel teknik puan, değişim ve güçlenme takibi
+- Hisse tarayıcıda güncel teknik puan ve güçlenme filtreleri
 - SQLite ile yerel veri saklama
 
 ## Çalıştırma

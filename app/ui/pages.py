@@ -1393,6 +1393,17 @@ def render_scanner() -> None:
                 step=1.0,
                 format="%.2f",
             )
+            minimum_technical = st.slider(
+                "Minimum güncel teknik puan",
+                0,
+                100,
+                0,
+                help=(
+                    "0 seçildiğinde teknik puan eşiği uygulanmaz. "
+                    "Daha yüksek bir eşik yalnız güncel ve doğrulanmış "
+                    "teknik kayıtları kabul eder."
+                ),
+            )
         with right:
             maximum_debt_to_equity = st.number_input(
                 "Maksimum borç / özkaynak",
@@ -1413,12 +1424,24 @@ def render_scanner() -> None:
                     "bulunan şirketleri gösterir."
                 ),
             )
+            current_technical_only = st.toggle(
+                "Yalnızca güncel teknik kaydı olanlar",
+                value=False,
+            )
+            technical_strengthening_only = st.toggle(
+                "Yalnızca teknik puanı yükselenler",
+                value=False,
+            )
         st.form_submit_button(
             "Filtrele",
             type="primary",
             icon=":material/filter_alt:",
         )
 
+    technical_histories = {
+        company.symbol: list_technical_score_history(company.symbol)
+        for company in companies
+    }
     summary = scan_companies(
         companies,
         ScannerFilters(
@@ -1428,8 +1451,18 @@ def render_scanner() -> None:
             maximum_debt_to_equity=maximum_debt_to_equity,
             positive_operating_cash_flow_only=positive_cash_flow,
             decision_ready_only=decision_ready_only,
+            minimum_technical_score=(
+                float(minimum_technical)
+                if minimum_technical > 0
+                else None
+            ),
+            current_technical_only=current_technical_only,
+            technical_strengthening_only=(
+                technical_strengthening_only
+            ),
         ),
         latest_audits,
+        technical_histories,
     )
 
     with st.container(horizontal=True):
@@ -1443,6 +1476,11 @@ def render_scanner() -> None:
         st.metric(
             "Lider",
             summary.rows[0].symbol if summary.rows else "-",
+            border=True,
+        )
+        st.metric(
+            "Güncel teknik kayıt",
+            summary.current_technical_count,
             border=True,
         )
 
@@ -1470,6 +1508,13 @@ def render_scanner() -> None:
             "Borç / özkaynak": row.debt_to_equity,
             "Cari oran": row.current_ratio,
             "Operasyonel nakit (TL)": row.operating_cash_flow,
+            "Teknik puan": row.technical_score,
+            "Teknik değişim": row.technical_delta,
+            "Teknik sinyal": (
+                row.technical_signal if row.technical_current else "-"
+            ),
+            "Teknik fiyat tarihi": row.technical_price_date,
+            "Teknik kayıt durumu": row.technical_status,
         }
         for index, row in enumerate(summary.rows, start=1)
     ]
@@ -1497,6 +1542,19 @@ def render_scanner() -> None:
                 "Cari oran": st.column_config.NumberColumn(format="%.2f"),
                 "Operasyonel nakit (TL)": st.column_config.NumberColumn(
                     format="localized"
+                ),
+                "Teknik puan": st.column_config.ProgressColumn(
+                    "Teknik puan",
+                    min_value=0,
+                    max_value=100,
+                    format="%.1f",
+                ),
+                "Teknik değişim": st.column_config.NumberColumn(
+                    format="%+.1f"
+                ),
+                "Teknik fiyat tarihi": st.column_config.DateColumn(
+                    "Teknik fiyat tarihi",
+                    format="DD.MM.YYYY",
                 ),
             },
         )

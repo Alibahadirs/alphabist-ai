@@ -1,20 +1,31 @@
 from collections.abc import Mapping, Sequence
+from datetime import date
 
 from app.audit.models import CompanyDataAudit
 from app.confidence.service import calculate_analysis_confidence
+from app.market_data.freshness import assess_price_freshness
 from app.scanner.models import ScannerFilters, ScannerRow, ScannerSummary
 from app.scoring.engine import calculate_alpha_score
 from app.scoring.models import FinancialMetrics
 from app.sector.profiles import CompanyProfile
+from app.technical.models import TechnicalHistoryEntry
 
 
 def scan_companies(
     companies: Sequence[FinancialMetrics],
     filters: ScannerFilters,
     latest_audits: Mapping[str, CompanyDataAudit] | None = None,
+    technical_histories: Mapping[
+        str, Sequence[TechnicalHistoryEntry]
+    ] | None = None,
+    reference_date: date | None = None,
 ) -> ScannerSummary:
     audits = {
         symbol.upper(): audit for symbol, audit in (latest_audits or {}).items()
+    }
+    histories = {
+        symbol.upper(): list(history)
+        for symbol, history in (technical_histories or {}).items()
     }
     rows: list[ScannerRow] = []
     for company in companies:
@@ -26,6 +37,46 @@ def scan_companies(
             if latest_audits is not None
             else None
         )
+        technical_history = histories.get(company.symbol.upper(), [])
+        latest_technical = (
+            technical_history[-1] if technical_history else None
+        )
+        previous_technical = (
+            technical_history[-2]
+            if len(technical_history) >= 2
+            else None
+        )
+        technical_freshness = assess_price_freshness(
+            latest_technical.price_date if latest_technical else None,
+            reference_date,
+        )
+        technical_current = (
+            bool(latest_technical) and technical_freshness.current
+        )
+        technical_delta = (
+            latest_technical.total_score - previous_technical.total_score
+            if latest_technical and previous_technical
+            else None
+        )
+        technical_filter_active = (
+            filters.current_technical_only
+            or filters.minimum_technical_score is not None
+            or filters.technical_strengthening_only
+        )
+        if technical_filter_active and not technical_current:
+            continue
+        if (
+            filters.minimum_technical_score is not None
+            and latest_technical is not None
+            and latest_technical.total_score
+            < filters.minimum_technical_score
+        ):
+            continue
+        if (
+            filters.technical_strengthening_only
+            and (technical_delta is None or technical_delta <= 0)
+        ):
+            continue
         if (
             filters.decision_ready_only
             and confidence is not None
@@ -70,6 +121,26 @@ def scan_companies(
                 decision_ready=(
                     confidence.decision_ready if confidence else True
                 ),
+                technical_score=(
+                    latest_technical.total_score
+                    if latest_technical
+                    else None
+                ),
+                technical_delta=technical_delta,
+                technical_signal=(
+                    latest_technical.signal if latest_technical else ""
+                ),
+                technical_price_date=(
+                    latest_technical.price_date
+                    if latest_technical
+                    else None
+                ),
+                technical_status=(
+                    technical_freshness.status
+                    if latest_technical
+                    else "Kayıt yok"
+                ),
+                technical_current=technical_current,
             )
         )
 
@@ -84,4 +155,7 @@ def scan_companies(
         total_scanned=len(companies),
         matched_count=len(rows),
         average_alpha_score=average_alpha_score,
+        current_technical_count=sum(
+            row.technical_current for row in rows
+        ),
     )
