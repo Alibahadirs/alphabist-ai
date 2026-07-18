@@ -10,7 +10,7 @@ def yahoo_symbol(symbol: str) -> str:
     return normalized if normalized.endswith(".IS") else f"{normalized}.IS"
 
 
-def get_quote(symbol: str) -> dict[str, float | None]:
+def get_quote(symbol: str) -> dict[str, float | str | None]:
     try:
         history = yf.Ticker(yahoo_symbol(symbol)).history(
             period="5d",
@@ -28,11 +28,14 @@ def get_quote(symbol: str) -> dict[str, float | None]:
     previous = float(closes.iloc[-2]) if len(closes) > 1 else None
     change = None if previous is None else last - previous
     change_percent = None if not previous else change / previous * 100
+    as_of_date = pd.Timestamp(closes.index[-1]).date().isoformat()
     return {
         "last": last,
         "previous": previous,
         "change": change,
         "change_percent": change_percent,
+        "as_of_date": as_of_date,
+        "source": "Yahoo Finance",
     }
 
 

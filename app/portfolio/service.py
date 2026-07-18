@@ -1,8 +1,10 @@
 from collections.abc import Mapping, Sequence
+from datetime import date
 
 from app.audit.models import CompanyDataAudit
 from app.confidence.service import calculate_analysis_confidence
 from app.portfolio.models import (
+    PortfolioMarketPrice,
     PortfolioPosition,
     PortfolioRow,
     PortfolioStressScenario,
@@ -18,6 +20,7 @@ MAX_PROFILE_WEIGHT = 60.0
 STRESS_SHOCKS = (-20.0, -10.0, 10.0)
 LARGEST_POSITION_SHOCK = -25.0
 LARGEST_PROFILE_SHOCK = -15.0
+MAX_PRICE_AGE_DAYS = 5
 
 
 def _diversification_status(concentration_index: float) -> str:
@@ -104,12 +107,60 @@ def _build_stress_scenarios(
     return scenarios
 
 
+def _price_details(
+    raw_price: float | None | PortfolioMarketPrice,
+    reference_date: date,
+) -> tuple[float | None, bool, date | None, int | None, str, str, bool]:
+    price = (
+        raw_price
+        if isinstance(raw_price, PortfolioMarketPrice)
+        else PortfolioMarketPrice(value=raw_price)
+    )
+    available = price.value is not None and price.value >= 0
+    if not available:
+        return None, False, price.as_of_date, None, price.source, "Fiyat yok", False
+    if price.as_of_date is None:
+        return (
+            float(price.value),
+            True,
+            None,
+            None,
+            price.source,
+            "Tarih bilinmiyor",
+            False,
+        )
+
+    age_days = (reference_date - price.as_of_date).days
+    if age_days < 0:
+        return (
+            float(price.value),
+            True,
+            price.as_of_date,
+            0,
+            price.source,
+            "Tarih hatası",
+            False,
+        )
+    current = age_days <= MAX_PRICE_AGE_DAYS
+    return (
+        float(price.value),
+        True,
+        price.as_of_date,
+        age_days,
+        price.source,
+        "Güncel günlük veri" if current else "Eski fiyat",
+        current,
+    )
+
+
 def build_portfolio_summary(
     positions: Sequence[PortfolioPosition],
     companies: Mapping[str, FinancialMetrics],
-    prices: Mapping[str, float | None],
+    prices: Mapping[str, float | None | PortfolioMarketPrice],
     latest_audits: Mapping[str, CompanyDataAudit] | None = None,
+    reference_date: date | None = None,
 ) -> PortfolioSummary:
+    effective_reference_date = reference_date or date.today()
     audits = {
         symbol.upper(): audit for symbol, audit in (latest_audits or {}).items()
     }
@@ -119,9 +170,19 @@ def build_portfolio_summary(
         if company is None:
             continue
 
-        price = prices.get(position.symbol)
-        price_available = price is not None and price >= 0
-        effective_price = float(price) if price_available else position.average_cost
+        (
+            price,
+            price_available,
+            price_as_of_date,
+            price_age_days,
+            price_source,
+            price_status,
+            price_current,
+        ) = _price_details(
+            prices.get(position.symbol),
+            effective_reference_date,
+        )
+        effective_price = price if price_available else position.average_cost
         cost_value = position.quantity * position.average_cost
         market_value = position.quantity * effective_price
         profit_loss = market_value - cost_value
@@ -141,13 +202,18 @@ def build_portfolio_summary(
                 company_name=company.company_name,
                 quantity=position.quantity,
                 average_cost=position.average_cost,
-                last_price=float(price) if price_available else None,
+                last_price=price if price_available else None,
                 cost_value=cost_value,
                 market_value=market_value,
                 profit_loss=profit_loss,
                 return_percent=return_percent,
                 alpha_score=score.total,
                 price_available=price_available,
+                price_as_of_date=price_as_of_date,
+                price_age_days=price_age_days,
+                price_source=price_source,
+                price_status=price_status,
+                price_current=price_current,
                 confidence_score=confidence.total if confidence else None,
                 confidence_status=confidence.status if confidence else "",
                 decision=confidence.decision if confidence else score.decision,
@@ -285,6 +351,8 @@ def build_portfolio_summary(
             if rows
             else "Veri yok"
         ),
+        current_price_count=sum(row.price_current for row in rows),
+        price_warning_count=sum(not row.price_current for row in rows),
         stress_scenarios=_build_stress_scenarios(
             total_market_value,
             total_cost,

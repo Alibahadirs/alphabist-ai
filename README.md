@@ -49,6 +49,7 @@ yerel Streamlit uygulaması.
 - Ağırlık bazlı yoğunlaşma endeksi ve etkin pozisyon sayısı
 - Portföy için mekanik fiyat şoku stres senaryoları
 - En büyük pozisyon ve şirket profili için yoğunlaşma stres testi
+- Portföy fiyatları için kaynak, tarih ve güncellik doğrulaması
 - SQLite ile yerel veri saklama
 
 ## Çalıştırma

@@ -1,7 +1,9 @@
+from datetime import date
+
 import pytest
 
 from app.database import repository
-from app.portfolio.models import PortfolioPosition
+from app.portfolio.models import PortfolioMarketPrice, PortfolioPosition
 from app.portfolio.service import build_portfolio_summary
 from app.scoring.models import FinancialMetrics
 from app.sector.profiles import CompanyProfile
@@ -215,3 +217,44 @@ def test_equal_weight_portfolio_is_classified_as_diversified():
     assert summary.concentration_index == pytest.approx(20)
     assert summary.effective_position_count == pytest.approx(5)
     assert summary.diversification_status == "Dengeli"
+
+
+def test_portfolio_marks_current_and_stale_market_prices():
+    companies = {
+        "FRESH": _company("FRESH"),
+        "STALE": _company("STALE"),
+    }
+    summary = build_portfolio_summary(
+        [
+            PortfolioPosition(
+                symbol="FRESH", quantity=1, average_cost=20
+            ),
+            PortfolioPosition(
+                symbol="STALE", quantity=1, average_cost=20
+            ),
+        ],
+        companies,
+        {
+            "FRESH": PortfolioMarketPrice(
+                value=25,
+                as_of_date=date(2026, 7, 17),
+                source="Yahoo Finance",
+            ),
+            "STALE": PortfolioMarketPrice(
+                value=22,
+                as_of_date=date(2026, 7, 1),
+                source="Yahoo Finance",
+            ),
+        },
+        reference_date=date(2026, 7, 18),
+    )
+
+    rows = {row.symbol: row for row in summary.rows}
+    assert rows["FRESH"].price_current is True
+    assert rows["FRESH"].price_age_days == 1
+    assert rows["FRESH"].price_status == "Güncel günlük veri"
+    assert rows["STALE"].price_current is False
+    assert rows["STALE"].price_age_days == 17
+    assert rows["STALE"].price_status == "Eski fiyat"
+    assert summary.current_price_count == 1
+    assert summary.price_warning_count == 1

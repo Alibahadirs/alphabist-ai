@@ -1,3 +1,5 @@
+from datetime import date
+
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -12,6 +14,12 @@ class PortfolioPosition(BaseModel):
         return value.upper().strip()
 
 
+class PortfolioMarketPrice(BaseModel):
+    value: float | None
+    as_of_date: date | None = None
+    source: str = ""
+
+
 class PortfolioRow(BaseModel):
     symbol: str
     company_name: str
@@ -24,6 +32,11 @@ class PortfolioRow(BaseModel):
     return_percent: float
     alpha_score: float = Field(ge=0, le=100)
     price_available: bool
+    price_as_of_date: date | None = None
+    price_age_days: int | None = Field(default=None, ge=0)
+    price_source: str = ""
+    price_status: str = "Fiyat yok"
+    price_current: bool = False
     confidence_score: float | None = Field(default=None, ge=0, le=100)
     confidence_status: str = ""
     decision: str = ""
@@ -63,6 +76,8 @@ class PortfolioSummary(BaseModel):
     concentration_index: float = Field(default=0, ge=0, le=100)
     effective_position_count: float = Field(default=0, ge=0)
     diversification_status: str = "Veri yok"
+    current_price_count: int = Field(default=0, ge=0)
+    price_warning_count: int = Field(default=0, ge=0)
     stress_scenarios: list[PortfolioStressScenario] = Field(
         default_factory=list
     )

@@ -69,7 +69,7 @@ from app.parser.models import (
     FinancialReportDraft,
     PdfExtractionResult,
 )
-from app.portfolio.models import PortfolioPosition
+from app.portfolio.models import PortfolioMarketPrice, PortfolioPosition
 from app.portfolio.service import build_portfolio_summary
 from app.reporting.models import REPORT_FRESHNESS_LABELS, ReportFreshnessStatus
 from app.reporting.service import assess_report_period, report_period_regresses
@@ -2539,15 +2539,24 @@ def render_portfolio() -> None:
         st.info("Portföyünüz henüz boş.")
         return
 
-    prices: dict[str, float | None] = {}
+    prices: dict[str, PortfolioMarketPrice] = {}
     failed_symbols: list[str] = []
     with st.spinner("Gecikmeli fiyatlar alınıyor..."):
         for position in positions:
             try:
                 quote = _load_quote(position.symbol)
-                prices[position.symbol] = float(quote["last"])
+                quote_date = (
+                    date.fromisoformat(str(quote["as_of_date"]))
+                    if quote.get("as_of_date")
+                    else None
+                )
+                prices[position.symbol] = PortfolioMarketPrice(
+                    value=float(quote["last"]),
+                    as_of_date=quote_date,
+                    source=str(quote.get("source") or ""),
+                )
             except Exception:
-                prices[position.symbol] = None
+                prices[position.symbol] = PortfolioMarketPrice(value=None)
                 failed_symbols.append(position.symbol)
 
     latest_audits = {
@@ -2563,6 +2572,16 @@ def render_portfolio() -> None:
         st.warning(
             "Fiyat alınamayan hisselerde güncel değer yerine maliyet kullanıldı: "
             + ", ".join(failed_symbols)
+        )
+    stale_symbols = [
+        row.symbol
+        for row in summary.rows
+        if row.price_available and not row.price_current
+    ]
+    if stale_symbols:
+        st.warning(
+            "Fiyat tarihi güncel doğrulanamayan pozisyonlar var: "
+            + ", ".join(stale_symbols)
         )
 
     with st.container(horizontal=True):
@@ -2621,6 +2640,11 @@ def render_portfolio() -> None:
             f"{summary.effective_position_count:.1f}",
             border=True,
         )
+        st.metric(
+            "Güncel fiyat",
+            f"{summary.current_price_count}/{len(summary.rows)}",
+            border=True,
+        )
 
     st.caption(
         "Ağırlık bazlı yoğunlaşma endeksi: "
@@ -2646,6 +2670,9 @@ def render_portfolio() -> None:
             "Lot": row.quantity,
             "Maliyet (TL)": row.average_cost,
             "Son fiyat (TL)": row.last_price,
+            "Fiyat tarihi": row.price_as_of_date,
+            "Fiyat yaşı (gün)": row.price_age_days,
+            "Fiyat kaynağı": row.price_source or "-",
             "Güncel değer (TL)": row.market_value,
             "Kâr / zarar (TL)": row.profit_loss,
             "Getiri (%)": row.return_percent,
@@ -2658,7 +2685,7 @@ def render_portfolio() -> None:
                 "Hazır" if row.decision_ready else "Doğrulama gerekli"
             ),
             "Hesap kontrolü": row.calculation_check_status,
-            "Fiyat durumu": "Güncel" if row.price_available else "Fiyat bekleniyor",
+            "Fiyat durumu": row.price_status,
         }
         for row in summary.rows
     ]
@@ -2672,6 +2699,14 @@ def render_portfolio() -> None:
                 "Lot": st.column_config.NumberColumn(format="%.0f"),
                 "Maliyet (TL)": st.column_config.NumberColumn(format="%.2f"),
                 "Son fiyat (TL)": st.column_config.NumberColumn(format="%.2f"),
+                "Fiyat tarihi": st.column_config.DateColumn(
+                    "Fiyat tarihi",
+                    format="DD.MM.YYYY",
+                ),
+                "Fiyat yaşı (gün)": st.column_config.NumberColumn(
+                    "Fiyat yaşı (gün)",
+                    format="%d",
+                ),
                 "Güncel değer (TL)": st.column_config.NumberColumn(format="localized"),
                 "Kâr / zarar (TL)": st.column_config.NumberColumn(format="localized"),
                 "Getiri (%)": st.column_config.NumberColumn(format="%.2f"),
