@@ -84,6 +84,7 @@ from app.scanner.models import ScannerFilters
 from app.scanner.service import scan_companies
 from app.technical.engine import calculate_combined_score, calculate_technical_score
 from app.technical.models import TechnicalScoreBreakdown
+from app.technical.refresh import refresh_technical_scores
 from app.watchlist.models import WatchlistEntry
 from app.watchlist.service import build_watchlist_summary
 from app.validation.service import (
@@ -1371,6 +1372,69 @@ def render_scanner() -> None:
     latest_audits = {
         audit.symbol: audit for audit in list_latest_company_data_audits()
     }
+
+    if st.button(
+        "Teknik kayıtları güncelle",
+        icon=":material/sync:",
+        help=(
+            "Kayıtlı şirketlerin gecikmeli piyasa verisini doğrular ve "
+            "yalnız güncel, fiyat-grafik uyumlu teknik puanları kaydeder."
+        ),
+    ):
+        with st.spinner("Teknik veriler doğrulanıp kaydediliyor..."):
+            refresh_summary = refresh_technical_scores(
+                [company.symbol for company in companies],
+                _load_market_data,
+                add_technical_score_history,
+                settings.technical_methodology_version,
+            )
+        with st.container(horizontal=True):
+            st.metric(
+                "Kaydedildi",
+                refresh_summary.saved,
+                border=True,
+            )
+            st.metric(
+                "Değişmedi",
+                refresh_summary.unchanged,
+                border=True,
+            )
+            st.metric(
+                "Reddedildi",
+                refresh_summary.rejected,
+                border=True,
+            )
+            st.metric(
+                "Hata",
+                refresh_summary.failed,
+                border=True,
+            )
+        with st.expander("Teknik güncelleme ayrıntıları"):
+            st.dataframe(
+                pd.DataFrame(
+                    [
+                        {
+                            "Hisse": item.symbol,
+                            "Durum": item.status,
+                            "Fiyat tarihi": item.price_date,
+                            "Teknik puan": item.technical_score,
+                            "Açıklama": item.detail,
+                        }
+                        for item in refresh_summary.items
+                    ]
+                ),
+                hide_index=True,
+                width="stretch",
+                column_config={
+                    "Fiyat tarihi": st.column_config.DateColumn(
+                        "Fiyat tarihi",
+                        format="DD.MM.YYYY",
+                    ),
+                    "Teknik puan": st.column_config.NumberColumn(
+                        format="%.1f"
+                    ),
+                },
+            )
 
     with st.form("scanner_filters", border=True):
         st.subheader("Filtreler")

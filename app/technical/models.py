@@ -29,3 +29,20 @@ class TechnicalHistoryEntry(BaseModel):
     alignment_status: str
     methodology_version: str
     created_at: datetime
+
+
+class TechnicalRefreshItem(BaseModel):
+    symbol: str
+    status: str
+    detail: str
+    price_date: date | None = None
+    technical_score: float | None = Field(default=None, ge=0, le=100)
+
+
+class TechnicalRefreshSummary(BaseModel):
+    total: int = Field(ge=0)
+    saved: int = Field(ge=0)
+    unchanged: int = Field(ge=0)
+    rejected: int = Field(ge=0)
+    failed: int = Field(ge=0)
+    items: list[TechnicalRefreshItem]
