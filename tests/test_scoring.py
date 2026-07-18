@@ -54,6 +54,9 @@ def test_strong_company_receives_full_score():
     score = calculate_alpha_score(metrics)
 
     assert score.total == 100
+    assert score.raw_total == 100
+    assert score.completeness_factor == 1
+    assert score.completeness_adjustment == 0
     assert score.grade == "A+"
     assert score.decision == "Güçlü Al"
 
@@ -112,3 +115,39 @@ def test_invalid_manual_score_is_rejected():
 def test_invalid_scale_range_raises_scoring_error():
     with pytest.raises(ScoringError):
         scale(value=10, low=20, high=20, points=15)
+
+
+def test_incomplete_data_adjustment_is_explicit_and_reproducible():
+    metrics = FinancialMetrics(
+        symbol="TEST",
+        company_name="Eksik Test Şirketi",
+        revenue_growth=20,
+        net_profit_growth=25,
+        net_margin=12,
+        roe=22,
+    )
+
+    score = calculate_alpha_score(metrics)
+    category_total = sum(
+        (
+            score.profitability,
+            score.growth,
+            score.leverage,
+            score.liquidity,
+            score.cash_flow,
+            score.efficiency,
+            score.valuation,
+            score.risk,
+            score.management,
+        )
+    )
+
+    assert score.raw_total == pytest.approx(category_total)
+    assert score.completeness_factor < 1
+    assert score.completeness_adjustment < 0
+    assert score.total == pytest.approx(
+        round(score.raw_total * score.completeness_factor, 2)
+    )
+    assert score.completeness_adjustment == pytest.approx(
+        round(score.total - score.raw_total, 2)
+    )

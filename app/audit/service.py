@@ -215,6 +215,10 @@ def attach_analysis_snapshot(
             "score_breakdown": {
                 category: getattr(score, category)
                 for category in CATEGORY_MAX_POINTS
+            } | {
+                "raw_total": score.raw_total,
+                "completeness_factor": score.completeness_factor,
+                "completeness_adjustment": score.completeness_adjustment,
             },
             "metric_values": metrics.model_dump(mode="json"),
         }

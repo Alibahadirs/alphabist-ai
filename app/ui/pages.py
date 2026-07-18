@@ -878,6 +878,32 @@ def render_dashboard() -> None:
                 "Maksimum": st.column_config.NumberColumn(format="%.0f"),
             },
         )
+        with st.container(horizontal=True):
+            st.metric(
+                "Ham kategori toplamı",
+                f"{score.raw_total:.2f}/100",
+                border=True,
+            )
+            st.metric(
+                "Veri yeterliliği",
+                f"%{score.data_completeness:.1f}",
+                border=True,
+            )
+            st.metric(
+                "Yeterlilik katsayısı",
+                f"{score.completeness_factor:.3f}",
+                border=True,
+            )
+            st.metric(
+                "Yeterlilik etkisi",
+                f"{score.completeness_adjustment:.2f} puan",
+                border=True,
+            )
+            st.metric(
+                "Nihai Alpha Score",
+                f"{score.total:.2f}/100",
+                border=True,
+            )
 
     if audit_history:
         with st.expander("Veri kaynağı ve puan geçmişi"):
@@ -909,6 +935,19 @@ def render_dashboard() -> None:
                                 audit.comparison_period_confirmed
                             ),
                             "Yeterlilik (%)": audit.completeness,
+                            "Ham kategori toplamı": (
+                                audit.score_breakdown.get("raw_total")
+                            ),
+                            "Yeterlilik katsayısı": (
+                                audit.score_breakdown.get(
+                                    "completeness_factor"
+                                )
+                            ),
+                            "Yeterlilik etkisi": (
+                                audit.score_breakdown.get(
+                                    "completeness_adjustment"
+                                )
+                            ),
                             "Alpha Score": audit.alpha_score,
                             "Not": audit.grade or "-",
                             "Karar": audit.decision or "-",
@@ -942,6 +981,15 @@ def render_dashboard() -> None:
                     ),
                     "Yeterlilik (%)": st.column_config.ProgressColumn(
                         "Yeterlilik (%)", min_value=0, max_value=100, format="%.1f"
+                    ),
+                    "Ham kategori toplamı": st.column_config.NumberColumn(
+                        format="%.2f"
+                    ),
+                    "Yeterlilik katsayısı": st.column_config.NumberColumn(
+                        format="%.3f"
+                    ),
+                    "Yeterlilik etkisi": st.column_config.NumberColumn(
+                        format="%+.2f"
                     ),
                     "Alpha Score": st.column_config.NumberColumn(format="%.1f"),
                     "Analiz güveni (%)": st.column_config.ProgressColumn(

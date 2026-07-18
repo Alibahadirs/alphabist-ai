@@ -49,6 +49,9 @@ class ScoreBreakdown(BaseModel):
     valuation: float = Field(ge=0, le=10)
     risk: float = Field(ge=0, le=5)
     management: float = Field(ge=0, le=5)
+    raw_total: float = Field(ge=0, le=100)
+    completeness_factor: float = Field(ge=0.7, le=1)
+    completeness_adjustment: float = Field(ge=-30, le=0)
     total: float = Field(ge=0, le=100)
     grade: str
     decision: str

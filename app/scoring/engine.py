@@ -116,14 +116,23 @@ def calculate_alpha_score(metrics: FinancialMetrics) -> ScoreBreakdown:
         valuation = round((valuation + nav_value_score) / 2, 2)
     raw_total = round(sum((profitability, growth, leverage, liquidity, cash_flow, efficiency, valuation, risk, management)), 2)
     validation = validate_financial_metrics(metrics)
-    total = round(raw_total * (0.7 + 0.3 * validation.completeness / 100), 2)
+    completeness_factor = round(
+        0.7 + 0.3 * validation.completeness / 100,
+        4,
+    )
+    total = round(raw_total * completeness_factor, 2)
+    completeness_adjustment = round(total - raw_total, 2)
     grade, decision = get_grade_and_decision(total)
     if validation.completeness < 70:
         decision = "Eksik veri / Doğrula"
     return ScoreBreakdown(
         profitability=profitability, growth=growth, leverage=leverage,
         liquidity=liquidity, cash_flow=cash_flow, efficiency=efficiency,
-        valuation=valuation, risk=risk, management=management, total=total,
+        valuation=valuation, risk=risk, management=management,
+        raw_total=raw_total,
+        completeness_factor=completeness_factor,
+        completeness_adjustment=completeness_adjustment,
+        total=total,
         grade=grade, decision=decision, company_profile=profile,
         data_completeness=validation.completeness,
         validation_warnings=validation.errors + validation.warnings,
