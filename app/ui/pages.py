@@ -64,6 +64,10 @@ from app.data_quality.readiness import (
 from app.market_data.provider import get_history, get_quote
 from app.market_data.freshness import assess_price_freshness
 from app.market_data.validation import validate_quote_history_alignment
+from app.history.service import (
+    calculate_latest_comparable_score_delta,
+    select_previous_comparable_audit,
+)
 from app.parser.converter import to_financial_metrics
 from app.parser.extractor import (
     extract_activity_report,
@@ -650,7 +654,11 @@ def _render_snapshot_comparison(
             st.metric(
                 "Alpha Score",
                 f"{comparison.current_score:.1f}/100",
-                f"{comparison.score_delta:+.1f}",
+                (
+                    f"{comparison.score_delta:+.1f}"
+                    if comparison.score_delta is not None
+                    else None
+                ),
                 border=True,
             )
             st.metric(
@@ -694,8 +702,8 @@ def _render_snapshot_comparison(
             st.warning(
                 "Puanlama metodolojisi değişmiş: "
                 f"{comparison.previous_methodology} → "
-                f"{comparison.current_methodology}. Puan farkının bir bölümü "
-                "metodoloji değişikliğinden kaynaklanabilir."
+                f"{comparison.current_methodology}. Puan ve kategori farkı "
+                "hesaplanmadı."
             )
 
         if comparison.category_deltas:
@@ -757,17 +765,29 @@ def render_dashboard() -> None:
     confidence = calculate_analysis_confidence(company, score, latest_audit)
     audit_history = list_company_data_audits(symbol)
     score_history = list_score_history(symbol)
+    comparable_score_history = [
+        entry
+        for entry in score_history
+        if entry.methodology_version
+        == settings.scoring_methodology_version
+    ]
     snapshot_comparison = None
-    if len(audit_history) >= 2:
+    previous_comparable_audit = select_previous_comparable_audit(
+        audit_history
+    )
+    if audit_history and previous_comparable_audit is not None:
         snapshot_comparison = compare_analysis_snapshots(
-            audit_history[-2],
+            previous_comparable_audit,
             audit_history[-1],
         )
     score_delta = None
     if snapshot_comparison is not None:
         score_delta = snapshot_comparison.score_delta
-    elif len(score_history) >= 2:
-        score_delta = score_history[-1].total_score - score_history[-2].total_score
+    else:
+        score_delta = calculate_latest_comparable_score_delta(
+            score_history,
+            settings.scoring_methodology_version,
+        )
 
     with st.container(horizontal=True):
         st.metric(
@@ -775,7 +795,9 @@ def render_dashboard() -> None:
             f"{score.total:.1f}/100",
             f"{score_delta:+.1f}" if score_delta is not None else None,
             border=True,
-            chart_data=[entry.total_score for entry in score_history] or None,
+            chart_data=[
+                entry.total_score for entry in comparable_score_history
+            ] or None,
             chart_type="line",
         )
         st.metric("Not", score.grade, border=True)
@@ -942,7 +964,7 @@ def render_dashboard() -> None:
             else:
                 st.caption("Belirgin risk veya eksik gösterge bulunamadı.")
 
-    if score_history:
+    if comparable_score_history:
         with st.container(border=True):
             st.subheader("Alpha Score geçmişi")
             history_frame = pd.DataFrame(
@@ -951,7 +973,7 @@ def render_dashboard() -> None:
                         "Tarih": entry.created_at,
                         "Alpha Score": entry.total_score,
                     }
-                    for entry in score_history
+                    for entry in comparable_score_history
                 ]
             )
             st.line_chart(
@@ -960,7 +982,10 @@ def render_dashboard() -> None:
                 y="Alpha Score",
                 y_label="Puan",
             )
-            st.caption(f"Son {len(score_history)} kayıt gösteriliyor.")
+            st.caption(
+                f"{settings.scoring_methodology_version} metodolojisine ait "
+                f"son {len(comparable_score_history)} kayıt gösteriliyor."
+            )
 
     st.subheader("Piyasa görünümü")
     try:

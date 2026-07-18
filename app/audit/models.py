@@ -114,7 +114,7 @@ class CompanyDataAudit(BaseModel):
 class AnalysisSnapshotComparison(BaseModel):
     previous_score: float = Field(ge=0, le=100)
     current_score: float = Field(ge=0, le=100)
-    score_delta: float
+    score_delta: float | None = None
     previous_confidence: float | None = Field(default=None, ge=0, le=100)
     current_confidence: float | None = Field(default=None, ge=0, le=100)
     confidence_delta: float | None = None

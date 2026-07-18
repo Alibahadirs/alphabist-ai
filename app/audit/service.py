@@ -145,14 +145,21 @@ def compare_analysis_snapshots(
     if previous.symbol.upper().strip() != current.symbol.upper().strip():
         raise ValueError("Yalnızca aynı şirkete ait analizler karşılaştırılabilir.")
 
+    methodology_changed = (
+        previous.methodology_version != current.methodology_version
+    )
     confidence_delta = None
-    if previous.confidence_score is not None and current.confidence_score is not None:
+    if (
+        not methodology_changed
+        and previous.confidence_score is not None
+        and current.confidence_score is not None
+    ):
         confidence_delta = round(
             current.confidence_score - previous.confidence_score,
             2,
         )
 
-    category_deltas = {
+    category_deltas = {} if methodology_changed else {
         category: round(
             current.score_breakdown[category]
             - previous.score_breakdown[category],
@@ -166,7 +173,11 @@ def compare_analysis_snapshots(
     return AnalysisSnapshotComparison(
         previous_score=previous.alpha_score,
         current_score=current.alpha_score,
-        score_delta=round(current.alpha_score - previous.alpha_score, 2),
+        score_delta=(
+            None
+            if methodology_changed
+            else round(current.alpha_score - previous.alpha_score, 2)
+        ),
         previous_confidence=previous.confidence_score,
         current_confidence=current.confidence_score,
         confidence_delta=confidence_delta,
@@ -176,9 +187,7 @@ def compare_analysis_snapshots(
         current_decision=current.decision,
         previous_methodology=previous.methodology_version,
         current_methodology=current.methodology_version,
-        methodology_changed=(
-            previous.methodology_version != current.methodology_version
-        ),
+        methodology_changed=methodology_changed,
         category_deltas=category_deltas,
     )
 

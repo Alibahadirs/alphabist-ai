@@ -4,6 +4,7 @@ from datetime import date
 from pathlib import Path
 
 from app.audit.models import CompanyDataAudit
+from app.core.settings import settings
 from app.history.models import ScoreHistoryEntry
 from app.portfolio.models import PortfolioPosition
 from app.scoring.models import FinancialMetrics, ScoreBreakdown
@@ -79,9 +80,21 @@ def init_db():
             total_score REAL NOT NULL,
             grade TEXT NOT NULL,
             decision TEXT NOT NULL,
+            methodology_version TEXT NOT NULL DEFAULT 'legacy',
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY(symbol) REFERENCES companies(symbol))"""
         )
+        score_history_columns = {
+            row[1]
+            for row in conn.execute(
+                "PRAGMA table_info(score_history)"
+            ).fetchall()
+        }
+        if "methodology_version" not in score_history_columns:
+            conn.execute(
+                """ALTER TABLE score_history
+                ADD COLUMN methodology_version TEXT NOT NULL DEFAULT 'legacy'"""
+            )
         conn.execute(
             """CREATE INDEX IF NOT EXISTS idx_score_history_symbol_id
             ON score_history(symbol, id)"""
@@ -207,16 +220,25 @@ def get_company(symbol):
     return FinancialMetrics(**dict(row)) if row else None
 
 
-def add_score_history(symbol: str, score: ScoreBreakdown) -> None:
+def add_score_history(
+    symbol: str,
+    score: ScoreBreakdown,
+    methodology_version: str | None = None,
+) -> None:
     with connect() as conn:
         conn.execute(
-            """INSERT INTO score_history(symbol, total_score, grade, decision)
-            VALUES(?, ?, ?, ?)""",
+            """INSERT INTO score_history(
+            symbol, total_score, grade, decision, methodology_version)
+            VALUES(?, ?, ?, ?, ?)""",
             (
                 symbol.upper().strip(),
                 score.total,
                 score.grade,
                 score.decision,
+                (
+                    methodology_version
+                    or settings.scoring_methodology_version
+                ),
             ),
         )
 
@@ -228,7 +250,8 @@ def list_score_history(
     safe_limit = max(1, min(limit, 100))
     with connect() as conn:
         rows = conn.execute(
-            """SELECT id, symbol, total_score, grade, decision, created_at
+            """SELECT id, symbol, total_score, grade, decision,
+            methodology_version, created_at
             FROM score_history
             WHERE symbol=?
             ORDER BY id DESC

@@ -1,8 +1,11 @@
 from app.database import repository
+from app.core.settings import settings
+from app.history.service import calculate_latest_comparable_score_delta
 from app.scoring.engine import calculate_alpha_score
 from app.scoring.models import FinancialMetrics
 from app.technical.models import TechnicalScoreBreakdown
 from datetime import date
+import sqlite3
 
 import pytest
 
@@ -49,6 +52,77 @@ def test_score_history_is_saved_in_chronological_order(tmp_path, monkeypatch):
     assert history[0].id < history[1].id
     assert history[0].total_score < history[1].total_score
     assert all(entry.symbol == "TEST" for entry in history)
+    assert all(
+        entry.methodology_version == settings.scoring_methodology_version
+        for entry in history
+    )
+
+
+def test_score_history_delta_skips_other_methodologies(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setattr(repository, "DB_PATH", tmp_path / "test.db")
+    repository.init_db()
+    low = _company(5)
+    high = _company(25)
+    repository.upsert_company(low)
+    repository.add_score_history(
+        "TEST",
+        calculate_alpha_score(low),
+        methodology_version="alpha-current",
+    )
+    repository.add_score_history(
+        "TEST",
+        calculate_alpha_score(high),
+        methodology_version="alpha-legacy",
+    )
+    repository.add_score_history(
+        "TEST",
+        calculate_alpha_score(high),
+        methodology_version="alpha-current",
+    )
+
+    history = repository.list_score_history("TEST")
+    delta = calculate_latest_comparable_score_delta(
+        history,
+        "alpha-current",
+    )
+
+    assert delta == pytest.approx(
+        calculate_alpha_score(high).total
+        - calculate_alpha_score(low).total
+    )
+
+
+def test_score_history_migration_preserves_legacy_rows(
+    tmp_path,
+    monkeypatch,
+):
+    database_path = tmp_path / "legacy.db"
+    with sqlite3.connect(database_path) as conn:
+        conn.execute(
+            """CREATE TABLE score_history(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            symbol TEXT NOT NULL,
+            total_score REAL NOT NULL,
+            grade TEXT NOT NULL,
+            decision TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"""
+        )
+        conn.execute(
+            """INSERT INTO score_history(
+            symbol, total_score, grade, decision)
+            VALUES('TEST', 72, 'B+', 'İzle')"""
+        )
+
+    monkeypatch.setattr(repository, "DB_PATH", database_path)
+    repository.init_db()
+
+    history = repository.list_score_history("TEST")
+    assert len(history) == 1
+    assert history[0].total_score == 72
+    assert history[0].methodology_version == "legacy"
 
 
 def test_technical_history_deduplicates_same_market_snapshot(

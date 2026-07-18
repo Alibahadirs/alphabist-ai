@@ -18,6 +18,7 @@ from app.audit.service import (
 from app.confidence.models import AnalysisConfidence
 from app.core.settings import settings
 from app.database import repository
+from app.history.service import select_previous_comparable_audit
 from app.parser.models import (
     ActivityReportExtractionResult,
     CompanyMetadata,
@@ -475,10 +476,24 @@ def test_snapshot_comparison_handles_legacy_missing_fields():
 
     comparison = compare_analysis_snapshots(previous, current)
 
-    assert comparison.score_delta == 5
+    assert comparison.score_delta is None
     assert comparison.confidence_delta is None
     assert comparison.category_deltas == {}
     assert comparison.methodology_changed is True
+
+
+def test_audit_history_selects_previous_same_methodology():
+    first_current = _audit("TEST", 70, DataSourceType.PDF)
+    intervening_legacy = _audit(
+        "TEST", 95, DataSourceType.LEGACY
+    ).model_copy(update={"methodology_version": "legacy"})
+    latest_current = _audit("TEST", 80, DataSourceType.PDF)
+
+    selected = select_previous_comparable_audit(
+        [first_current, intervening_legacy, latest_current]
+    )
+
+    assert selected == first_current
 
 
 def test_snapshot_comparison_rejects_different_companies():

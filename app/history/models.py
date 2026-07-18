@@ -9,4 +9,5 @@ class ScoreHistoryEntry(BaseModel):
     total_score: float = Field(ge=0, le=100)
     grade: str
     decision: str
+    methodology_version: str = "legacy"
     created_at: datetime

@@ -73,6 +73,7 @@ yerel Streamlit uygulaması.
 - Teknik güçlenmede aynı metodolojili ve doğrulanmış geçmiş kayıt karşılaştırması
 - Aynı piyasa günündeki bozuk teknik kaydı doğrulanmış veriyle yerinde onarma
 - Birleşik AI puanında finansal ve teknik karara hazırlık kapısı
+- Alpha Score değişiminde aynı metodoloji sürümüne ait geçmiş karşılaştırması
 - SQLite ile yerel veri saklama
 
 ## Çalıştırma
