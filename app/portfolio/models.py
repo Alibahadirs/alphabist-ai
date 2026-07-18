@@ -78,6 +78,10 @@ class PortfolioSummary(BaseModel):
     diversification_status: str = "Veri yok"
     current_price_count: int = Field(default=0, ge=0)
     price_warning_count: int = Field(default=0, ge=0)
+    current_price_value_percent: float = Field(
+        default=0, ge=0, le=100
+    )
+    stress_test_ready: bool = False
     stress_scenarios: list[PortfolioStressScenario] = Field(
         default_factory=list
     )

@@ -258,3 +258,39 @@ def test_portfolio_marks_current_and_stale_market_prices():
     assert rows["STALE"].price_status == "Eski fiyat"
     assert summary.current_price_count == 1
     assert summary.price_warning_count == 1
+    assert summary.current_price_value_percent == pytest.approx(53.19)
+    assert summary.stress_test_ready is False
+
+
+def test_portfolio_stress_is_ready_with_sufficient_current_price_coverage():
+    companies = {
+        "FRESH": _company("FRESH"),
+        "SMALL": _company("SMALL"),
+    }
+    summary = build_portfolio_summary(
+        [
+            PortfolioPosition(
+                symbol="FRESH", quantity=9, average_cost=10
+            ),
+            PortfolioPosition(
+                symbol="SMALL", quantity=1, average_cost=10
+            ),
+        ],
+        companies,
+        {
+            "FRESH": PortfolioMarketPrice(
+                value=10,
+                as_of_date=date(2026, 7, 17),
+                source="Yahoo Finance",
+            ),
+            "SMALL": PortfolioMarketPrice(
+                value=10,
+                as_of_date=date(2026, 7, 17),
+                source="Yahoo Finance",
+            ),
+        },
+        reference_date=date(2026, 7, 18),
+    )
+
+    assert summary.current_price_value_percent == 100
+    assert summary.stress_test_ready is True

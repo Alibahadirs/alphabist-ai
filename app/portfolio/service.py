@@ -21,6 +21,7 @@ STRESS_SHOCKS = (-20.0, -10.0, 10.0)
 LARGEST_POSITION_SHOCK = -25.0
 LARGEST_PROFILE_SHOCK = -15.0
 MAX_PRICE_AGE_DAYS = 5
+MIN_STRESS_PRICE_COVERAGE = 90.0
 
 
 def _diversification_status(concentration_index: float) -> str:
@@ -271,6 +272,12 @@ def build_portfolio_summary(
     decision_ready_value_percent = (
         decision_ready_value / weight_base * 100 if weight_base else 0
     )
+    current_price_value = sum(
+        row.market_value for row in rows if row.price_current
+    )
+    current_price_value_percent = (
+        current_price_value / weight_base * 100 if weight_base else 0
+    )
     profile_exposure: dict[str, float] = {}
     for row in rows:
         profile_exposure[row.company_profile] = (
@@ -353,6 +360,13 @@ def build_portfolio_summary(
         ),
         current_price_count=sum(row.price_current for row in rows),
         price_warning_count=sum(not row.price_current for row in rows),
+        current_price_value_percent=round(
+            current_price_value_percent, 2
+        ),
+        stress_test_ready=(
+            bool(rows)
+            and current_price_value_percent >= MIN_STRESS_PRICE_COVERAGE
+        ),
         stress_scenarios=_build_stress_scenarios(
             total_market_value,
             total_cost,

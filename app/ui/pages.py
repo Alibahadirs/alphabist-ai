@@ -2645,6 +2645,11 @@ def render_portfolio() -> None:
             f"{summary.current_price_count}/{len(summary.rows)}",
             border=True,
         )
+        st.metric(
+            "Güncel fiyat kapsamı",
+            f"%{summary.current_price_value_percent:.1f}",
+            border=True,
+        )
 
     st.caption(
         "Ağırlık bazlı yoğunlaşma endeksi: "
@@ -2772,6 +2777,14 @@ def render_portfolio() -> None:
         )
         with st.container(border=True):
             st.subheader("Basit fiyat stres testi")
+            if not summary.stress_test_ready:
+                st.warning(
+                    "Güncel fiyat kapsamı "
+                    f"%{summary.current_price_value_percent:.1f}. "
+                    "Stres sonuçları için en az %90 güncel fiyat kapsamı "
+                    "gereklidir; aşağıdaki değerleri doğrulama amacıyla "
+                    "kullanın."
+                )
             st.caption(
                 "İlk üç senaryo tüm portföye, yoğunlaşma senaryoları ise "
                 "yalnızca belirtilen pozisyon veya şirket profiline "

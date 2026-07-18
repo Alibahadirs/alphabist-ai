@@ -50,6 +50,7 @@ yerel Streamlit uygulaması.
 - Portföy için mekanik fiyat şoku stres senaryoları
 - En büyük pozisyon ve şirket profili için yoğunlaşma stres testi
 - Portföy fiyatları için kaynak, tarih ve güncellik doğrulaması
+- Stres testi için değer ağırlıklı güncel fiyat kapsamı eşiği
 - SQLite ile yerel veri saklama
 
 ## Çalıştırma

@@ -5,7 +5,7 @@ from pathlib import Path
 @dataclass(frozen=True)
 class AppSettings:
     app_name: str = "AlphaBIST AI"
-    app_version: str = "0.45.0"
+    app_version: str = "0.46.0"
     scoring_methodology_version: str = "alpha-2026.2"
 
     base_dir: Path = Path(__file__).resolve().parents[2]
