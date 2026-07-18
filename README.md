@@ -53,6 +53,7 @@ yerel Streamlit uygulaması.
 - Stres testi için değer ağırlıklı güncel fiyat kapsamı eşiği
 - Genel bakış, takip listesi ve portföyde ortak fiyat güncelliği kuralı
 - Son fiyat ile teknik grafik tarihi ve kapanış değeri çapraz kontrolü
+- Karşılaştırmada şirket bazlı doğrulanmış teknik puan kapsamı
 - SQLite ile yerel veri saklama
 
 ## Çalıştırma

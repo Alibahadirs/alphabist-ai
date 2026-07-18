@@ -13,11 +13,13 @@ def build_comparison(
     companies: Sequence[FinancialMetrics],
     technical_scores: Mapping[str, TechnicalScoreBreakdown] | None = None,
     latest_audits: Mapping[str, CompanyDataAudit] | None = None,
+    market_data_statuses: Mapping[str, str] | None = None,
 ) -> ComparisonSummary:
     if len(companies) < 2:
         raise ValueError("Karşılaştırma için en az iki şirket seçilmelidir.")
 
     technical_scores = technical_scores or {}
+    market_data_statuses = market_data_statuses or {}
     audits = {
         symbol.upper(): audit for symbol, audit in (latest_audits or {}).items()
     }
@@ -33,6 +35,13 @@ def build_comparison(
             else None
         )
         technical = technical_scores.get(company.symbol)
+        market_data_status = market_data_statuses.get(
+            company.symbol,
+            "Doğrulandı" if technical else "",
+        )
+        technical_ready = (
+            technical is not None and market_data_status == "Doğrulandı"
+        )
         rows.append(
             CompanyComparisonRow(
                 symbol=company.symbol,
@@ -40,14 +49,20 @@ def build_comparison(
                 alpha_score=alpha.total,
                 grade=alpha.grade,
                 decision=confidence.decision if confidence else alpha.decision,
-                technical_score=technical.total if technical else None,
-                technical_signal=technical.signal if technical else None,
+                technical_score=(
+                    technical.total if technical_ready else None
+                ),
+                technical_signal=(
+                    technical.signal if technical_ready else None
+                ),
                 combined_score=(
                     calculate_combined_score(alpha.total, technical.total)
-                    if technical
+                    if technical_ready
                     else None
                 ),
-                atr_percent=technical.atr_percent if technical else None,
+                atr_percent=(
+                    technical.atr_percent if technical_ready else None
+                ),
                 confidence_score=confidence.total if confidence else None,
                 confidence_status=confidence.status if confidence else "",
                 calculation_check_status=(
@@ -58,6 +73,8 @@ def build_comparison(
                 decision_ready=(
                     confidence.decision_ready if confidence else True
                 ),
+                market_data_status=market_data_status,
+                technical_ready=technical_ready,
             )
         )
 
@@ -89,4 +106,5 @@ def build_comparison(
             else None
         ),
         decision_ready_count=sum(row.decision_ready for row in rows),
+        technical_ready_count=sum(row.technical_ready for row in rows),
     )

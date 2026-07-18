@@ -81,6 +81,28 @@ def test_comparison_ranks_by_combined_score_with_technical_data():
         2,
     )
     assert result.average_combined_score == expected
+    assert result.technical_ready_count == 2
+
+
+def test_comparison_excludes_unverified_technical_score():
+    companies = [_company("GOOD", 20, 30), _company("STALE", 10, 15)]
+    result = build_comparison(
+        companies,
+        {"GOOD": _technical(60), "STALE": _technical(95)},
+        market_data_statuses={
+            "GOOD": "Doğrulandı",
+            "STALE": "Eski fiyat",
+        },
+    )
+
+    rows = {row.symbol: row for row in result.rows}
+    assert rows["GOOD"].technical_ready is True
+    assert rows["GOOD"].combined_score is not None
+    assert rows["STALE"].technical_ready is False
+    assert rows["STALE"].technical_score is None
+    assert rows["STALE"].combined_score is None
+    assert rows["STALE"].market_data_status == "Eski fiyat"
+    assert result.technical_ready_count == 1
 
 
 def test_comparison_uses_confidence_gated_decisions_when_audits_are_supplied():

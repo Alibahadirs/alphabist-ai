@@ -15,6 +15,8 @@ class CompanyComparisonRow(BaseModel):
     confidence_status: str = ""
     calculation_check_status: str = "Kayıt yok"
     decision_ready: bool = True
+    market_data_status: str = ""
+    technical_ready: bool = False
 
 
 class ComparisonSummary(BaseModel):
@@ -23,3 +25,4 @@ class ComparisonSummary(BaseModel):
     average_alpha_score: float = Field(ge=0, le=100)
     average_combined_score: float | None = Field(default=None, ge=0, le=100)
     decision_ready_count: int = Field(default=0, ge=0)
+    technical_ready_count: int = Field(default=0, ge=0)

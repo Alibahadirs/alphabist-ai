@@ -2315,27 +2315,57 @@ def render_comparison() -> None:
     selected_companies = [company_by_symbol[symbol] for symbol in selected_symbols]
     technical_scores = {}
     failed_symbols = []
+    market_data_statuses: dict[str, str] = {}
     if include_technical:
         with st.spinner("Teknik puanlar hesaplanıyor..."):
             for symbol in selected_symbols:
                 try:
-                    _, history = _load_market_data(symbol)
-                    technical_scores[symbol] = calculate_technical_score(history)
+                    quote, history = _load_market_data(symbol)
+                    freshness = assess_price_freshness(
+                        _quote_date(quote)
+                    )
+                    alignment = validate_quote_history_alignment(
+                        quote,
+                        history,
+                    )
+                    if freshness.current and alignment.valid:
+                        technical_scores[symbol] = (
+                            calculate_technical_score(history)
+                        )
+                        market_data_statuses[symbol] = "Doğrulandı"
+                    else:
+                        market_data_statuses[symbol] = (
+                            f"{freshness.status}; {alignment.status}"
+                        )
                 except Exception:
                     failed_symbols.append(symbol)
+                    market_data_statuses[symbol] = "Veri alınamadı"
 
         if failed_symbols:
-            technical_scores = {}
             st.warning(
-                "Bazı piyasa verileri alınamadığı için karşılaştırma yalnızca "
-                f"temel puanlarla hazırlandı: {', '.join(failed_symbols)}"
+                "Piyasa verisi alınamayan şirketler yalnızca temel puanla "
+                f"karşılaştırıldı: {', '.join(failed_symbols)}"
+            )
+        unverified_symbols = [
+            symbol
+            for symbol, status in market_data_statuses.items()
+            if status != "Doğrulandı" and symbol not in failed_symbols
+        ]
+        if unverified_symbols:
+            st.warning(
+                "Piyasa verisi doğrulanamayan şirketlerin birleşik puanı "
+                "hesaplanmadı: "
+                + ", ".join(unverified_symbols)
             )
 
     latest_audits = {
         audit.symbol: audit for audit in list_latest_company_data_audits()
     }
     summary = build_comparison(
-        selected_companies, technical_scores, latest_audits
+        selected_companies,
+        technical_scores,
+        latest_audits,
+        market_data_statuses,
     )
     with st.container(horizontal=True):
         st.metric("Lider", summary.leader_symbol, border=True)
@@ -2356,6 +2386,12 @@ def render_comparison() -> None:
             summary.decision_ready_count,
             border=True,
         )
+        if include_technical:
+            st.metric(
+                "Teknik doğrulanan",
+                f"{summary.technical_ready_count}/{len(summary.rows)}",
+                border=True,
+            )
 
     rows = []
     for rank, row in enumerate(summary.rows, start=1):
@@ -2377,6 +2413,9 @@ def render_comparison() -> None:
                 ),
                 "Teknik sinyal": row.technical_signal,
                 "ATR (%)": row.atr_percent,
+                "Piyasa veri kontrolü": (
+                    row.market_data_status or "Dahil edilmedi"
+                ),
             }
         )
 
