@@ -22,6 +22,7 @@ yerel Streamlit uygulaması.
 - Finansal hizmetlerde sermaye yeterliliği veya borç / özkaynak alternatifi
 - Puan tablolarında sektöre özgü kategori adı ve hesap dayanağı
 - Ham kategori toplamı, veri yeterliliği katsayısı ve nihai puan düzeltme izi
+- Değerleme, yönetim ve risk puanlarında kayıt öncesi zorunlu kullanıcı doğrulaması
 - Veri yeterliliği ve kaynak kanıtına göre bağımsız analiz güveni puanı
 - Düşük güvenli kayıtlarda yatırım kararını otomatik doğrulama seviyesine çekme
 - Her analiz için metodoloji, kategori puanları, güven ve karar anlık görüntüsü

@@ -3,6 +3,7 @@ from app.ui.pages import (
     _format_metric_snapshot_value,
     _format_turkish_amount,
     _pdf_source_fields,
+    _subjective_score_confirmation_error,
 )
 
 
@@ -37,3 +38,8 @@ def test_metric_snapshot_values_follow_field_type():
         == "75/100"
     )
     assert _format_metric_snapshot_value("roe", None) == "-"
+
+
+def test_subjective_score_inputs_require_explicit_confirmation():
+    assert _subjective_score_confirmation_error(True) is None
+    assert "doğrulamadan" in _subjective_score_confirmation_error(False)

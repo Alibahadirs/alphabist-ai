@@ -137,6 +137,24 @@ SCORE_INPUT_LABELS = {
     "risk_score_input": "Risk dayanıklılığı",
 }
 
+SUBJECTIVE_SCORE_FIELDS = (
+    "valuation_score_input",
+    "management_score_input",
+    "risk_score_input",
+)
+
+
+def _subjective_score_confirmation_error(
+    confirmed: bool,
+) -> str | None:
+    if confirmed:
+        return None
+    return (
+        "Değerleme, yönetim ve risk puanlarını güncel piyasa ve şirket "
+        "bilgileriyle doğrulamadan analiz kaydedilemez."
+    )
+
+
 AMOUNT_METRIC_FIELDS = {
     "operating_cash_flow",
     "free_cash_flow",
@@ -1287,6 +1305,36 @@ def _render_quality_correction_form() -> None:
                     if field == "occupancy_rate":
                         kwargs["max_value"] = 100.0
                     raw_values[field] = st.number_input(**kwargs)
+        st.markdown("**Öznel puan girdileri**")
+        score_columns = st.columns(3)
+        with score_columns[0]:
+            valuation = st.slider(
+                "Değerleme girdisi",
+                0,
+                100,
+                int(company.valuation_score_input),
+                key=f"quality_{symbol}_valuation",
+            )
+        with score_columns[1]:
+            management = st.slider(
+                "Yönetim girdisi",
+                0,
+                100,
+                int(company.management_score_input),
+                key=f"quality_{symbol}_management",
+            )
+        with score_columns[2]:
+            risk = st.slider(
+                "Risk dayanıklılığı",
+                0,
+                100,
+                int(company.risk_score_input),
+                key=f"quality_{symbol}_risk",
+            )
+        subjective_inputs_confirmed = st.checkbox(
+            "Değerleme, yönetim ve risk puanlarını güncel verilerle kontrol ettim",
+            key=f"quality_{symbol}_subjective_confirmed",
+        )
         submitted = st.form_submit_button(
             "Doğrula ve kaydet",
             type="primary",
@@ -1295,7 +1343,18 @@ def _render_quality_correction_form() -> None:
 
     if not submitted:
         return
-    updates: dict[str, float | None | CompanyProfile] = {"company_profile": profile}
+    confirmation_error = _subjective_score_confirmation_error(
+        subjective_inputs_confirmed
+    )
+    if confirmation_error:
+        st.error(confirmation_error)
+        return
+    updates: dict[str, float | None | CompanyProfile] = {
+        "company_profile": profile,
+        "valuation_score_input": valuation,
+        "management_score_input": management,
+        "risk_score_input": risk,
+    }
     try:
         for field, value in raw_values.items():
             if field in amount_fields:
@@ -1327,7 +1386,10 @@ def _render_quality_correction_form() -> None:
     add_score_history(corrected.symbol, score)
     corrected_sources = dict(previous_audit.field_sources) if previous_audit else {}
     corrected_sources.update(
-        {field: MetricSourceType.CORRECTION for field in required_fields}
+        {
+            field: MetricSourceType.CORRECTION
+            for field in (*required_fields, *SUBJECTIVE_SCORE_FIELDS)
+        }
     )
     audit = CompanyDataAudit(
         symbol=corrected.symbol,
@@ -2406,6 +2468,10 @@ def _render_pdf_company_form() -> None:
             risk = st.slider(
                 "Risk dayanıklılığı", 0, 100, 50, key="pdf_field_risk"
             )
+        subjective_inputs_confirmed = st.checkbox(
+            "Değerleme, yönetim ve risk puanlarını güncel verilerle kontrol ettim",
+            key="pdf_field_subjective_confirmed",
+        )
         submitted = st.form_submit_button(
             "Kontrol et ve kaydet",
             type="primary",
@@ -2428,6 +2494,12 @@ def _render_pdf_company_form() -> None:
             "Karşılaştırma dönemi otomatik doğrulanamadı. Büyüme oranlarını "
             "kaydetmek için cari ve önceki dönem sütunlarını doğrulayın."
         )
+        return
+    confirmation_error = _subjective_score_confirmation_error(
+        subjective_inputs_confirmed
+    )
+    if confirmation_error:
+        st.error(confirmation_error)
         return
     identity_errors = validate_report_identity(
         submitted_symbol=symbol,
@@ -2476,6 +2548,7 @@ def _render_pdf_company_form() -> None:
         valuation=valuation,
         management=management,
         risk=risk,
+        subjective_inputs_confirmed=subjective_inputs_confirmed,
         company_profile=company_profile,
         sector_metrics=sector_metrics,
         source_type=DataSourceType.PDF,
@@ -2598,6 +2671,10 @@ def _render_manual_company_form() -> None:
             risk = st.slider("Risk dayanıklılığı", 0, 100, 65)
 
         sector_metrics = _sector_inputs(company_profile, "manual_sector")
+        subjective_inputs_confirmed = st.checkbox(
+            "Değerleme, yönetim ve risk puanlarını güncel verilerle kontrol ettim",
+            key="manual_subjective_confirmed",
+        )
 
         submitted = st.form_submit_button(
             "Hesapla ve kaydet",
@@ -2636,6 +2713,7 @@ def _render_manual_company_form() -> None:
         valuation=valuation,
         management=management,
         risk=risk,
+        subjective_inputs_confirmed=subjective_inputs_confirmed,
         company_profile=company_profile,
         sector_metrics=sector_metrics,
         period_months=period_months,
@@ -2659,6 +2737,7 @@ def _validate_and_save_company(
     valuation: float,
     management: float,
     risk: float,
+    subjective_inputs_confirmed: bool,
     company_profile: CompanyProfile = CompanyProfile.STANDARD,
     sector_metrics: dict[str, float | None] | None = None,
     source_type: DataSourceType = DataSourceType.MANUAL,
@@ -2675,6 +2754,12 @@ def _validate_and_save_company(
     source_values: dict[str, float | None] | None = None,
 ) -> None:
     sector_metrics = sector_metrics or {}
+    confirmation_error = _subjective_score_confirmation_error(
+        subjective_inputs_confirmed
+    )
+    if confirmation_error:
+        st.error(confirmation_error)
+        return
     period_assessment = assess_report_period(report_period_end, period_months)
     if period_assessment.blocks_decision:
         st.error(period_assessment.message)
