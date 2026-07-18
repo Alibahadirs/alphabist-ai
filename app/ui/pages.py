@@ -33,6 +33,7 @@ from app.core.settings import settings
 from app.database.repository import (
     add_company_data_audit,
     add_score_history,
+    add_technical_score_history,
     get_company,
     get_latest_company_data_audit,
     list_companies,
@@ -41,6 +42,7 @@ from app.database.repository import (
     list_latest_company_data_audits,
     list_portfolio_positions,
     list_score_history,
+    list_technical_score_history,
     list_watchlist_entries,
     remove_watchlist_entry,
     remove_portfolio_position,
@@ -918,6 +920,17 @@ def render_dashboard() -> None:
                 quote_freshness.current and market_alignment.valid
             )
             technical_score = calculate_technical_score(history)
+            if market_data_ready and quote_date is not None:
+                add_technical_score_history(
+                    symbol=symbol,
+                    price_date=quote_date,
+                    source=str(quote.get("source") or "Bilinmiyor"),
+                    score=technical_score,
+                    alignment_status=market_alignment.status,
+                    methodology_version=(
+                        settings.technical_methodology_version
+                    ),
+                )
             combined_score = calculate_combined_score(
                 score.total,
                 technical_score.total,
@@ -994,6 +1007,55 @@ def render_dashboard() -> None:
                     "Maksimum": st.column_config.NumberColumn(format="%.0f"),
                 },
             )
+
+        technical_history = list_technical_score_history(symbol)
+        if technical_history:
+            history_frame = pd.DataFrame(
+                [
+                    {
+                        "Fiyat tarihi": entry.price_date,
+                        "Teknik puan": entry.total_score,
+                        "Sinyal": entry.signal,
+                        "RSI": entry.rsi_value,
+                        "ATR (%)": entry.atr_percent,
+                        "Kaynak": entry.source,
+                        "Veri kontrolü": entry.alignment_status,
+                        "Metodoloji": entry.methodology_version,
+                    }
+                    for entry in technical_history
+                ]
+            )
+            with st.container(border=True):
+                st.subheader("Doğrulanmış teknik puan geçmişi")
+                st.line_chart(
+                    history_frame,
+                    x="Fiyat tarihi",
+                    y="Teknik puan",
+                    y_label="Puan",
+                )
+                st.dataframe(
+                    history_frame,
+                    hide_index=True,
+                    width="stretch",
+                    column_config={
+                        "Fiyat tarihi": st.column_config.DateColumn(
+                            "Fiyat tarihi",
+                            format="DD.MM.YYYY",
+                        ),
+                        "Teknik puan": st.column_config.ProgressColumn(
+                            "Teknik puan",
+                            min_value=0,
+                            max_value=100,
+                            format="%.1f",
+                        ),
+                        "RSI": st.column_config.NumberColumn(
+                            format="%.2f"
+                        ),
+                        "ATR (%)": st.column_config.NumberColumn(
+                            format="%.2f"
+                        ),
+                    },
+                )
     except Exception as exc:
         st.warning(f"Piyasa verisi alınamadı: {exc}")
 

@@ -1,11 +1,16 @@
 import json
 import sqlite3
+from datetime import date
 from pathlib import Path
 
 from app.audit.models import CompanyDataAudit
 from app.history.models import ScoreHistoryEntry
 from app.portfolio.models import PortfolioPosition
 from app.scoring.models import FinancialMetrics, ScoreBreakdown
+from app.technical.models import (
+    TechnicalHistoryEntry,
+    TechnicalScoreBreakdown,
+)
 from app.watchlist.models import WatchlistEntry
 from app.sector.profiles import CompanyProfile, detect_company_profile
 
@@ -80,6 +85,27 @@ def init_db():
         conn.execute(
             """CREATE INDEX IF NOT EXISTS idx_score_history_symbol_id
             ON score_history(symbol, id)"""
+        )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS technical_score_history(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            symbol TEXT NOT NULL,
+            price_date TEXT NOT NULL,
+            source TEXT NOT NULL,
+            total_score REAL NOT NULL,
+            signal TEXT NOT NULL,
+            rsi_value REAL NOT NULL,
+            atr_percent REAL NOT NULL,
+            score_breakdown TEXT NOT NULL DEFAULT '{}',
+            alignment_status TEXT NOT NULL,
+            methodology_version TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(symbol, price_date, source, methodology_version),
+            FOREIGN KEY(symbol) REFERENCES companies(symbol))"""
+        )
+        conn.execute(
+            """CREATE INDEX IF NOT EXISTS idx_technical_history_symbol_id
+            ON technical_score_history(symbol, id)"""
         )
         conn.execute(
             """CREATE TABLE IF NOT EXISTS portfolio_positions(
@@ -210,6 +236,66 @@ def list_score_history(
             (symbol.upper().strip(), safe_limit),
         ).fetchall()
     return [ScoreHistoryEntry(**dict(row)) for row in reversed(rows)]
+
+
+def add_technical_score_history(
+    symbol: str,
+    price_date: date,
+    source: str,
+    score: TechnicalScoreBreakdown,
+    alignment_status: str,
+    methodology_version: str,
+) -> bool:
+    breakdown = score.model_dump(
+        exclude={"total", "signal", "rsi_value", "atr_percent"}
+    )
+    with connect() as conn:
+        cursor = conn.execute(
+            """INSERT OR IGNORE INTO technical_score_history(
+            symbol, price_date, source, total_score, signal, rsi_value,
+            atr_percent, score_breakdown, alignment_status,
+            methodology_version)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                symbol.upper().strip(),
+                price_date.isoformat(),
+                source,
+                score.total,
+                score.signal,
+                score.rsi_value,
+                score.atr_percent,
+                json.dumps(breakdown, sort_keys=True),
+                alignment_status,
+                methodology_version,
+            ),
+        )
+    return cursor.rowcount == 1
+
+
+def list_technical_score_history(
+    symbol: str,
+    limit: int = 30,
+) -> list[TechnicalHistoryEntry]:
+    safe_limit = max(1, min(limit, 100))
+    with connect() as conn:
+        rows = conn.execute(
+            """SELECT id, symbol, price_date, source, total_score, signal,
+            rsi_value, atr_percent, score_breakdown, alignment_status,
+            methodology_version, created_at
+            FROM technical_score_history
+            WHERE symbol=?
+            ORDER BY id DESC
+            LIMIT ?""",
+            (symbol.upper().strip(), safe_limit),
+        ).fetchall()
+    entries = []
+    for row in reversed(rows):
+        values = dict(row)
+        values["score_breakdown"] = json.loads(
+            values["score_breakdown"] or "{}"
+        )
+        entries.append(TechnicalHistoryEntry(**values))
+    return entries
 
 
 def add_company_data_audit(audit: CompanyDataAudit) -> None:

@@ -1,6 +1,8 @@
 from app.database import repository
 from app.scoring.engine import calculate_alpha_score
 from app.scoring.models import FinancialMetrics
+from app.technical.models import TechnicalScoreBreakdown
+from datetime import date
 
 
 def _company(margin: float) -> FinancialMetrics:
@@ -45,3 +47,51 @@ def test_score_history_is_saved_in_chronological_order(tmp_path, monkeypatch):
     assert history[0].id < history[1].id
     assert history[0].total_score < history[1].total_score
     assert all(entry.symbol == "TEST" for entry in history)
+
+
+def test_technical_history_deduplicates_same_market_snapshot(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setattr(repository, "DB_PATH", tmp_path / "test.db")
+    repository.init_db()
+    company = _company(15)
+    repository.upsert_company(company)
+    score = TechnicalScoreBreakdown(
+        trend=15,
+        moving_averages=15,
+        rsi=10,
+        macd=10,
+        volume=10,
+        support_resistance=10,
+        total=70,
+        signal="Al",
+        rsi_value=55,
+        atr_percent=3.2,
+    )
+
+    first_insert = repository.add_technical_score_history(
+        symbol="test",
+        price_date=date(2026, 7, 17),
+        source="Yahoo Finance",
+        score=score,
+        alignment_status="Fiyat ve grafik verisi uyumlu",
+        methodology_version="technical-2026.1",
+    )
+    duplicate_insert = repository.add_technical_score_history(
+        symbol="TEST",
+        price_date=date(2026, 7, 17),
+        source="Yahoo Finance",
+        score=score,
+        alignment_status="Fiyat ve grafik verisi uyumlu",
+        methodology_version="technical-2026.1",
+    )
+
+    history = repository.list_technical_score_history("test")
+    assert first_insert is True
+    assert duplicate_insert is False
+    assert len(history) == 1
+    assert history[0].symbol == "TEST"
+    assert history[0].price_date == date(2026, 7, 17)
+    assert history[0].total_score == 70
+    assert history[0].score_breakdown["trend"] == 15

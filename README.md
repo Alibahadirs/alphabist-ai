@@ -54,6 +54,7 @@ yerel Streamlit uygulaması.
 - Genel bakış, takip listesi ve portföyde ortak fiyat güncelliği kuralı
 - Son fiyat ile teknik grafik tarihi ve kapanış değeri çapraz kontrolü
 - Karşılaştırmada şirket bazlı doğrulanmış teknik puan kapsamı
+- Yinelenmeyen, kaynak ve metodoloji izli teknik puan geçmişi
 - SQLite ile yerel veri saklama
 
 ## Çalıştırma
