@@ -43,6 +43,7 @@ yerel Streamlit uygulaması.
 - Banka, sigorta, GYO ve finansal hizmet oranlarında makul aralık kontrolleri
 - Olağan dışı doğrulama uyarılarında kayıt öncesi zorunlu kullanıcı onayı
 - Onaylı uyarıları veri kalite durumu ve analiz güveninde ayrı değerlendirme
+- Onaylanan veri uyarılarının denetlenebilir analiz anlık görüntüsünü saklama
 - PDF kaynak tutarlarını düzeltme ve oranları anında yeniden hesaplama
 - Her analiz için ham finansal tutar anlık görüntüsü ve hesap izi
 - Dönem bazlı gösterge değeri, birim ve kaynak anlık görüntüsü

@@ -144,6 +144,7 @@ def init_db():
             comparison_period_end TEXT,
             comparison_period_confirmed INTEGER NOT NULL DEFAULT 0,
             validation_warnings_confirmed INTEGER NOT NULL DEFAULT 0,
+            validation_warnings TEXT NOT NULL DEFAULT '[]',
             completeness REAL NOT NULL,
             alpha_score REAL NOT NULL,
             grade TEXT NOT NULL DEFAULT '',
@@ -183,6 +184,7 @@ def init_db():
             "comparison_period_end": "TEXT",
             "comparison_period_confirmed": "INTEGER NOT NULL DEFAULT 0",
             "validation_warnings_confirmed": "INTEGER NOT NULL DEFAULT 0",
+            "validation_warnings": "TEXT NOT NULL DEFAULT '[]'",
         }
         for column, definition in audit_migrations.items():
             if column not in audit_columns:
@@ -383,11 +385,11 @@ def add_company_data_audit(audit: CompanyDataAudit) -> None:
             financial_report_hash, activity_report_hash,
             financial_report_scale, comparison_period_end,
             comparison_period_confirmed, validation_warnings_confirmed,
-            completeness,
+            validation_warnings, completeness,
             alpha_score, grade, decision, confidence_score, confidence_status,
             methodology_version, input_fingerprint, score_breakdown,
             field_sources, source_values, metric_values)
-            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 audit.symbol.upper().strip(),
                 audit.source_type.value,
@@ -410,6 +412,10 @@ def add_company_data_audit(audit: CompanyDataAudit) -> None:
                 ),
                 int(audit.comparison_period_confirmed),
                 int(audit.validation_warnings_confirmed),
+                json.dumps(
+                    audit.validation_warnings,
+                    ensure_ascii=False,
+                ),
                 audit.completeness,
                 audit.alpha_score,
                 audit.grade,
@@ -443,6 +449,9 @@ def add_company_data_audit(audit: CompanyDataAudit) -> None:
 
 def _audit_from_row(row: sqlite3.Row) -> CompanyDataAudit:
     values = dict(row)
+    values["validation_warnings"] = json.loads(
+        values.get("validation_warnings") or "[]"
+    )
     values["field_sources"] = json.loads(values.get("field_sources") or "{}")
     values["score_breakdown"] = json.loads(
         values.get("score_breakdown") or "{}"
@@ -465,7 +474,7 @@ def get_latest_company_data_audit(symbol: str) -> CompanyDataAudit | None:
             financial_report_hash, activity_report_hash,
             financial_report_scale, comparison_period_end,
             comparison_period_confirmed, validation_warnings_confirmed,
-            completeness,
+            validation_warnings, completeness,
             alpha_score, grade, decision, confidence_score,
             confidence_status, methodology_version, input_fingerprint,
             score_breakdown,
@@ -490,7 +499,7 @@ def list_company_data_audits(
             financial_report_hash, activity_report_hash,
             financial_report_scale, comparison_period_end,
             comparison_period_confirmed, validation_warnings_confirmed,
-            completeness,
+            validation_warnings, completeness,
             alpha_score, grade, decision, confidence_score,
             confidence_status, methodology_version, input_fingerprint,
             score_breakdown,
@@ -513,7 +522,8 @@ def list_latest_company_data_audits() -> list[CompanyDataAudit]:
             audit.financial_report_scale,
             audit.comparison_period_end, audit.comparison_period_confirmed,
             audit.validation_warnings_confirmed,
-            audit.completeness, audit.alpha_score, audit.grade,
+            audit.validation_warnings, audit.completeness,
+            audit.alpha_score, audit.grade,
             audit.decision, audit.confidence_score, audit.confidence_status,
             audit.methodology_version, audit.input_fingerprint,
             audit.score_breakdown,
@@ -544,7 +554,7 @@ def list_document_usages(
             financial_report_hash, activity_report_hash,
             financial_report_scale, comparison_period_end,
             comparison_period_confirmed, validation_warnings_confirmed,
-            completeness,
+            validation_warnings, completeness,
             alpha_score, grade, decision, confidence_score,
             confidence_status, methodology_version, input_fingerprint,
             score_breakdown, field_sources, source_values, metric_values,

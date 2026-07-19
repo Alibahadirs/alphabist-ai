@@ -20,6 +20,7 @@ from app.parser.models import (
     PdfExtractionResult,
 )
 from app.scoring.models import FinancialMetrics, ScoreBreakdown
+from app.validation.service import validate_financial_metrics
 
 
 FINANCIAL_METRIC_DEPENDENCIES = {
@@ -203,6 +204,7 @@ def attach_analysis_snapshot(
     score: ScoreBreakdown,
     confidence: AnalysisConfidence,
 ) -> CompanyDataAudit:
+    validation = validate_financial_metrics(metrics)
     return audit.model_copy(
         update={
             "alpha_score": score.total,
@@ -221,6 +223,7 @@ def attach_analysis_snapshot(
                 "completeness_adjustment": score.completeness_adjustment,
             },
             "metric_values": metrics.model_dump(mode="json"),
+            "validation_warnings": validation.warnings,
         }
     )
 

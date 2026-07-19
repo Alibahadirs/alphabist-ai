@@ -26,6 +26,7 @@ from app.parser.models import (
     PdfExtractionResult,
 )
 from app.scoring.models import FinancialMetrics, ScoreBreakdown
+from app.scoring.engine import calculate_alpha_score
 from app.sector.profiles import CompanyProfile
 
 
@@ -44,6 +45,7 @@ def _audit(symbol: str, score: float, source: DataSourceType) -> CompanyDataAudi
         comparison_period_end=date(2025, 3, 31),
         comparison_period_confirmed=True,
         validation_warnings_confirmed=True,
+        validation_warnings=["Net kâr marjını kontrol edin."],
         completeness=92.5,
         alpha_score=score,
         grade="A",
@@ -94,6 +96,7 @@ def test_audit_repository_returns_latest_record(tmp_path, monkeypatch):
     assert latest.comparison_period_end == date(2025, 3, 31)
     assert latest.comparison_period_confirmed is True
     assert latest.validation_warnings_confirmed is True
+    assert latest.validation_warnings == ["Net kâr marjını kontrol edin."]
     assert latest.report_period_end == date(2026, 3, 31)
     assert (
         latest.field_sources["revenue_growth"]
@@ -189,6 +192,7 @@ def test_init_db_migrates_existing_audit_table(tmp_path, monkeypatch):
         "comparison_period_end",
         "comparison_period_confirmed",
         "validation_warnings_confirmed",
+        "validation_warnings",
     }.issubset(columns)
     assert {
         "idx_company_data_audit_financial_hash",
@@ -437,6 +441,47 @@ def test_analysis_snapshot_freezes_methodology_and_breakdown():
     assert snapshot.metric_values["symbol"] == "TEST"
     assert snapshot.metric_values["revenue_growth"] is None
     assert snapshot.metric_values["valuation_score_input"] == 50
+
+
+def test_analysis_snapshot_preserves_current_validation_warnings():
+    metrics = FinancialMetrics(
+        symbol="WARN",
+        company_name="Warning Sanayi A.Ş.",
+        revenue_growth=20,
+        net_profit_growth=20,
+        net_margin=150,
+        roe=20,
+        debt_to_equity=0.5,
+        current_ratio=1.5,
+        operating_cash_flow=100,
+        free_cash_flow=50,
+        asset_turnover=0.8,
+    )
+    score = calculate_alpha_score(metrics)
+    confidence = AnalysisConfidence(
+        total=80,
+        status="Orta",
+        decision="İzle",
+        completeness_component=55,
+        source_component=20,
+        report_component=0,
+        period_component=0,
+        validation_component=4,
+    )
+    audit = CompanyDataAudit(
+        symbol="WARN",
+        source_type=DataSourceType.MANUAL,
+        company_profile=CompanyProfile.STANDARD,
+        completeness=100,
+        alpha_score=score.total,
+        validation_warnings_confirmed=True,
+    )
+
+    snapshot = attach_analysis_snapshot(audit, metrics, score, confidence)
+
+    assert snapshot.validation_warnings_confirmed is True
+    assert len(snapshot.validation_warnings) == 1
+    assert "Net kâr marjı" in snapshot.validation_warnings[0]
 
 
 def test_analysis_snapshot_comparison_calculates_category_changes():
