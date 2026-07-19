@@ -46,6 +46,14 @@ yerel Streamlit uygulaması.
 - Onaylanan veri uyarılarının denetlenebilir analiz anlık görüntüsünü saklama
 - Uyarı onayını güncel metodoloji ve birebir uyarı listesiyle doğrulama
 - Şirket geçmişi ve veri kalite merkezinde onaylanan uyarı kanıtını gösterme
+- Uyarı onayının neden geçerli veya geçersiz olduğunu ayrıntılı durumla açıklama
+- Onaysız uyarılı analizlerde güven puanı ve yatırım kararı kilidi
+- Aynı finansal veriyi geçerli uyarı onayıyla yeniden audit kaydına alma
+- Uyarı listesi ve metodolojiye bağlı SHA-256 kanıt parmak izi
+- Eksik veya bozulmuş uyarı kanıtını otomatik yeniden doğrulamaya yönlendirme
+- Bozulmuş uyarı kanıtını veri kalite merkezinde kritik hata olarak gösterme
+- Veri kalite merkezinde uyarı onay durumuna göre filtreleme
+- Filtrelenmiş veri kalite listesini UTF-8 CSV raporu olarak indirme
 - PDF kaynak tutarlarını düzeltme ve oranları anında yeniden hesaplama
 - Her analiz için ham finansal tutar anlık görüntüsü ve hesap izi
 - Dönem bazlı gösterge değeri, birim ve kaynak anlık görüntüsü
