@@ -58,6 +58,7 @@ from app.database.backup import (
     validate_database_backup,
 )
 from app.data_quality.service import FIELD_LABELS, build_data_quality_summary
+from app.data_quality.export import build_data_quality_csv
 from app.data_quality.readiness import (
     READINESS_STATUS_OPTIONS,
     build_decision_readiness_summary,
@@ -1892,6 +1893,17 @@ def render_data_quality() -> None:
                         "Teknik kayıt yaşı (gün)", format="%d"
                     ),
                 },
+            )
+            st.download_button(
+                "Doğrulama raporunu indir",
+                data=build_data_quality_csv(filtered),
+                file_name=(
+                    f"alphabist_veri_kalite_{date.today():%Y%m%d}.csv"
+                ),
+                mime="text/csv",
+                icon=":material/download:",
+                on_click="ignore",
+                width="content",
             )
 
     _render_quality_correction_form()
