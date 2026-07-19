@@ -11,7 +11,7 @@ from app.core.settings import settings
 from app.scoring.engine import calculate_alpha_score
 from app.scoring.models import FinancialMetrics
 from app.sector.profiles import CompanyProfile
-from app.validation.service import PROFILE_REQUIREMENTS
+from app.validation.service import PROFILE_REQUIREMENTS, validate_financial_metrics
 
 
 def _strong_metrics() -> FinancialMetrics:
@@ -217,13 +217,17 @@ def test_old_methodology_calculation_snapshot_does_not_block_decision():
 def test_confirmed_validation_warning_has_smaller_confidence_penalty():
     metrics = _strong_metrics().model_copy(update={"current_ratio": 50})
     score = calculate_alpha_score(metrics)
+    warnings = validate_financial_metrics(metrics).warnings
     unconfirmed_audit = _audit(
         MetricSourceType.FINANCIAL_REPORT
     ).model_copy(
         update={"methodology_version": settings.scoring_methodology_version}
     )
     confirmed_audit = unconfirmed_audit.model_copy(
-        update={"validation_warnings_confirmed": True}
+        update={
+            "validation_warnings_confirmed": True,
+            "validation_warnings": warnings,
+        }
     )
 
     unconfirmed = calculate_analysis_confidence(
@@ -244,8 +248,29 @@ def test_confirmed_validation_warning_has_smaller_confidence_penalty():
 def test_old_methodology_warning_confirmation_does_not_reduce_penalty():
     metrics = _strong_metrics().model_copy(update={"current_ratio": 50})
     score = calculate_alpha_score(metrics)
+    warnings = validate_financial_metrics(metrics).warnings
     audit = _audit(MetricSourceType.FINANCIAL_REPORT).model_copy(
-        update={"validation_warnings_confirmed": True}
+        update={
+            "validation_warnings_confirmed": True,
+            "validation_warnings": warnings,
+        }
+    )
+
+    confidence = calculate_analysis_confidence(metrics, score, audit)
+
+    assert confidence.validation_component == 3.5
+    assert any("uyarısı bulunuyor" in item for item in confidence.reasons)
+
+
+def test_changed_warning_snapshot_does_not_reduce_confidence_penalty():
+    metrics = _strong_metrics().model_copy(update={"current_ratio": 50})
+    score = calculate_alpha_score(metrics)
+    audit = _audit(MetricSourceType.FINANCIAL_REPORT).model_copy(
+        update={
+            "methodology_version": settings.scoring_methodology_version,
+            "validation_warnings_confirmed": True,
+            "validation_warnings": ["Farklı bir uyarı onaylanmış."],
+        }
     )
 
     confidence = calculate_analysis_confidence(metrics, score, audit)

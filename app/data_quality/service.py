@@ -7,6 +7,7 @@ from app.data_quality.models import DataQualityRow, DataQualitySummary
 from app.scoring.models import FinancialMetrics
 from app.sector.profiles import CompanyProfile
 from app.validation.service import validate_financial_metrics
+from app.validation.service import validation_warning_confirmation_matches
 
 
 FIELD_LABELS = {
@@ -85,11 +86,14 @@ def build_data_quality_summary(
         report = validate_financial_metrics(company)
         audit = audits.get(company.symbol.upper())
         warnings_confirmed = bool(
-            report.warnings
-            and audit
-            and audit.validation_warnings_confirmed
-            and audit.methodology_version
-            == settings.scoring_methodology_version
+            audit
+            and validation_warning_confirmation_matches(
+                report.warnings,
+                audit.validation_warnings,
+                audit.validation_warnings_confirmed,
+                audit.methodology_version,
+                settings.scoring_methodology_version,
+            )
         )
         calculation_status, mismatch_fields, calculation_errors = (
             _calculation_check(audit)

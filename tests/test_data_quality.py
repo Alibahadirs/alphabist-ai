@@ -5,6 +5,7 @@ from app.core.settings import settings
 from app.data_quality.service import build_data_quality_summary
 from app.scoring.models import FinancialMetrics
 from app.sector.profiles import CompanyProfile
+from app.validation.service import validate_financial_metrics
 
 
 def _complete_company() -> FinancialMetrics:
@@ -117,6 +118,7 @@ def test_confirmed_warning_is_verified_but_remains_visible():
         current_ratio=1.5, operating_cash_flow=100, free_cash_flow=50,
         asset_turnover=0.8,
     )
+    warnings = validate_financial_metrics(company).warnings
     audit = CompanyDataAudit(
         symbol="OUTL",
         source_type=DataSourceType.CORRECTION,
@@ -125,6 +127,7 @@ def test_confirmed_warning_is_verified_but_remains_visible():
         alpha_score=70,
         methodology_version=settings.scoring_methodology_version,
         validation_warnings_confirmed=True,
+        validation_warnings=warnings,
     )
 
     row = build_data_quality_summary(
@@ -144,6 +147,7 @@ def test_old_methodology_warning_confirmation_is_not_reused():
         current_ratio=1.5, operating_cash_flow=100, free_cash_flow=50,
         asset_turnover=0.8,
     )
+    warnings = validate_financial_metrics(company).warnings
     audit = CompanyDataAudit(
         symbol="OUTL",
         source_type=DataSourceType.CORRECTION,
@@ -152,6 +156,34 @@ def test_old_methodology_warning_confirmation_is_not_reused():
         alpha_score=70,
         methodology_version="alpha-2025.1",
         validation_warnings_confirmed=True,
+        validation_warnings=warnings,
+    )
+
+    row = build_data_quality_summary(
+        [company],
+        {company.symbol: audit},
+    ).rows[0]
+
+    assert row.status == "Kontrol gerekli"
+    assert row.warnings_confirmed is False
+
+
+def test_changed_warning_snapshot_requires_new_confirmation():
+    company = FinancialMetrics(
+        symbol="OUTL", company_name="Outlier Sanayi A.Ş.", revenue_growth=10,
+        net_profit_growth=10, net_margin=150, roe=15, debt_to_equity=0.5,
+        current_ratio=1.5, operating_cash_flow=100, free_cash_flow=50,
+        asset_turnover=0.8,
+    )
+    audit = CompanyDataAudit(
+        symbol="OUTL",
+        source_type=DataSourceType.CORRECTION,
+        company_profile=CompanyProfile.STANDARD,
+        completeness=100,
+        alpha_score=70,
+        methodology_version=settings.scoring_methodology_version,
+        validation_warnings_confirmed=True,
+        validation_warnings=["Farklı bir uyarı onaylanmış."],
     )
 
     row = build_data_quality_summary(

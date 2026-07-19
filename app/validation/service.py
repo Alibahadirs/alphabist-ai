@@ -26,6 +26,20 @@ class SourceValidationReport(BaseModel):
         return not self.errors
 
 
+def validation_warning_confirmation_matches(
+    current_warnings: list[str],
+    stored_warnings: list[str],
+    confirmed: bool,
+    stored_methodology: str,
+    current_methodology: str,
+) -> bool:
+    if not current_warnings or not confirmed:
+        return False
+    if stored_methodology != current_methodology:
+        return False
+    return current_warnings == stored_warnings
+
+
 PROFILE_REQUIREMENTS = {
     CompanyProfile.STANDARD: (
         "revenue_growth", "net_profit_growth", "net_margin", "roe",

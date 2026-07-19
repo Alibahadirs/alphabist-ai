@@ -8,6 +8,7 @@ from app.scoring.models import FinancialMetrics, ScoreBreakdown
 from app.validation.service import (
     get_profile_requirements,
     validate_financial_metrics,
+    validation_warning_confirmation_matches,
 )
 
 
@@ -116,10 +117,14 @@ def calculate_analysis_confidence(
     )
     period_component = period_assessment.confidence_points
     warnings_confirmed = bool(
-        validation.warnings
-        and audit
-        and audit.validation_warnings_confirmed
-        and audit.methodology_version == settings.scoring_methodology_version
+        audit
+        and validation_warning_confirmation_matches(
+            validation.warnings,
+            audit.validation_warnings,
+            audit.validation_warnings_confirmed,
+            audit.methodology_version,
+            settings.scoring_methodology_version,
+        )
     )
     warning_penalty = len(validation.warnings) * (
         0.5 if warnings_confirmed else 1.5
