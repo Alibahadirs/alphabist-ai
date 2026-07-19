@@ -3,9 +3,11 @@ from datetime import date, datetime, timezone
 
 from app.audit.models import CompanyDataAudit, DataSourceType
 from app.data_quality.evidence import (
+    EVIDENCE_INTEGRITY_ALGORITHM,
     EVIDENCE_SCHEMA_VERSION,
     build_validation_evidence_package,
     serialize_validation_evidence_package,
+    validation_evidence_digest,
 )
 from app.data_quality.models import DataQualityRow
 from app.scoring.models import FinancialMetrics
@@ -65,6 +67,11 @@ def test_validation_evidence_package_contains_verifiable_warning_proof():
     assert package["warning_evidence"]["stored_fingerprint"] == fingerprint
     assert package["warning_evidence"]["fingerprint_matches"] is True
     assert package["data_quality"]["status"] == "Doğrulandı"
+    assert package["integrity"]["algorithm"] == EVIDENCE_INTEGRITY_ALGORITHM
+    assert package["integrity"]["digest"] == validation_evidence_digest(
+        package
+    )
+    assert len(package["integrity"]["digest"]) == 64
 
     serialized = serialize_validation_evidence_package(package)
     decoded = json.loads(serialized.decode("utf-8"))

@@ -1,4 +1,5 @@
 import json
+from hashlib import sha256
 from datetime import datetime, timezone
 from typing import Any
 
@@ -9,6 +10,25 @@ from app.validation.service import validation_warning_fingerprint
 
 
 EVIDENCE_SCHEMA_VERSION = "alphabist-validation-evidence-1"
+EVIDENCE_INTEGRITY_ALGORITHM = "sha256"
+
+
+def _canonical_evidence_bytes(package: dict[str, Any]) -> bytes:
+    return json.dumps(
+        package,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+
+
+def validation_evidence_digest(package: dict[str, Any]) -> str:
+    unsigned_package = {
+        key: value
+        for key, value in package.items()
+        if key != "integrity"
+    }
+    return sha256(_canonical_evidence_bytes(unsigned_package)).hexdigest()
 
 
 def serialize_validation_evidence_package(
@@ -48,7 +68,7 @@ def build_validation_evidence_package(
         else True
     )
 
-    return {
+    package = {
         "schema_version": EVIDENCE_SCHEMA_VERSION,
         "generated_at": timestamp.isoformat(),
         "company": {
@@ -91,3 +111,8 @@ def build_validation_evidence_package(
             ),
         },
     }
+    package["integrity"] = {
+        "algorithm": EVIDENCE_INTEGRITY_ALGORITHM,
+        "digest": validation_evidence_digest(package),
+    }
+    return package
