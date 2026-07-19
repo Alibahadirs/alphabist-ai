@@ -6,6 +6,7 @@ from app.data_quality.evidence import (
     EVIDENCE_INTEGRITY_ALGORITHM,
     EVIDENCE_SCHEMA_VERSION,
     build_validation_evidence_package,
+    compare_validation_evidence_packages,
     serialize_validation_evidence_package,
     validation_evidence_digest,
     verify_validation_evidence_package,
@@ -129,3 +130,37 @@ def test_evidence_verifier_rejects_invalid_json_and_schema():
 
     assert invalid_schema.valid is False
     assert "şema sürümü" in " ".join(invalid_schema.errors)
+
+
+def test_evidence_comparison_orders_packages_and_lists_changes():
+    previous = json.loads(_valid_evidence_bytes())
+    previous["generated_at"] = "2026-07-18T12:00:00+00:00"
+    previous["analysis"]["alpha_score"] = 70
+    previous["data_quality"]["completeness"] = 80
+    previous["integrity"]["digest"] = validation_evidence_digest(previous)
+    current = json.loads(_valid_evidence_bytes())
+    current["generated_at"] = "2026-07-19T12:00:00+00:00"
+    current["analysis"]["alpha_score"] = 82
+    current["data_quality"]["completeness"] = 100
+    current["integrity"]["digest"] = validation_evidence_digest(current)
+
+    result = compare_validation_evidence_packages(current, previous)
+
+    assert result.comparable is True
+    assert result.symbol == "TEST"
+    assert result.previous_generated_at.startswith("2026-07-18")
+    assert [change.field for change in result.changes] == [
+        "Alpha Score",
+        "Veri yeterliliği",
+    ]
+
+
+def test_evidence_comparison_rejects_different_companies():
+    first = json.loads(_valid_evidence_bytes())
+    second = json.loads(_valid_evidence_bytes())
+    second["company"]["symbol"] = "OTHER"
+
+    result = compare_validation_evidence_packages(first, second)
+
+    assert result.comparable is False
+    assert result.status == "Paketler aynı şirkete ait değil."

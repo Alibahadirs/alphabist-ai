@@ -24,6 +24,23 @@ class EvidenceVerificationResult:
     package: dict[str, Any] | None = None
 
 
+@dataclass(frozen=True)
+class EvidenceChange:
+    field: str
+    previous: Any
+    current: Any
+
+
+@dataclass(frozen=True)
+class EvidenceComparisonResult:
+    comparable: bool
+    status: str
+    symbol: str = ""
+    previous_generated_at: str = ""
+    current_generated_at: str = ""
+    changes: list[EvidenceChange] = field(default_factory=list)
+
+
 def _canonical_evidence_bytes(package: dict[str, Any]) -> bytes:
     return json.dumps(
         package,
@@ -132,6 +149,75 @@ def verify_validation_evidence_package(
         status="Doğrulandı" if not errors else "Doğrulama başarısız",
         errors=errors,
         package=package,
+    )
+
+
+def compare_validation_evidence_packages(
+    first: dict[str, Any],
+    second: dict[str, Any],
+) -> EvidenceComparisonResult:
+    first_symbol = str(first.get("company", {}).get("symbol", ""))
+    second_symbol = str(second.get("company", {}).get("symbol", ""))
+    if not first_symbol or first_symbol != second_symbol:
+        return EvidenceComparisonResult(
+            comparable=False,
+            status="Paketler aynı şirkete ait değil.",
+        )
+
+    try:
+        first_timestamp = datetime.fromisoformat(
+            str(first.get("generated_at", ""))
+        )
+        second_timestamp = datetime.fromisoformat(
+            str(second.get("generated_at", ""))
+        )
+    except ValueError:
+        return EvidenceComparisonResult(
+            comparable=False,
+            status="Paket zamanları karşılaştırılamıyor.",
+            symbol=first_symbol,
+        )
+
+    previous, current = (
+        (first, second)
+        if first_timestamp <= second_timestamp
+        else (second, first)
+    )
+    fields = (
+        ("Rapor dönemi", ("analysis", "report_period_end")),
+        ("Metodoloji", ("analysis", "methodology_version")),
+        ("Alpha Score", ("analysis", "alpha_score")),
+        ("Analiz güveni", ("analysis", "confidence_score")),
+        ("Veri kalite durumu", ("data_quality", "status")),
+        ("Veri yeterliliği", ("data_quality", "completeness")),
+        ("Uyarı kanıtı durumu", ("warning_evidence", "status")),
+        ("Uyarı sayısı", ("warning_evidence", "warnings")),
+    )
+    changes: list[EvidenceChange] = []
+    for label, (section, key) in fields:
+        previous_value = previous.get(section, {}).get(key)
+        current_value = current.get(section, {}).get(key)
+        if key == "warnings":
+            previous_value = len(previous_value or [])
+            current_value = len(current_value or [])
+        if previous_value != current_value:
+            changes.append(
+                EvidenceChange(
+                    field=label,
+                    previous=previous_value,
+                    current=current_value,
+                )
+            )
+
+    return EvidenceComparisonResult(
+        comparable=True,
+        status=(
+            "Değişiklik bulundu" if changes else "Değişiklik bulunamadı"
+        ),
+        symbol=first_symbol,
+        previous_generated_at=str(previous.get("generated_at", "")),
+        current_generated_at=str(current.get("generated_at", "")),
+        changes=changes,
     )
 
 

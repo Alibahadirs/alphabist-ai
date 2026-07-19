@@ -61,6 +61,7 @@ from app.data_quality.service import FIELD_LABELS, build_data_quality_summary
 from app.data_quality.export import build_data_quality_csv
 from app.data_quality.evidence import (
     build_validation_evidence_package,
+    compare_validation_evidence_packages,
     serialize_validation_evidence_package,
     verify_validation_evidence_package,
 )
@@ -1589,6 +1590,59 @@ def render_data_quality() -> None:
                 )
                 for evidence_error in evidence_verification.errors:
                     st.write(f"- {evidence_error}")
+        comparison_uploads = st.file_uploader(
+            "Karşılaştırılacak iki kanıt paketi",
+            type="json",
+            accept_multiple_files=True,
+            max_upload_size=5,
+            key="quality_evidence_comparison_upload",
+            help="Aynı şirkete ait iki doğrulama kanıt paketini seçin.",
+        )
+        if comparison_uploads:
+            if len(comparison_uploads) != 2:
+                st.info("Karşılaştırma için tam olarak iki paket yükleyin.")
+            else:
+                comparison_verifications = [
+                    verify_validation_evidence_package(upload.getvalue())
+                    for upload in comparison_uploads
+                ]
+                invalid_comparisons = [
+                    result
+                    for result in comparison_verifications
+                    if not result.valid
+                ]
+                if invalid_comparisons:
+                    st.error(
+                        "Karşılaştırma için iki paketin de doğrulanması gerekir.",
+                        icon=":material/compare_arrows:",
+                    )
+                else:
+                    evidence_comparison = (
+                        compare_validation_evidence_packages(
+                            comparison_verifications[0].package or {},
+                            comparison_verifications[1].package or {},
+                        )
+                    )
+                    if not evidence_comparison.comparable:
+                        st.warning(evidence_comparison.status)
+                    elif not evidence_comparison.changes:
+                        st.success(evidence_comparison.status)
+                    else:
+                        st.markdown(
+                            f"**{evidence_comparison.symbol} kanıt değişiklikleri**"
+                        )
+                        st.dataframe(
+                            [
+                                {
+                                    "Alan": change.field,
+                                    "Önceki": change.previous,
+                                    "Güncel": change.current,
+                                }
+                                for change in evidence_comparison.changes
+                            ],
+                            hide_index=True,
+                            width="stretch",
+                        )
     companies = list_companies()
     latest_audits = {
         audit.symbol: audit for audit in list_latest_company_data_audits()
