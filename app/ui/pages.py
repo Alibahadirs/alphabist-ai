@@ -59,6 +59,10 @@ from app.database.backup import (
 )
 from app.data_quality.service import FIELD_LABELS, build_data_quality_summary
 from app.data_quality.export import build_data_quality_csv
+from app.data_quality.evidence import (
+    build_validation_evidence_package,
+    serialize_validation_evidence_package,
+)
 from app.data_quality.readiness import (
     READINESS_STATUS_OPTIONS,
     build_decision_readiness_summary,
@@ -1934,6 +1938,39 @@ def render_data_quality() -> None:
                 icon=":material/download:",
                 on_click="ignore",
                 width="content",
+            )
+            evidence_symbol = st.selectbox(
+                "Kanıt paketi indirilecek hisse",
+                [row.symbol for row in filtered],
+                key="quality_evidence_symbol",
+            )
+            evidence_row = next(
+                row for row in filtered
+                if row.symbol == evidence_symbol
+            )
+            evidence_company = next(
+                company for company in companies
+                if company.symbol == evidence_symbol
+            )
+            evidence_package = build_validation_evidence_package(
+                evidence_company,
+                evidence_row,
+                latest_audits.get(evidence_symbol),
+            )
+            st.download_button(
+                "Şirket kanıt paketini indir",
+                data=serialize_validation_evidence_package(
+                    evidence_package
+                ),
+                file_name=(
+                    f"alphabist_kanit_{evidence_symbol}_"
+                    f"{date.today():%Y%m%d}.json"
+                ),
+                mime="application/json",
+                icon=":material/verified_user:",
+                on_click="ignore",
+                width="content",
+                key="quality_evidence_download",
             )
 
     _render_quality_correction_form()

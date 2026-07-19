@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timezone
 from typing import Any
 
@@ -8,6 +9,20 @@ from app.validation.service import validation_warning_fingerprint
 
 
 EVIDENCE_SCHEMA_VERSION = "alphabist-validation-evidence-1"
+
+
+def serialize_validation_evidence_package(
+    package: dict[str, Any],
+) -> bytes:
+    return (
+        json.dumps(
+            package,
+            ensure_ascii=False,
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n"
+    ).encode("utf-8")
 
 
 def build_validation_evidence_package(

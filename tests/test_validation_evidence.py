@@ -1,9 +1,11 @@
+import json
 from datetime import date, datetime, timezone
 
 from app.audit.models import CompanyDataAudit, DataSourceType
 from app.data_quality.evidence import (
     EVIDENCE_SCHEMA_VERSION,
     build_validation_evidence_package,
+    serialize_validation_evidence_package,
 )
 from app.data_quality.models import DataQualityRow
 from app.scoring.models import FinancialMetrics
@@ -63,3 +65,9 @@ def test_validation_evidence_package_contains_verifiable_warning_proof():
     assert package["warning_evidence"]["stored_fingerprint"] == fingerprint
     assert package["warning_evidence"]["fingerprint_matches"] is True
     assert package["data_quality"]["status"] == "Doğrulandı"
+
+    serialized = serialize_validation_evidence_package(package)
+    decoded = json.loads(serialized.decode("utf-8"))
+
+    assert decoded == package
+    assert "Test Sanayi A.Ş.".encode("utf-8") in serialized
