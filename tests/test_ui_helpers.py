@@ -1,5 +1,7 @@
 from app.sector.profiles import CompanyProfile
+from app.audit.models import CompanyDataAudit, DataSourceType
 from app.ui.pages import (
+    _audit_warning_confirmation_label,
     _format_metric_snapshot_value,
     _format_turkish_amount,
     _pdf_source_fields,
@@ -55,3 +57,24 @@ def test_validation_warnings_require_confirmation_only_when_present():
         warnings,
         False,
     )
+
+
+def test_audit_warning_confirmation_label_distinguishes_evidence_states():
+    base = CompanyDataAudit(
+        symbol="TEST",
+        source_type=DataSourceType.MANUAL,
+        company_profile=CompanyProfile.STANDARD,
+        completeness=100,
+        alpha_score=70,
+    )
+    unconfirmed = base.model_copy(
+        update={"validation_warnings": ["Bir uyarı"]}
+    )
+    confirmed = unconfirmed.model_copy(
+        update={"validation_warnings_confirmed": True}
+    )
+
+    assert _audit_warning_confirmation_label(None) == "Uygulanamaz"
+    assert _audit_warning_confirmation_label(base) == "Uygulanamaz"
+    assert _audit_warning_confirmation_label(unconfirmed) == "Onaylanmadı"
+    assert _audit_warning_confirmation_label(confirmed) == "Onaylandı"

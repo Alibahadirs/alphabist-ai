@@ -504,6 +504,18 @@ def _audit_source_label(audit: CompanyDataAudit | None) -> str:
     return SOURCE_LABELS[audit.source_type]
 
 
+def _audit_warning_confirmation_label(
+    audit: CompanyDataAudit | None,
+) -> str:
+    if audit is None or not audit.validation_warnings:
+        return "Uygulanamaz"
+    return (
+        "Onaylandı"
+        if audit.validation_warnings_confirmed
+        else "Onaylanmadı"
+    )
+
+
 def _audit_period_label(audit: CompanyDataAudit | None) -> str:
     if audit is None or audit.period_months is None:
         return "Belirtilmemiş"
@@ -571,6 +583,25 @@ def _render_data_source_caption(audit: CompanyDataAudit | None) -> None:
             else "doğrulanmadı"
         )
         st.caption("Büyüme karşılaştırma dönemi: " + comparison_label)
+
+    if audit.validation_warnings:
+        st.caption(
+            "Doğrulama uyarıları: "
+            f"{len(audit.validation_warnings)} | "
+            f"{_audit_warning_confirmation_label(audit)}"
+        )
+        with st.expander("Analiz kaydındaki doğrulama uyarıları"):
+            if audit.validation_warnings_confirmed:
+                st.success(
+                    "Bu uyarılar analiz kaydedilirken kullanıcı tarafından "
+                    "resmi raporlarla kontrol edildi."
+                )
+            else:
+                st.warning(
+                    "Bu kayıttaki uyarılar için doğrulama onayı bulunmuyor."
+                )
+            for warning in audit.validation_warnings:
+                st.write(f"- {warning}")
 
     if audit.field_sources:
         with st.expander("Son puanın gösterge kaynakları"):
@@ -963,6 +994,13 @@ def render_dashboard() -> None:
                             "Karşılaştırma dönemi": audit.comparison_period_end,
                             "Karşılaştırma doğrulandı": (
                                 audit.comparison_period_confirmed
+                            ),
+                            "Uyarı onayı": (
+                                _audit_warning_confirmation_label(audit)
+                            ),
+                            "Onaylanan uyarılar": (
+                                " | ".join(audit.validation_warnings)
+                                or "Yok"
                             ),
                             "Yeterlilik (%)": audit.completeness,
                             "Ham kategori toplamı": (
@@ -1782,6 +1820,12 @@ def render_data_quality() -> None:
                     "Onaylandı"
                     if row.warnings_confirmed
                     else ("Gerekli" if row.warnings else "Uygulanamaz")
+                ),
+                "Uyarı kanıtı": (
+                    f"{len(latest_audits[row.symbol].validation_warnings)} uyarı"
+                    if row.warnings_confirmed
+                    and row.symbol in latest_audits
+                    else "Yok"
                 ),
                 "Hesap kontrolü": row.calculation_check_status,
                 "Uyuşmayan göstergeler": (
