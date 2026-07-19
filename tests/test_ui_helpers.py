@@ -1,6 +1,8 @@
 from app.sector.profiles import CompanyProfile
 from app.audit.models import CompanyDataAudit, DataSourceType
+from app.validation.service import WarningConfirmationStatus
 from app.ui.pages import (
+    WARNING_CONFIRMATION_OPTIONS,
     _audit_warning_confirmation_label,
     _format_metric_snapshot_value,
     _format_turkish_amount,
@@ -78,3 +80,9 @@ def test_audit_warning_confirmation_label_distinguishes_evidence_states():
     assert _audit_warning_confirmation_label(base) == "Uygulanamaz"
     assert _audit_warning_confirmation_label(unconfirmed) == "Onaylanmadı"
     assert _audit_warning_confirmation_label(confirmed) == "Onaylandı"
+
+
+def test_warning_confirmation_filter_contains_every_status():
+    assert set(WARNING_CONFIRMATION_OPTIONS) == {
+        status.value for status in WarningConfirmationStatus
+    }

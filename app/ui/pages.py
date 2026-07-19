@@ -117,6 +117,7 @@ from app.technical.refresh import (
 from app.watchlist.models import WatchlistEntry
 from app.watchlist.service import build_watchlist_summary
 from app.validation.service import (
+    WarningConfirmationStatus,
     get_profile_requirements,
     validate_financial_draft,
     validate_financial_metrics,
@@ -131,6 +132,10 @@ TECHNICAL_LABELS = {
     "volume": ("Hacim", 15),
     "support_resistance": ("Destek / direnç", 15),
 }
+
+WARNING_CONFIRMATION_OPTIONS = [
+    status.value for status in WarningConfirmationStatus
+]
 
 SCORE_INPUT_LABELS = {
     "valuation_score_input": "Değerleme girdisi",
@@ -1737,7 +1742,13 @@ def render_data_quality() -> None:
             freshness_options,
             default=freshness_options,
         )
-    filter_technical, filter_readiness = st.columns(2)
+    filter_warning, filter_technical, filter_readiness = st.columns(3)
+    with filter_warning:
+        selected_warning_statuses = st.multiselect(
+            "Uyarı onayı",
+            WARNING_CONFIRMATION_OPTIONS,
+            default=WARNING_CONFIRMATION_OPTIONS,
+        )
     with filter_technical:
         selected_technical_statuses = st.multiselect(
             "Teknik kayıt durumu",
@@ -1754,6 +1765,8 @@ def render_data_quality() -> None:
     filtered = [
         row for row in summary.rows
         if row.status in selected_statuses
+        and row.warning_confirmation_status.value
+        in selected_warning_statuses
         and REPORT_FRESHNESS_LABELS[freshness[row.symbol].status]
         in selected_freshness
         and technical_by_symbol[row.symbol].status
