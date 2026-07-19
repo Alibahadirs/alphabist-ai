@@ -28,6 +28,7 @@ from app.parser.models import (
 from app.scoring.models import FinancialMetrics, ScoreBreakdown
 from app.scoring.engine import calculate_alpha_score
 from app.sector.profiles import CompanyProfile
+from app.validation.service import validate_financial_metrics
 
 
 def _audit(symbol: str, score: float, source: DataSourceType) -> CompanyDataAudit:
@@ -649,3 +650,52 @@ def test_duplicate_analysis_requires_same_period_and_fingerprint():
         date(2026, 3, 31),
     ) is False
     assert is_duplicate_analysis(None, metrics, date(2026, 3, 31)) is False
+
+
+def test_duplicate_analysis_allows_new_warning_confirmation_record():
+    metrics = FinancialMetrics(
+        symbol="AKSA",
+        company_name="Aksa Akrilik",
+        revenue_growth=12.5,
+        net_margin=150,
+    )
+    latest = _audit("AKSA", 80, DataSourceType.PDF).model_copy(
+        update={
+            "input_fingerprint": analysis_input_fingerprint(metrics),
+            "methodology_version": settings.scoring_methodology_version,
+            "validation_warnings_confirmed": False,
+            "validation_warnings": [],
+        }
+    )
+
+    assert is_duplicate_analysis(
+        latest,
+        metrics,
+        date(2026, 3, 31),
+        validation_warnings_confirmed=True,
+    ) is False
+
+
+def test_duplicate_analysis_rejects_repeated_valid_warning_confirmation():
+    metrics = FinancialMetrics(
+        symbol="AKSA",
+        company_name="Aksa Akrilik",
+        revenue_growth=12.5,
+        net_margin=150,
+    )
+    warnings = validate_financial_metrics(metrics).warnings
+    latest = _audit("AKSA", 80, DataSourceType.PDF).model_copy(
+        update={
+            "input_fingerprint": analysis_input_fingerprint(metrics),
+            "methodology_version": settings.scoring_methodology_version,
+            "validation_warnings_confirmed": True,
+            "validation_warnings": warnings,
+        }
+    )
+
+    assert is_duplicate_analysis(
+        latest,
+        metrics,
+        date(2026, 3, 31),
+        validation_warnings_confirmed=True,
+    ) is True

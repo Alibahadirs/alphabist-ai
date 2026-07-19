@@ -20,7 +20,10 @@ from app.parser.models import (
     PdfExtractionResult,
 )
 from app.scoring.models import FinancialMetrics, ScoreBreakdown
-from app.validation.service import validate_financial_metrics
+from app.validation.service import (
+    validation_warning_confirmation_matches,
+    validate_financial_metrics,
+)
 
 
 FINANCIAL_METRIC_DEPENDENCIES = {
@@ -129,14 +132,33 @@ def is_duplicate_analysis(
     latest_audit: CompanyDataAudit | None,
     metrics: FinancialMetrics,
     report_period_end: date | None,
+    validation_warnings_confirmed: bool = False,
 ) -> bool:
     if latest_audit is None or not latest_audit.input_fingerprint:
         return False
-    return (
+    same_analysis = (
         latest_audit.report_period_end == report_period_end
         and latest_audit.input_fingerprint
         == analysis_input_fingerprint(metrics)
     )
+    if not same_analysis:
+        return False
+
+    current_warnings = validate_financial_metrics(metrics).warnings
+    latest_confirmation_valid = validation_warning_confirmation_matches(
+        current_warnings,
+        latest_audit.validation_warnings,
+        latest_audit.validation_warnings_confirmed,
+        latest_audit.methodology_version,
+        settings.scoring_methodology_version,
+    )
+    if (
+        current_warnings
+        and validation_warnings_confirmed
+        and not latest_confirmation_valid
+    ):
+        return False
+    return True
 
 
 def compare_analysis_snapshots(

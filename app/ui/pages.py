@@ -1438,7 +1438,12 @@ def _render_quality_correction_form() -> None:
     previous_period_end = (
         previous_audit.report_period_end if previous_audit else None
     )
-    if is_duplicate_analysis(previous_audit, corrected, previous_period_end):
+    if is_duplicate_analysis(
+        previous_audit,
+        corrected,
+        previous_period_end,
+        validation_warnings_confirmed,
+    ):
         st.info(
             "Bu dönem ve finansal girdiler son analizle aynı. Puan geçmişine "
             "yinelenen kayıt eklenmedi."
@@ -1488,6 +1493,7 @@ def _render_quality_correction_form() -> None:
         validation_warnings_confirmed=bool(
             validation.warnings and validation_warnings_confirmed
         ),
+        validation_warnings=validation.warnings,
         completeness=validation.completeness,
         alpha_score=score.total,
         field_sources=corrected_sources,
@@ -2929,7 +2935,12 @@ def _validate_and_save_company(
         for conflict in document_conflicts:
             st.warning(conflict)
         return
-    if is_duplicate_analysis(latest_audit, metrics, report_period_end):
+    if is_duplicate_analysis(
+        latest_audit,
+        metrics,
+        report_period_end,
+        validation_warnings_confirmed,
+    ):
         st.info(
             "Bu dönem ve finansal girdiler son analizle aynı. Puan geçmişine "
             "yinelenen kayıt eklenmedi."
@@ -2979,6 +2990,7 @@ def _validate_and_save_company(
         validation_warnings_confirmed=bool(
             validation.warnings and validation_warnings_confirmed
         ),
+        validation_warnings=validation.warnings,
         completeness=score.data_completeness,
         alpha_score=score.total,
         field_sources=field_sources,
