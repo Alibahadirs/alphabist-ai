@@ -12,6 +12,7 @@ from app.validation.service import (
     get_validation_warning_confirmation_status,
     get_profile_requirements,
     validate_financial_metrics,
+    warning_confirmation_recommended_action,
 )
 
 
@@ -390,3 +391,12 @@ def test_warning_confirmation_status_explains_evidence_state(
         stored_methodology,
         "alpha-2026.4",
     ) == expected
+
+
+@pytest.mark.parametrize("status", list(WarningConfirmationStatus))
+def test_every_warning_confirmation_status_has_a_recommended_action(status):
+    action = warning_confirmation_recommended_action(status)
+
+    assert action
+    if status == WarningConfirmationStatus.EVIDENCE_DAMAGED:
+        assert "kaydı kullanma" in action.lower()

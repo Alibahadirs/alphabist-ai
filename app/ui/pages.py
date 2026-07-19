@@ -1844,6 +1844,7 @@ def render_data_quality() -> None:
                 "Uyarı onayı": (
                     row.warning_confirmation_status.value
                 ),
+                "Önerilen uyarı işlemi": row.warning_recommended_action,
                 "Uyarı kanıtı": (
                     f"{len(latest_audits[row.symbol].validation_warnings)} uyarı"
                     if row.warnings_confirmed

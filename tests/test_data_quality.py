@@ -245,6 +245,7 @@ def test_damaged_warning_evidence_is_a_data_quality_error():
         row.warning_confirmation_status
         == WarningConfirmationStatus.EVIDENCE_DAMAGED
     )
+    assert "kaydı kullanma" in row.warning_recommended_action.lower()
     assert any(
         "audit parmak izi" in error
         for error in row.errors

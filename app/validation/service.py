@@ -39,6 +39,33 @@ class WarningConfirmationStatus(str, Enum):
     CONFIRMED = "Onaylandı"
 
 
+WARNING_CONFIRMATION_ACTIONS = {
+    WarningConfirmationStatus.NOT_APPLICABLE: "İşlem gerekmiyor",
+    WarningConfirmationStatus.REQUIRED: (
+        "Uyarıları resmi finansal/faaliyet raporlarıyla doğrula"
+    ),
+    WarningConfirmationStatus.METHODOLOGY_CHANGED: (
+        "Güncel metodolojiyle uyarıları yeniden doğrula"
+    ),
+    WarningConfirmationStatus.WARNINGS_CHANGED: (
+        "Değişen uyarı listesini yeniden incele ve onayla"
+    ),
+    WarningConfirmationStatus.EVIDENCE_MISSING: (
+        "Parmak izli yeni bir doğrulama kaydı oluştur"
+    ),
+    WarningConfirmationStatus.EVIDENCE_DAMAGED: (
+        "Kaydı kullanma; kaynak raporlardan yeni audit kaydı oluştur"
+    ),
+    WarningConfirmationStatus.CONFIRMED: "İşlem gerekmiyor",
+}
+
+
+def warning_confirmation_recommended_action(
+    status: WarningConfirmationStatus,
+) -> str:
+    return WARNING_CONFIRMATION_ACTIONS[status]
+
+
 def validation_warning_fingerprint(
     warnings: list[str],
     methodology_version: str,

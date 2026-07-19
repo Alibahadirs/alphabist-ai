@@ -10,6 +10,7 @@ from app.validation.service import (
     WarningConfirmationStatus,
     get_validation_warning_confirmation_status,
     validate_financial_metrics,
+    warning_confirmation_recommended_action,
 )
 
 
@@ -129,6 +130,11 @@ def build_data_quality_summary(
                 warnings=report.warnings,
                 warnings_confirmed=warnings_confirmed,
                 warning_confirmation_status=warning_confirmation_status,
+                warning_recommended_action=(
+                    warning_confirmation_recommended_action(
+                        warning_confirmation_status
+                    )
+                ),
                 errors=errors,
                 calculation_check_status=calculation_status,
                 calculation_mismatch_fields=mismatch_fields,

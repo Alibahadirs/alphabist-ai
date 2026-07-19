@@ -16,6 +16,7 @@ class DataQualityRow(BaseModel):
     warning_confirmation_status: WarningConfirmationStatus = (
         WarningConfirmationStatus.NOT_APPLICABLE
     )
+    warning_recommended_action: str = "İşlem gerekmiyor"
     errors: list[str] = Field(default_factory=list)
     calculation_check_status: str = "Kayıt yok"
     calculation_mismatch_fields: list[str] = Field(default_factory=list)
