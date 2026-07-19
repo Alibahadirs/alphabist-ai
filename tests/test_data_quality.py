@@ -62,6 +62,7 @@ def test_data_quality_summary_separates_verified_and_critical_companies():
     assert summary.total_companies == 2
     assert summary.verified_count == 1
     assert summary.critical_count == 1
+    assert summary.warning_issue_count == 1
     assert summary.rows[0].symbol == "TBNK"
     assert "Sermaye yeterliliği" in summary.rows[0].missing_fields
 
@@ -109,10 +110,13 @@ def test_extreme_bank_ratios_are_visible_in_data_quality_center():
         cost_income_ratio=500,
     )
 
-    row = build_data_quality_summary([company]).rows[0]
+    summary = build_data_quality_summary([company])
+    row = summary.rows[0]
 
     assert row.status == "Kontrol gerekli"
     assert len(row.warnings) >= 3
+    assert summary.warning_issue_count == 1
+    assert summary.warning_status_counts["Onay gerekli"] == 1
 
 
 def test_confirmed_warning_is_verified_but_remains_visible():

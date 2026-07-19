@@ -1585,6 +1585,35 @@ def render_data_quality() -> None:
 
     with st.container(horizontal=True):
         st.metric(
+            "Uyarı onayı gerekli",
+            summary.warning_status_counts.get("Onay gerekli", 0),
+            border=True,
+        )
+        st.metric(
+            "Metodoloji / uyarı değişti",
+            summary.warning_status_counts.get("Metodoloji değişti", 0)
+            + summary.warning_status_counts.get("Uyarılar değişti", 0),
+            border=True,
+        )
+        st.metric(
+            "Kanıt eksik / bozuk",
+            summary.warning_status_counts.get("Kanıt eksik", 0)
+            + summary.warning_status_counts.get("Kanıt bozuk", 0),
+            border=True,
+        )
+        st.metric(
+            "Uyarı onaylı",
+            summary.warning_status_counts.get("Onaylandı", 0),
+            border=True,
+        )
+        st.metric(
+            "Toplam uyarı sorunu",
+            summary.warning_issue_count,
+            border=True,
+        )
+
+    with st.container(horizontal=True):
+        st.metric(
             "Güncel rapor",
             sum(
                 item.status == ReportFreshnessStatus.CURRENT

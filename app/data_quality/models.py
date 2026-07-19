@@ -29,6 +29,8 @@ class DataQualitySummary(BaseModel):
     review_count: int = Field(ge=0)
     critical_count: int = Field(ge=0)
     average_completeness: float = Field(ge=0, le=100)
+    warning_status_counts: dict[str, int] = Field(default_factory=dict)
+    warning_issue_count: int = Field(default=0, ge=0)
 
 
 class DecisionReadinessRow(BaseModel):

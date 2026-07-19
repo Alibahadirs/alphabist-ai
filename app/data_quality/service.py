@@ -143,6 +143,13 @@ def build_data_quality_summary(
 
     priority = {"Hatalı": 0, "Eksik veri": 1, "Kontrol gerekli": 2, "Doğrulandı": 3}
     rows.sort(key=lambda row: (priority[row.status], row.completeness, row.symbol))
+    warning_status_counts = {
+        status.value: sum(
+            row.warning_confirmation_status == status
+            for row in rows
+        )
+        for status in WarningConfirmationStatus
+    }
     return DataQualitySummary(
         rows=rows,
         total_companies=len(rows),
@@ -150,4 +157,13 @@ def build_data_quality_summary(
         review_count=sum(row.status == "Kontrol gerekli" for row in rows),
         critical_count=sum(row.status in ("Hatalı", "Eksik veri") for row in rows),
         average_completeness=(round(sum(row.completeness for row in rows) / len(rows), 1) if rows else 0),
+        warning_status_counts=warning_status_counts,
+        warning_issue_count=sum(
+            row.warning_confirmation_status
+            not in {
+                WarningConfirmationStatus.NOT_APPLICABLE,
+                WarningConfirmationStatus.CONFIRMED,
+            }
+            for row in rows
+        ),
     )
