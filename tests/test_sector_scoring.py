@@ -8,6 +8,8 @@ from app.sector.profiles import (
     reconcile_company_profiles,
 )
 from app.validation.service import (
+    WarningConfirmationStatus,
+    get_validation_warning_confirmation_status,
     get_profile_requirements,
     validate_financial_metrics,
 )
@@ -344,3 +346,47 @@ def test_normal_bank_ratios_do_not_create_sector_range_warnings():
 
     assert report.is_valid
     assert report.warnings == []
+
+
+@pytest.mark.parametrize(
+    ("current", "stored", "confirmed", "stored_methodology", "expected"),
+    [
+        ([], [], False, "alpha-2026.4", WarningConfirmationStatus.NOT_APPLICABLE),
+        (["Uyarı"], [], False, "alpha-2026.4", WarningConfirmationStatus.REQUIRED),
+        (
+            ["Uyarı"],
+            ["Uyarı"],
+            True,
+            "alpha-2025.1",
+            WarningConfirmationStatus.METHODOLOGY_CHANGED,
+        ),
+        (
+            ["Yeni uyarı"],
+            ["Eski uyarı"],
+            True,
+            "alpha-2026.4",
+            WarningConfirmationStatus.WARNINGS_CHANGED,
+        ),
+        (
+            ["Uyarı"],
+            ["Uyarı"],
+            True,
+            "alpha-2026.4",
+            WarningConfirmationStatus.CONFIRMED,
+        ),
+    ],
+)
+def test_warning_confirmation_status_explains_evidence_state(
+    current,
+    stored,
+    confirmed,
+    stored_methodology,
+    expected,
+):
+    assert get_validation_warning_confirmation_status(
+        current,
+        stored,
+        confirmed,
+        stored_methodology,
+        "alpha-2026.4",
+    ) == expected

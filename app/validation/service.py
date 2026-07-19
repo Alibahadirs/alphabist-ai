@@ -1,4 +1,5 @@
 from math import isfinite
+from enum import Enum
 from pydantic import BaseModel, Field
 
 from app.parser.models import FinancialReportDraft
@@ -26,6 +27,32 @@ class SourceValidationReport(BaseModel):
         return not self.errors
 
 
+class WarningConfirmationStatus(str, Enum):
+    NOT_APPLICABLE = "Uygulanamaz"
+    REQUIRED = "Onay gerekli"
+    METHODOLOGY_CHANGED = "Metodoloji değişti"
+    WARNINGS_CHANGED = "Uyarılar değişti"
+    CONFIRMED = "Onaylandı"
+
+
+def get_validation_warning_confirmation_status(
+    current_warnings: list[str],
+    stored_warnings: list[str],
+    confirmed: bool,
+    stored_methodology: str,
+    current_methodology: str,
+) -> WarningConfirmationStatus:
+    if not current_warnings:
+        return WarningConfirmationStatus.NOT_APPLICABLE
+    if not confirmed:
+        return WarningConfirmationStatus.REQUIRED
+    if stored_methodology != current_methodology:
+        return WarningConfirmationStatus.METHODOLOGY_CHANGED
+    if current_warnings != stored_warnings:
+        return WarningConfirmationStatus.WARNINGS_CHANGED
+    return WarningConfirmationStatus.CONFIRMED
+
+
 def validation_warning_confirmation_matches(
     current_warnings: list[str],
     stored_warnings: list[str],
@@ -33,11 +60,13 @@ def validation_warning_confirmation_matches(
     stored_methodology: str,
     current_methodology: str,
 ) -> bool:
-    if not current_warnings or not confirmed:
-        return False
-    if stored_methodology != current_methodology:
-        return False
-    return current_warnings == stored_warnings
+    return get_validation_warning_confirmation_status(
+        current_warnings,
+        stored_warnings,
+        confirmed,
+        stored_methodology,
+        current_methodology,
+    ) == WarningConfirmationStatus.CONFIRMED
 
 
 PROFILE_REQUIREMENTS = {
