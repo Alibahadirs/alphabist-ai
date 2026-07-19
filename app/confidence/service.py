@@ -124,6 +124,7 @@ def calculate_analysis_confidence(
             audit.validation_warnings_confirmed if audit else False,
             audit.methodology_version if audit else "legacy",
             settings.scoring_methodology_version,
+            audit.validation_warning_fingerprint if audit else "",
         )
     )
     warnings_confirmed = (
@@ -156,6 +157,8 @@ def calculate_analysis_confidence(
         WarningConfirmationStatus.REQUIRED,
         WarningConfirmationStatus.METHODOLOGY_CHANGED,
         WarningConfirmationStatus.WARNINGS_CHANGED,
+        WarningConfirmationStatus.EVIDENCE_MISSING,
+        WarningConfirmationStatus.EVIDENCE_DAMAGED,
     }
     if warning_confirmation_blocks:
         total = min(total, 69.0)

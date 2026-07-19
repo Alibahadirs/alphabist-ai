@@ -95,6 +95,7 @@ def build_data_quality_summary(
                 audit.validation_warnings_confirmed if audit else False,
                 audit.methodology_version if audit else "legacy",
                 settings.scoring_methodology_version,
+                audit.validation_warning_fingerprint if audit else "",
             )
         )
         warnings_confirmed = (
@@ -105,6 +106,13 @@ def build_data_quality_summary(
             _calculation_check(audit)
         )
         errors = [*report.errors, *calculation_errors]
+        if (
+            warning_confirmation_status
+            == WarningConfirmationStatus.EVIDENCE_DAMAGED
+        ):
+            errors.append(
+                "Onaylanan doğrulama uyarılarının audit parmak izi uyuşmuyor."
+            )
         rows.append(
             DataQualityRow(
                 symbol=company.symbol,

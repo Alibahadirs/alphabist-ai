@@ -3,6 +3,7 @@ from app.validation.service import (
     ValidationReport,
     WarningConfirmationStatus,
     get_validation_warning_confirmation_status,
+    validation_warning_fingerprint,
     validate_financial_draft,
     validate_financial_metrics,
 )
@@ -12,6 +13,7 @@ __all__ = [
     "ValidationReport",
     "WarningConfirmationStatus",
     "get_validation_warning_confirmation_status",
+    "validation_warning_fingerprint",
     "validate_financial_draft",
     "validate_financial_metrics",
 ]

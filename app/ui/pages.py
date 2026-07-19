@@ -23,6 +23,7 @@ from app.audit.service import (
     document_fingerprint,
     document_identity_conflicts,
     is_duplicate_analysis,
+    validation_warning_fingerprint,
     verify_audit_calculations,
 )
 from app.comparison.service import build_comparison
@@ -1494,6 +1495,10 @@ def _render_quality_correction_form() -> None:
             validation.warnings and validation_warnings_confirmed
         ),
         validation_warnings=validation.warnings,
+        validation_warning_fingerprint=validation_warning_fingerprint(
+            validation.warnings,
+            settings.scoring_methodology_version,
+        ),
         completeness=validation.completeness,
         alpha_score=score.total,
         field_sources=corrected_sources,
@@ -2989,6 +2994,10 @@ def _validate_and_save_company(
             validation.warnings and validation_warnings_confirmed
         ),
         validation_warnings=validation.warnings,
+        validation_warning_fingerprint=validation_warning_fingerprint(
+            validation.warnings,
+            settings.scoring_methodology_version,
+        ),
         completeness=score.data_completeness,
         alpha_score=score.total,
         field_sources=field_sources,

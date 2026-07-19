@@ -1,5 +1,7 @@
 from math import isfinite
 from enum import Enum
+import hashlib
+import json
 from pydantic import BaseModel, Field
 
 from app.parser.models import FinancialReportDraft
@@ -32,7 +34,28 @@ class WarningConfirmationStatus(str, Enum):
     REQUIRED = "Onay gerekli"
     METHODOLOGY_CHANGED = "Metodoloji değişti"
     WARNINGS_CHANGED = "Uyarılar değişti"
+    EVIDENCE_MISSING = "Kanıt eksik"
+    EVIDENCE_DAMAGED = "Kanıt bozuk"
     CONFIRMED = "Onaylandı"
+
+
+def validation_warning_fingerprint(
+    warnings: list[str],
+    methodology_version: str,
+) -> str:
+    if not warnings:
+        return ""
+    payload = {
+        "methodology_version": methodology_version,
+        "warnings": sorted(warnings),
+    }
+    serialized = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
 def get_validation_warning_confirmation_status(
@@ -41,6 +64,7 @@ def get_validation_warning_confirmation_status(
     confirmed: bool,
     stored_methodology: str,
     current_methodology: str,
+    stored_fingerprint: str | None = None,
 ) -> WarningConfirmationStatus:
     if not current_warnings:
         return WarningConfirmationStatus.NOT_APPLICABLE
@@ -50,6 +74,15 @@ def get_validation_warning_confirmation_status(
         return WarningConfirmationStatus.METHODOLOGY_CHANGED
     if current_warnings != stored_warnings:
         return WarningConfirmationStatus.WARNINGS_CHANGED
+    if stored_fingerprint is not None:
+        if not stored_fingerprint:
+            return WarningConfirmationStatus.EVIDENCE_MISSING
+        expected_fingerprint = validation_warning_fingerprint(
+            stored_warnings,
+            stored_methodology,
+        )
+        if stored_fingerprint != expected_fingerprint:
+            return WarningConfirmationStatus.EVIDENCE_DAMAGED
     return WarningConfirmationStatus.CONFIRMED
 
 
@@ -59,6 +92,7 @@ def validation_warning_confirmation_matches(
     confirmed: bool,
     stored_methodology: str,
     current_methodology: str,
+    stored_fingerprint: str | None = None,
 ) -> bool:
     return get_validation_warning_confirmation_status(
         current_warnings,
@@ -66,6 +100,7 @@ def validation_warning_confirmation_matches(
         confirmed,
         stored_methodology,
         current_methodology,
+        stored_fingerprint,
     ) == WarningConfirmationStatus.CONFIRMED
 
 

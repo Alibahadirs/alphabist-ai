@@ -11,7 +11,11 @@ from app.core.settings import settings
 from app.scoring.engine import calculate_alpha_score
 from app.scoring.models import FinancialMetrics
 from app.sector.profiles import CompanyProfile
-from app.validation.service import PROFILE_REQUIREMENTS, validate_financial_metrics
+from app.validation.service import (
+    PROFILE_REQUIREMENTS,
+    validate_financial_metrics,
+    validation_warning_fingerprint,
+)
 
 
 def _strong_metrics() -> FinancialMetrics:
@@ -227,6 +231,10 @@ def test_confirmed_validation_warning_has_smaller_confidence_penalty():
         update={
             "validation_warnings_confirmed": True,
             "validation_warnings": warnings,
+            "validation_warning_fingerprint": validation_warning_fingerprint(
+                warnings,
+                settings.scoring_methodology_version,
+            ),
         }
     )
 
@@ -300,3 +308,23 @@ def test_unconfirmed_validation_warning_blocks_investment_decision():
     assert confidence.decision == "Doğrula / Karar verme"
     assert confidence.decision_ready is False
     assert any("Onay gerekli" in item for item in confidence.reasons)
+
+
+def test_damaged_warning_evidence_blocks_investment_decision():
+    metrics = _strong_metrics().model_copy(update={"current_ratio": 50})
+    score = calculate_alpha_score(metrics)
+    warnings = validate_financial_metrics(metrics).warnings
+    audit = _audit(MetricSourceType.FINANCIAL_REPORT).model_copy(
+        update={
+            "methodology_version": settings.scoring_methodology_version,
+            "validation_warnings_confirmed": True,
+            "validation_warnings": warnings,
+            "validation_warning_fingerprint": "a" * 64,
+        }
+    )
+
+    confidence = calculate_analysis_confidence(metrics, score, audit)
+
+    assert confidence.total == 69
+    assert confidence.decision_ready is False
+    assert any("Kanıt bozuk" in item for item in confidence.reasons)

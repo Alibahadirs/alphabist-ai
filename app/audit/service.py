@@ -22,6 +22,7 @@ from app.parser.models import (
 from app.scoring.models import FinancialMetrics, ScoreBreakdown
 from app.validation.service import (
     validation_warning_confirmation_matches,
+    validation_warning_fingerprint,
     validate_financial_metrics,
 )
 
@@ -128,25 +129,6 @@ def analysis_input_fingerprint(metrics: FinancialMetrics) -> str:
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
-def validation_warning_fingerprint(
-    warnings: list[str],
-    methodology_version: str,
-) -> str:
-    if not warnings:
-        return ""
-    payload = {
-        "methodology_version": methodology_version,
-        "warnings": sorted(warnings),
-    }
-    serialized = json.dumps(
-        payload,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
-
-
 def is_duplicate_analysis(
     latest_audit: CompanyDataAudit | None,
     metrics: FinancialMetrics,
@@ -170,6 +152,7 @@ def is_duplicate_analysis(
         latest_audit.validation_warnings_confirmed,
         latest_audit.methodology_version,
         settings.scoring_methodology_version,
+        latest_audit.validation_warning_fingerprint,
     )
     if (
         current_warnings

@@ -719,6 +719,10 @@ def test_duplicate_analysis_rejects_repeated_valid_warning_confirmation():
             "methodology_version": settings.scoring_methodology_version,
             "validation_warnings_confirmed": True,
             "validation_warnings": warnings,
+            "validation_warning_fingerprint": validation_warning_fingerprint(
+                warnings,
+                settings.scoring_methodology_version,
+            ),
         }
     )
 
