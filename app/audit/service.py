@@ -265,6 +265,10 @@ def attach_analysis_snapshot(
             },
             "metric_values": metrics.model_dump(mode="json"),
             "validation_warnings": validation.warnings,
+            "validation_warning_fingerprint": validation_warning_fingerprint(
+                validation.warnings,
+                settings.scoring_methodology_version,
+            ),
         }
     )
 

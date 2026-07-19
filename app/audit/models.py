@@ -98,6 +98,10 @@ class CompanyDataAudit(BaseModel):
     comparison_period_confirmed: bool = False
     validation_warnings_confirmed: bool = False
     validation_warnings: list[str] = Field(default_factory=list)
+    validation_warning_fingerprint: str = Field(
+        default="",
+        pattern=r"^(?:[0-9a-f]{64})?$",
+    )
     completeness: float = Field(ge=0, le=100)
     alpha_score: float = Field(ge=0, le=100)
     grade: str = ""

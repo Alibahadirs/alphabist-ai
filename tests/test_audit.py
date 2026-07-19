@@ -99,6 +99,7 @@ def test_audit_repository_returns_latest_record(tmp_path, monkeypatch):
     assert latest.comparison_period_confirmed is True
     assert latest.validation_warnings_confirmed is True
     assert latest.validation_warnings == ["Net kâr marjını kontrol edin."]
+    assert latest.validation_warning_fingerprint == ""
     assert latest.report_period_end == date(2026, 3, 31)
     assert (
         latest.field_sources["revenue_growth"]
@@ -195,6 +196,7 @@ def test_init_db_migrates_existing_audit_table(tmp_path, monkeypatch):
         "comparison_period_confirmed",
         "validation_warnings_confirmed",
         "validation_warnings",
+        "validation_warning_fingerprint",
     }.issubset(columns)
     assert {
         "idx_company_data_audit_financial_hash",
@@ -509,6 +511,7 @@ def test_analysis_snapshot_preserves_current_validation_warnings():
     assert snapshot.validation_warnings_confirmed is True
     assert len(snapshot.validation_warnings) == 1
     assert "Net kâr marjı" in snapshot.validation_warnings[0]
+    assert len(snapshot.validation_warning_fingerprint) == 64
 
 
 def test_analysis_snapshot_comparison_calculates_category_changes():
