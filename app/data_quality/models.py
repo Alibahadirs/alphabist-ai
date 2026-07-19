@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 
 from app.sector.profiles import CompanyProfile
+from app.validation.service import WarningConfirmationStatus
 
 
 class DataQualityRow(BaseModel):
@@ -12,6 +13,9 @@ class DataQualityRow(BaseModel):
     missing_fields: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     warnings_confirmed: bool = False
+    warning_confirmation_status: WarningConfirmationStatus = (
+        WarningConfirmationStatus.NOT_APPLICABLE
+    )
     errors: list[str] = Field(default_factory=list)
     calculation_check_status: str = "Kayıt yok"
     calculation_mismatch_fields: list[str] = Field(default_factory=list)

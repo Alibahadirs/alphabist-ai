@@ -6,6 +6,7 @@ from app.data_quality.service import build_data_quality_summary
 from app.scoring.models import FinancialMetrics
 from app.sector.profiles import CompanyProfile
 from app.validation.service import validate_financial_metrics
+from app.validation.service import WarningConfirmationStatus
 
 
 def _complete_company() -> FinancialMetrics:
@@ -137,6 +138,10 @@ def test_confirmed_warning_is_verified_but_remains_visible():
 
     assert row.status == "Doğrulandı"
     assert row.warnings_confirmed is True
+    assert (
+        row.warning_confirmation_status
+        == WarningConfirmationStatus.CONFIRMED
+    )
     assert row.warnings
 
 
@@ -166,6 +171,10 @@ def test_old_methodology_warning_confirmation_is_not_reused():
 
     assert row.status == "Kontrol gerekli"
     assert row.warnings_confirmed is False
+    assert (
+        row.warning_confirmation_status
+        == WarningConfirmationStatus.METHODOLOGY_CHANGED
+    )
 
 
 def test_changed_warning_snapshot_requires_new_confirmation():
@@ -193,6 +202,10 @@ def test_changed_warning_snapshot_requires_new_confirmation():
 
     assert row.status == "Kontrol gerekli"
     assert row.warnings_confirmed is False
+    assert (
+        row.warning_confirmation_status
+        == WarningConfirmationStatus.WARNINGS_CHANGED
+    )
 
 
 def test_matching_calculation_is_verified_in_data_quality_summary():

@@ -1823,9 +1823,7 @@ def render_data_quality() -> None:
                 ),
                 "Durum": row.status,
                 "Uyarı onayı": (
-                    "Onaylandı"
-                    if row.warnings_confirmed
-                    else ("Gerekli" if row.warnings else "Uygulanamaz")
+                    row.warning_confirmation_status.value
                 ),
                 "Uyarı kanıtı": (
                     f"{len(latest_audits[row.symbol].validation_warnings)} uyarı"

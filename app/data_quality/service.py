@@ -6,8 +6,11 @@ from app.core.settings import settings
 from app.data_quality.models import DataQualityRow, DataQualitySummary
 from app.scoring.models import FinancialMetrics
 from app.sector.profiles import CompanyProfile
-from app.validation.service import validate_financial_metrics
-from app.validation.service import validation_warning_confirmation_matches
+from app.validation.service import (
+    WarningConfirmationStatus,
+    get_validation_warning_confirmation_status,
+    validate_financial_metrics,
+)
 
 
 FIELD_LABELS = {
@@ -85,15 +88,18 @@ def build_data_quality_summary(
     for company in companies:
         report = validate_financial_metrics(company)
         audit = audits.get(company.symbol.upper())
-        warnings_confirmed = bool(
-            audit
-            and validation_warning_confirmation_matches(
+        warning_confirmation_status = (
+            get_validation_warning_confirmation_status(
                 report.warnings,
-                audit.validation_warnings,
-                audit.validation_warnings_confirmed,
-                audit.methodology_version,
+                audit.validation_warnings if audit else [],
+                audit.validation_warnings_confirmed if audit else False,
+                audit.methodology_version if audit else "legacy",
                 settings.scoring_methodology_version,
             )
+        )
+        warnings_confirmed = (
+            warning_confirmation_status
+            == WarningConfirmationStatus.CONFIRMED
         )
         calculation_status, mismatch_fields, calculation_errors = (
             _calculation_check(audit)
@@ -114,6 +120,7 @@ def build_data_quality_summary(
                 missing_fields=[FIELD_LABELS.get(field, field) for field in report.missing_fields],
                 warnings=report.warnings,
                 warnings_confirmed=warnings_confirmed,
+                warning_confirmation_status=warning_confirmation_status,
                 errors=errors,
                 calculation_check_status=calculation_status,
                 calculation_mismatch_fields=mismatch_fields,
