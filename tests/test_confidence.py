@@ -241,7 +241,11 @@ def test_confirmed_validation_warning_has_smaller_confidence_penalty():
         confirmed_audit,
     )
 
-    assert confirmed.total == unconfirmed.total + 1
+    assert unconfirmed.total == 69
+    assert unconfirmed.decision_ready is False
+    assert confirmed.total == 99.5
+    assert confirmed.validation_component == unconfirmed.validation_component + 1
+    assert confirmed.decision_ready is True
     assert any("resmi raporlarla onaylanmış" in item for item in confirmed.reasons)
 
 
@@ -258,8 +262,10 @@ def test_old_methodology_warning_confirmation_does_not_reduce_penalty():
 
     confidence = calculate_analysis_confidence(metrics, score, audit)
 
+    assert confidence.total == 69
     assert confidence.validation_component == 3.5
-    assert any("uyarısı bulunuyor" in item for item in confidence.reasons)
+    assert confidence.decision_ready is False
+    assert any("Metodoloji değişti" in item for item in confidence.reasons)
 
 
 def test_changed_warning_snapshot_does_not_reduce_confidence_penalty():
@@ -275,5 +281,22 @@ def test_changed_warning_snapshot_does_not_reduce_confidence_penalty():
 
     confidence = calculate_analysis_confidence(metrics, score, audit)
 
+    assert confidence.total == 69
     assert confidence.validation_component == 3.5
-    assert any("uyarısı bulunuyor" in item for item in confidence.reasons)
+    assert confidence.decision_ready is False
+    assert any("Uyarılar değişti" in item for item in confidence.reasons)
+
+
+def test_unconfirmed_validation_warning_blocks_investment_decision():
+    metrics = _strong_metrics().model_copy(update={"current_ratio": 50})
+    score = calculate_alpha_score(metrics)
+    audit = _audit(MetricSourceType.FINANCIAL_REPORT).model_copy(
+        update={"methodology_version": settings.scoring_methodology_version}
+    )
+
+    confidence = calculate_analysis_confidence(metrics, score, audit)
+
+    assert confidence.total == 69
+    assert confidence.decision == "Doğrula / Karar verme"
+    assert confidence.decision_ready is False
+    assert any("Onay gerekli" in item for item in confidence.reasons)

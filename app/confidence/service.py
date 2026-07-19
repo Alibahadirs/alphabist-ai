@@ -6,9 +6,10 @@ from app.reporting.models import ReportFreshnessStatus
 from app.reporting.service import assess_report_period
 from app.scoring.models import FinancialMetrics, ScoreBreakdown
 from app.validation.service import (
+    WarningConfirmationStatus,
+    get_validation_warning_confirmation_status,
     get_profile_requirements,
     validate_financial_metrics,
-    validation_warning_confirmation_matches,
 )
 
 
@@ -116,15 +117,17 @@ def calculate_analysis_confidence(
         audit.period_months if audit else None,
     )
     period_component = period_assessment.confidence_points
-    warnings_confirmed = bool(
-        audit
-        and validation_warning_confirmation_matches(
+    warning_confirmation_status = (
+        get_validation_warning_confirmation_status(
             validation.warnings,
-            audit.validation_warnings,
-            audit.validation_warnings_confirmed,
-            audit.methodology_version,
+            audit.validation_warnings if audit else [],
+            audit.validation_warnings_confirmed if audit else False,
+            audit.methodology_version if audit else "legacy",
             settings.scoring_methodology_version,
         )
+    )
+    warnings_confirmed = (
+        warning_confirmation_status == WarningConfirmationStatus.CONFIRMED
     )
     warning_penalty = len(validation.warnings) * (
         0.5 if warnings_confirmed else 1.5
@@ -149,10 +152,18 @@ def calculate_analysis_confidence(
         total = min(total, 69.0)
     if calculation_mismatches:
         total = min(total, 69.0)
+    warning_confirmation_blocks = warning_confirmation_status in {
+        WarningConfirmationStatus.REQUIRED,
+        WarningConfirmationStatus.METHODOLOGY_CHANGED,
+        WarningConfirmationStatus.WARNINGS_CHANGED,
+    }
+    if warning_confirmation_blocks:
+        total = min(total, 69.0)
     has_blocking_error = (
         bool(validation.errors)
         or period_assessment.blocks_decision
         or bool(calculation_mismatches)
+        or warning_confirmation_blocks
     )
     decision_ready = not has_blocking_error and total >= 85
 
@@ -192,7 +203,8 @@ def calculate_analysis_confidence(
             )
         else:
             reasons.append(
-                f"{len(validation.warnings)} veri kontrol uyarısı bulunuyor."
+                f"{len(validation.warnings)} veri kontrol uyarısı için geçerli "
+                f"onay bulunmuyor: {warning_confirmation_status.value}."
             )
     if calculation_mismatches:
         reasons.append(
