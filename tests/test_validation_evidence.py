@@ -8,6 +8,7 @@ from app.data_quality.evidence import (
     build_validation_evidence_package,
     serialize_validation_evidence_package,
     validation_evidence_digest,
+    verify_validation_evidence_package,
 )
 from app.data_quality.models import DataQualityRow
 from app.scoring.models import FinancialMetrics
@@ -78,3 +79,53 @@ def test_validation_evidence_package_contains_verifiable_warning_proof():
 
     assert decoded == package
     assert "Test Sanayi A.Ş.".encode("utf-8") in serialized
+
+
+def _valid_evidence_bytes() -> bytes:
+    company = FinancialMetrics(symbol="TEST", company_name="Test A.Ş.")
+    row = DataQualityRow(
+        symbol="TEST",
+        company_name=company.company_name,
+        company_profile=CompanyProfile.STANDARD,
+        completeness=100,
+        status="Doğrulandı",
+    )
+    return serialize_validation_evidence_package(
+        build_validation_evidence_package(company, row, None)
+    )
+
+
+def test_evidence_verifier_accepts_intact_package():
+    result = verify_validation_evidence_package(_valid_evidence_bytes())
+
+    assert result.valid is True
+    assert result.status == "Doğrulandı"
+    assert result.errors == []
+    assert result.package["company"]["symbol"] == "TEST"
+
+
+def test_evidence_verifier_rejects_modified_package():
+    package = json.loads(_valid_evidence_bytes())
+    package["company"]["symbol"] = "FAKE"
+
+    result = verify_validation_evidence_package(
+        json.dumps(package).encode("utf-8")
+    )
+
+    assert result.valid is False
+    assert "bütünlük özetiyle eşleşmiyor" in " ".join(result.errors)
+
+
+def test_evidence_verifier_rejects_invalid_json_and_schema():
+    invalid_json = verify_validation_evidence_package(b"{")
+    assert invalid_json.status == "Geçersiz JSON"
+
+    package = json.loads(_valid_evidence_bytes())
+    package["schema_version"] = "future-schema"
+    package["integrity"]["digest"] = validation_evidence_digest(package)
+    invalid_schema = verify_validation_evidence_package(
+        json.dumps(package)
+    )
+
+    assert invalid_schema.valid is False
+    assert "şema sürümü" in " ".join(invalid_schema.errors)

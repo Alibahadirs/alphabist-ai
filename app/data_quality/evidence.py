@@ -1,4 +1,6 @@
 import json
+import re
+from dataclasses import dataclass, field
 from hashlib import sha256
 from datetime import datetime, timezone
 from typing import Any
@@ -11,6 +13,15 @@ from app.validation.service import validation_warning_fingerprint
 
 EVIDENCE_SCHEMA_VERSION = "alphabist-validation-evidence-1"
 EVIDENCE_INTEGRITY_ALGORITHM = "sha256"
+_SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
+
+
+@dataclass(frozen=True)
+class EvidenceVerificationResult:
+    valid: bool
+    status: str
+    errors: list[str] = field(default_factory=list)
+    package: dict[str, Any] | None = None
 
 
 def _canonical_evidence_bytes(package: dict[str, Any]) -> bytes:
@@ -29,6 +40,99 @@ def validation_evidence_digest(package: dict[str, Any]) -> str:
         if key != "integrity"
     }
     return sha256(_canonical_evidence_bytes(unsigned_package)).hexdigest()
+
+
+def verify_validation_evidence_package(
+    content: bytes | str,
+) -> EvidenceVerificationResult:
+    try:
+        raw_content = (
+            content.decode("utf-8-sig")
+            if isinstance(content, bytes)
+            else content
+        )
+        package = json.loads(raw_content)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return EvidenceVerificationResult(
+            valid=False,
+            status="Geçersiz JSON",
+            errors=["Dosya geçerli UTF-8 JSON biçiminde değil."],
+        )
+
+    if not isinstance(package, dict):
+        return EvidenceVerificationResult(
+            valid=False,
+            status="Geçersiz yapı",
+            errors=["Kanıt paketinin kök değeri bir JSON nesnesi olmalıdır."],
+        )
+
+    errors: list[str] = []
+    required_sections = {
+        "schema_version",
+        "generated_at",
+        "company",
+        "analysis",
+        "warning_evidence",
+        "data_quality",
+        "integrity",
+    }
+    missing_sections = sorted(required_sections.difference(package))
+    if missing_sections:
+        errors.append(
+            "Zorunlu bölümler eksik: " + ", ".join(missing_sections)
+        )
+
+    if package.get("schema_version") != EVIDENCE_SCHEMA_VERSION:
+        errors.append("Kanıt paketi şema sürümü desteklenmiyor.")
+
+    try:
+        datetime.fromisoformat(str(package.get("generated_at", "")))
+    except ValueError:
+        errors.append("Paket oluşturulma zamanı geçerli ISO-8601 değil.")
+
+    company = package.get("company")
+    if not isinstance(company, dict):
+        errors.append("Şirket bölümü geçerli bir nesne değil.")
+    elif not str(company.get("symbol", "")).strip():
+        errors.append("Şirket hisse kodu eksik.")
+
+    integrity = package.get("integrity")
+    if not isinstance(integrity, dict):
+        errors.append("Bütünlük bölümü geçerli bir nesne değil.")
+    else:
+        algorithm = integrity.get("algorithm")
+        stored_digest = str(integrity.get("digest", ""))
+        if algorithm != EVIDENCE_INTEGRITY_ALGORITHM:
+            errors.append("Bütünlük algoritması desteklenmiyor.")
+        if not _SHA256_PATTERN.fullmatch(stored_digest):
+            errors.append("Bütünlük özeti geçerli bir SHA-256 değeri değil.")
+        elif stored_digest != validation_evidence_digest(package):
+            errors.append("Kanıt paketi içeriği bütünlük özetiyle eşleşmiyor.")
+
+    analysis = package.get("analysis")
+    warning_evidence = package.get("warning_evidence")
+    if isinstance(analysis, dict) and isinstance(warning_evidence, dict):
+        warnings = warning_evidence.get("warnings")
+        methodology = str(analysis.get("methodology_version", ""))
+        expected_fingerprint = warning_evidence.get(
+            "expected_fingerprint"
+        )
+        if not isinstance(warnings, list):
+            errors.append("Uyarı kanıtı listesi geçerli değil.")
+        elif expected_fingerprint != validation_warning_fingerprint(
+            [str(warning) for warning in warnings],
+            methodology,
+        ):
+            errors.append("Uyarı kanıtı parmak izi yeniden üretilemedi.")
+    else:
+        errors.append("Analiz veya uyarı kanıtı bölümü geçerli değil.")
+
+    return EvidenceVerificationResult(
+        valid=not errors,
+        status="Doğrulandı" if not errors else "Doğrulama başarısız",
+        errors=errors,
+        package=package,
+    )
 
 
 def serialize_validation_evidence_package(
