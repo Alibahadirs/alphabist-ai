@@ -1,5 +1,15 @@
 # Değişiklik günlüğü
 
+## 0.97.0 - 2026-07-19
+
+### Kanıt bütünlüğü ve yeniden doğrulama
+
+- Doğrulama kanıt paketlerine kararlı SHA-256 içerik özeti eklendi.
+- JSON paketlerinde şema, zorunlu alan, tarih, bütünlük ve uyarı parmak izi kontrolü eklendi.
+- Veri kalite ekranından kanıt paketi yükleme ve nedenleriyle doğrulama akışı eklendi.
+- Aynı şirkete ait iki geçerli kanıt paketinin kronolojik değişiklik karşılaştırması eklendi.
+- Bütünlük kontrolünün kaynak doğrulaması veya dijital imza olmadığı arayüzde ve belgelerde açıklandı.
+
 ## 0.96.0 - 2026-07-19
 
 ### Doğrulama kanıt paketi

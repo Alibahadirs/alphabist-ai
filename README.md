@@ -58,6 +58,9 @@ yerel Streamlit uygulaması.
 - Veri kalite özetinde uyarı kanıtı durum sayaçları
 - Şirket bazlı, sürümlü ve makine tarafından okunabilir doğrulama kanıt paketi
 - Seçilen şirketin doğrulama kanıt paketini JSON olarak indirme
+- Kanıt paketlerinde içerik değişikliğini tespit eden SHA-256 bütünlük özeti
+- Yüklenen kanıt JSON'unda şema, bütünlük ve uyarı kanıtı doğrulaması
+- Aynı şirkete ait iki kanıt paketi arasında doğrulamalı değişiklik karşılaştırması
 - PDF kaynak tutarlarını düzeltme ve oranları anında yeniden hesaplama
 - Her analiz için ham finansal tutar anlık görüntüsü ve hesap izi
 - Dönem bazlı gösterge değeri, birim ve kaynak anlık görüntüsü
@@ -144,3 +147,5 @@ python -m pytest -q
 PDF çıkarımı hataya açık olabileceği için otomatik bulunan değerler kaydetmeden
 önce resmi KAP/SPK tablolarıyla doğrulanmalıdır. Piyasa verileri gecikmeli olabilir.
 Uygulama yatırım tavsiyesi üretmez; karar desteği sağlar.
+Kanıt paketi bütünlük kontrolü dosyanın dışa aktarımdan sonra değişmediğini sınar;
+dosyayı oluşturan kişi veya sistemin kimliğini doğrulayan dijital imza değildir.
