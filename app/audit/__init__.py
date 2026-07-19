@@ -15,6 +15,7 @@ from app.audit.service import (
     build_source_value_snapshot,
     compare_analysis_snapshots,
     is_duplicate_analysis,
+    validation_warning_fingerprint,
     verify_audit_calculations,
 )
 
@@ -33,5 +34,6 @@ __all__ = [
     "build_source_value_snapshot",
     "compare_analysis_snapshots",
     "is_duplicate_analysis",
+    "validation_warning_fingerprint",
     "verify_audit_calculations",
 ]

@@ -13,6 +13,7 @@ from app.audit.service import (
     document_fingerprint,
     document_identity_conflicts,
     is_duplicate_analysis,
+    validation_warning_fingerprint,
     verify_audit_calculations,
 )
 from app.confidence.models import AnalysisConfidence
@@ -226,6 +227,31 @@ def test_document_fingerprint_identifies_file_content():
     assert first == second
     assert first != changed
     assert document_fingerprint(b"") == ""
+
+
+def test_validation_warning_fingerprint_is_stable_and_methodology_bound():
+    first = validation_warning_fingerprint(
+        ["İkinci uyarı", "Birinci uyarı"],
+        "alpha-2026.4",
+    )
+    reordered = validation_warning_fingerprint(
+        ["Birinci uyarı", "İkinci uyarı"],
+        "alpha-2026.4",
+    )
+    changed_warning = validation_warning_fingerprint(
+        ["Birinci uyarı", "Değişen uyarı"],
+        "alpha-2026.4",
+    )
+    changed_methodology = validation_warning_fingerprint(
+        ["Birinci uyarı", "İkinci uyarı"],
+        "alpha-2027.1",
+    )
+
+    assert len(first) == 64
+    assert first == reordered
+    assert first != changed_warning
+    assert first != changed_methodology
+    assert validation_warning_fingerprint([], "alpha-2026.4") == ""
 
 
 def test_document_identity_rejects_cross_company_and_period_reuse():
