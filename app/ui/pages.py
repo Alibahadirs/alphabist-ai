@@ -62,6 +62,7 @@ from app.data_quality.export import build_data_quality_csv
 from app.data_quality.evidence import (
     build_validation_evidence_package,
     serialize_validation_evidence_package,
+    verify_validation_evidence_package,
 )
 from app.data_quality.readiness import (
     READINESS_STATUS_OPTIONS,
@@ -1536,6 +1537,58 @@ def render_data_quality() -> None:
         "Puanların dayandığı finansal göstergelerin sektör bazında yeterliliğini "
         "ve doğrulama durumunu izleyin."
     )
+    with st.container(border=True):
+        st.subheader("Kanıt paketi doğrula")
+        st.caption(
+            "AlphaBIST tarafından dışa aktarılan JSON dosyasının şemasını, "
+            "içerik bütünlüğünü ve uyarı kanıtını kontrol edin. Bu kontrol "
+            "dosyanın kaynağını değil, dışa aktarımdan sonra değişmediğini "
+            "doğrular."
+        )
+        uploaded_evidence = st.file_uploader(
+            "Doğrulanacak kanıt paketi",
+            type="json",
+            max_upload_size=5,
+            key="quality_evidence_upload",
+            help="En fazla 5 MB büyüklüğünde AlphaBIST kanıt JSON'u yükleyin.",
+        )
+        if uploaded_evidence is not None:
+            evidence_verification = verify_validation_evidence_package(
+                uploaded_evidence.getvalue()
+            )
+            if evidence_verification.valid:
+                package = evidence_verification.package or {}
+                company_evidence = package.get("company", {})
+                analysis_evidence = package.get("analysis", {})
+                integrity_evidence = package.get("integrity", {})
+                st.success(
+                    "Kanıt paketi bütünlük ve şema kontrollerinden geçti.",
+                    icon=":material/verified:",
+                )
+                evidence_columns = st.columns(3)
+                evidence_columns[0].metric(
+                    "Hisse",
+                    company_evidence.get("symbol", "-"),
+                )
+                evidence_columns[1].metric(
+                    "Rapor dönemi",
+                    analysis_evidence.get("report_period_end") or "-",
+                )
+                evidence_columns[2].metric(
+                    "Metodoloji",
+                    analysis_evidence.get("methodology_version") or "-",
+                )
+                st.caption(
+                    "SHA-256: "
+                    f"`{integrity_evidence.get('digest', '-')}`"
+                )
+            else:
+                st.error(
+                    evidence_verification.status,
+                    icon=":material/gpp_bad:",
+                )
+                for evidence_error in evidence_verification.errors:
+                    st.write(f"- {evidence_error}")
     companies = list_companies()
     latest_audits = {
         audit.symbol: audit for audit in list_latest_company_data_audits()
