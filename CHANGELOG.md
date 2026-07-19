@@ -1,5 +1,15 @@
 # Değişiklik günlüğü
 
+## 0.96.0 - 2026-07-19
+
+### Doğrulama kanıt paketi
+
+- Uyarı onay durumları için kullanıcıya uygulanabilir düzeltme eylemleri eklendi.
+- Veri kalite özetine uyarı kanıtı durum sayaçları ve toplam sorun sayısı eklendi.
+- Şirket, analiz, veri kalitesi, uyarılar ve parmak izlerini içeren sürümlü doğrulama kanıt paketi oluşturuldu.
+- Kanıt paketleri kararlı JSON biçiminde dışa aktarılabilir hale getirildi.
+- Veri kalite ekranına filtrelenmiş şirketler için JSON kanıt paketi indirme akışı eklendi.
+
 ## 0.91.0 - 2026-07-19
 
 ### Uyarı kanıtı ve karar güvenliği

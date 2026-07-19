@@ -54,6 +54,10 @@ yerel Streamlit uygulaması.
 - Bozulmuş uyarı kanıtını veri kalite merkezinde kritik hata olarak gösterme
 - Veri kalite merkezinde uyarı onay durumuna göre filtreleme
 - Filtrelenmiş veri kalite listesini UTF-8 CSV raporu olarak indirme
+- Uyarı kanıtı durumuna göre uygulanabilir düzeltme önerileri
+- Veri kalite özetinde uyarı kanıtı durum sayaçları
+- Şirket bazlı, sürümlü ve makine tarafından okunabilir doğrulama kanıt paketi
+- Seçilen şirketin doğrulama kanıt paketini JSON olarak indirme
 - PDF kaynak tutarlarını düzeltme ve oranları anında yeniden hesaplama
 - Her analiz için ham finansal tutar anlık görüntüsü ve hesap izi
 - Dönem bazlı gösterge değeri, birim ve kaynak anlık görüntüsü
