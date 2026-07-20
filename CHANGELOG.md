@@ -1,5 +1,15 @@
 # Değişiklik günlüğü
 
+## 1.1.0 - 2026-07-20
+
+### Görev olay denetimi
+
+- Açık, devam eden, kapalı ve sistem kaynaklı görev durumları için güvenli geçiş kuralları eklendi.
+- Her gerçek görev değişikliği önceki/yeni durum, not, sorun parmak izi ve zamanla SQLite olay geçmişine yazıldı.
+- Aynı içerik tekrar kaydedildiğinde yinelenen olay oluşturulması engellendi.
+- Görev olayları önceki olay özetini taşıyan SHA-256 zinciriyle bağlandı ve müdahale kontrolü eklendi.
+- Veri kalite ekranına zincir sağlık durumu, kayıt kilidi, görev zaman çizelgesi ve olay CSV indirme eklendi.
+
 ## 1.0.0 - 2026-07-20
 
 ### Düzeltme görevi kanıt güvenliği

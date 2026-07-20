@@ -75,6 +75,11 @@ yerel Streamlit uygulaması.
 - Değişen görev dayanağında otomatik `Yeniden açılmalı` güvenlik durumu
 - Eski görev kayıtları için güvenli SQLite parmak izi migrasyonu
 - Sorun kanıtı durumu, parmak izi ve yeniden açma uyarısını içeren görev raporu
+- Kapalı görevlerin güvenli biçimde yeniden açılmasını zorunlu kılan durum geçiş kuralları
+- Her gerçek görev değişikliğini saklayan yinelenmeyen SQLite olay geçmişi
+- Geçmiş müdahalesini tespit eden SHA-256 bağlantılı görev olay zinciri
+- Zincir bütünlüğü bozuk görevlerde yeni kayıt engeli
+- Görev zaman çizelgesi ve olay zinciri bilgilerini içeren UTF-8 CSV raporu
 - PDF kaynak tutarlarını düzeltme ve oranları anında yeniden hesaplama
 - Her analiz için ham finansal tutar anlık görüntüsü ve hesap izi
 - Dönem bazlı gösterge değeri, birim ve kaynak anlık görüntüsü
