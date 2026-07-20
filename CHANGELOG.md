@@ -1,5 +1,15 @@
 # Değişiklik günlüğü
 
+## 0.99.0 - 2026-07-20
+
+### Düzeltme görevi yaşam döngüsü
+
+- Şirket ve görev türüne bağlı kararlı düzeltme görevi kimliği eklendi.
+- Görevler için açık, devam ediyor, tamamlandı ve geçersiz durumları tanımlandı.
+- Görev durumu, çalışma notu ve güncelleme zamanı SQLite veritabanında kalıcı hale getirildi.
+- Veri kalite ekranına görev durumu ve not güncelleme formu eklendi.
+- Durum sayaçları, durum filtresi, görev geçmişi ve yaşam döngüsü bilgili CSV raporu eklendi.
+
 ## 0.98.0 - 2026-07-20
 
 ### Sektör duyarlı düzeltme kuyruğu

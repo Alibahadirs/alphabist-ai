@@ -66,6 +66,11 @@ yerel Streamlit uygulaması.
 - Kritik hesap hatalarını öncelik sırasında yükselten düzeltme kuyruğu
 - Öncelik ve görev türüne göre filtrelenebilir veri kalite iş listesi
 - Filtrelenmiş düzeltme kuyruğunu UTF-8 CSV olarak indirme
+- Düzeltme görevleri için kararlı ve tekrar üretilebilir görev kimliği
+- Açık, devam ediyor, tamamlandı ve geçersiz görev yaşam döngüsü
+- Görev durumu ile çalışma notlarını SQLite'ta kalıcı saklama
+- Veri kalite ekranından görev durumu ve not güncelleme
+- Durum sayaçları, görev geçmişi ve yaşam döngüsü bilgili CSV raporu
 - PDF kaynak tutarlarını düzeltme ve oranları anında yeniden hesaplama
 - Her analiz için ham finansal tutar anlık görüntüsü ve hesap izi
 - Dönem bazlı gösterge değeri, birim ve kaynak anlık görüntüsü
