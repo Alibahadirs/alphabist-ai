@@ -4,6 +4,7 @@ from app.audit.models import CompanyDataAudit, DataSourceType
 from app.confidence.models import AnalysisConfidence
 from app.reporting.company_report import (
     build_company_investment_report,
+    company_report_fingerprint,
     render_company_report_markdown,
     serialize_company_report_markdown,
 )
@@ -155,3 +156,46 @@ def test_company_report_markdown_formats_units_and_missing_values():
     assert "| Birleşik puan | - |" in markdown
     assert "yatırım tavsiyesi değildir" in markdown
     assert payload.startswith(b"\xef\xbb\xbf")
+
+
+def test_company_report_fingerprint_ignores_generation_time():
+    company = FinancialMetrics(symbol="TEST", company_name="Test A.Ş.")
+    score = calculate_alpha_score(company)
+    first = build_company_investment_report(
+        company,
+        score,
+        _confidence(False),
+        None,
+        None,
+        generated_at=datetime(2026, 7, 20, tzinfo=timezone.utc),
+    )
+    second = build_company_investment_report(
+        company,
+        score,
+        _confidence(False),
+        None,
+        None,
+        generated_at=datetime(2026, 7, 21, tzinfo=timezone.utc),
+    )
+
+    assert first.report_fingerprint == second.report_fingerprint
+    assert first.report_fingerprint == company_report_fingerprint(first)
+
+
+def test_company_report_fingerprint_changes_with_report_content():
+    company = FinancialMetrics(symbol="TEST", company_name="Test A.Ş.")
+    score = calculate_alpha_score(company)
+    report = build_company_investment_report(
+        company,
+        score,
+        _confidence(False),
+        None,
+        None,
+    )
+    changed = report.model_copy(
+        update={"alpha_score": report.alpha_score + 1}
+    )
+
+    assert company_report_fingerprint(report) != company_report_fingerprint(
+        changed
+    )

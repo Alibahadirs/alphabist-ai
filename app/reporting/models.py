@@ -59,3 +59,7 @@ class CompanyInvestmentReport(BaseModel):
     indicators: list[dict[str, Any]] = Field(default_factory=list)
     scoring_methodology_version: str
     technical_methodology_version: str
+    report_fingerprint: str = Field(
+        default="",
+        pattern=r"^(?:[0-9a-f]{64})?$",
+    )

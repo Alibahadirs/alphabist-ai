@@ -1,3 +1,5 @@
+import hashlib
+import json
 from datetime import datetime, timezone
 
 from app.analysis.service import build_company_analysis
@@ -10,6 +12,22 @@ from app.scoring.models import FinancialMetrics, ScoreBreakdown
 from app.sector.profiles import PROFILE_LABELS
 from app.technical.engine import calculate_verified_combined_score
 from app.technical.models import TechnicalQualityRow
+
+
+def company_report_fingerprint(
+    report: CompanyInvestmentReport,
+) -> str:
+    payload = report.model_dump(
+        mode="json",
+        exclude={"generated_at", "report_fingerprint"},
+    )
+    canonical = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _combined_decision(score: float | None) -> str:
@@ -95,7 +113,7 @@ def build_company_investment_report(
         f"{PROFILE_LABELS[analysis.company_profile]}. "
         f"Birleşik karar: {combined_decision}."
     )
-    return CompanyInvestmentReport(
+    report = CompanyInvestmentReport(
         symbol=company.symbol,
         company_name=company.company_name,
         company_profile=analysis.company_profile,
@@ -136,6 +154,9 @@ def build_company_investment_report(
         technical_methodology_version=(
             settings.technical_methodology_version
         ),
+    )
+    return report.model_copy(
+        update={"report_fingerprint": company_report_fingerprint(report)}
     )
 
 
