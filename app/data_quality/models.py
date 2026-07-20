@@ -41,6 +41,8 @@ class DecisionReadinessRow(BaseModel):
     status: str
     recommended_action: str
     blockers: list[str] = Field(default_factory=list)
+    priority_score: int = Field(default=0, ge=0, le=100)
+    priority_level: str = "Hazır"
 
 
 class DecisionReadinessSummary(BaseModel):

@@ -81,6 +81,12 @@ def test_decision_readiness_combines_financial_and_technical_gates():
         "Finansal rapor dönemi güncel değil.",
         "Teknik kayıt: Kayıt yok",
     ]
+    assert rows["BOTH"].priority_score == 85
+    assert rows["BOTH"].priority_level == "Yüksek"
+    assert rows["FIN"].priority_score == 55
+    assert rows["TECH"].priority_score == 30
+    assert rows["READY"].priority_score == 0
+    assert rows["READY"].priority_level == "Hazır"
 
 
 def test_decision_readiness_handles_missing_evaluations_safely():
@@ -103,3 +109,5 @@ def test_decision_readiness_handles_missing_evaluations_safely():
         "Finansal güven değerlendirmesi bulunmuyor.",
         "Teknik kayıt bulunmuyor.",
     ]
+    assert summary.rows[0].priority_score == 100
+    assert summary.rows[0].priority_level == "Acil"

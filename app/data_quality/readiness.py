@@ -19,6 +19,38 @@ READINESS_STATUS_OPTIONS = [
     TECHNICAL_STATUS,
     COMBINED_STATUS,
 ]
+PRIORITY_LEVEL_OPTIONS = ["Acil", "Yüksek", "Orta", "Düşük", "Hazır"]
+
+
+def _readiness_priority(
+    financial_ready: bool,
+    technical_ready: bool,
+    *,
+    financial_evaluation_missing: bool,
+    technical_evaluation_missing: bool,
+) -> tuple[int, str]:
+    score = 0
+    if not financial_ready:
+        score += 55
+    if not technical_ready:
+        score += 30
+    if financial_evaluation_missing:
+        score += 10
+    if technical_evaluation_missing:
+        score += 5
+    score = min(score, 100)
+
+    if score >= 90:
+        level = "Acil"
+    elif score >= 70:
+        level = "Yüksek"
+    elif score >= 45:
+        level = "Orta"
+    elif score > 0:
+        level = "Düşük"
+    else:
+        level = "Hazır"
+    return score, level
 
 
 def _readiness_status(
@@ -62,6 +94,12 @@ def build_decision_readiness_summary(
             financial_ready,
             technical_ready,
         )
+        priority_score, priority_level = _readiness_priority(
+            financial_ready,
+            technical_ready,
+            financial_evaluation_missing=confidence is None,
+            technical_evaluation_missing=technical is None,
+        )
 
         blockers: list[str] = []
         if not financial_ready:
@@ -85,6 +123,8 @@ def build_decision_readiness_summary(
                 status=status,
                 recommended_action=action,
                 blockers=blockers,
+                priority_score=priority_score,
+                priority_level=priority_level,
             )
         )
 
@@ -94,7 +134,13 @@ def build_decision_readiness_summary(
         TECHNICAL_STATUS: 2,
         READY_STATUS: 3,
     }
-    rows.sort(key=lambda row: (priority[row.status], row.symbol))
+    rows.sort(
+        key=lambda row: (
+            -row.priority_score,
+            priority[row.status],
+            row.symbol,
+        )
+    )
     return DecisionReadinessSummary(
         rows=rows,
         total=len(rows),
