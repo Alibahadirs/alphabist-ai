@@ -121,6 +121,13 @@ from app.reporting.company_report import (
     render_company_report_markdown,
     serialize_company_report_markdown,
 )
+from app.reporting.exchange import (
+    build_company_report_exchange_package,
+    serialize_company_report_exchange_package,
+)
+from app.reporting.importer import (
+    import_company_report_exchange_package,
+)
 from app.reporting.service import assess_report_period, report_period_regresses
 from app.scoring.engine import calculate_alpha_score
 from app.scoring.labels import get_category_evidence, get_category_label
@@ -1201,6 +1208,46 @@ def render_dashboard() -> None:
             else:
                 st.info("Aynı rapor içeriği geçmişte zaten kayıtlı.")
 
+        import_message = st.session_state.pop(
+            "company_report_import_message",
+            None,
+        )
+        if import_message:
+            st.success(import_message)
+        report_package_file = st.file_uploader(
+            "Rapor geçmişi paketi yükle",
+            type=["json"],
+            key="company_report_package_upload",
+            help=(
+                "Yalnızca seçili şirkete ait ve bütünlüğü doğrulanan "
+                "AlphaBIST rapor paketleri içe aktarılır."
+            ),
+        )
+        if report_package_file is not None and st.button(
+            "Paketi doğrula ve içe aktar",
+            icon=":material/upload:",
+            key="company_report_package_import",
+        ):
+            if report_package_file.size > 10 * 1024 * 1024:
+                st.error("Rapor paketi 10 MB sınırını aşıyor.")
+            else:
+                import_result = import_company_report_exchange_package(
+                    report_package_file.getvalue(),
+                    expected_symbol=symbol,
+                )
+                if not import_result.valid:
+                    st.error("Rapor paketi içe aktarılamadı.")
+                    for error in import_result.errors:
+                        st.warning(error)
+                else:
+                    st.session_state["company_report_import_message"] = (
+                        f"{import_result.imported_count} yeni rapor "
+                        "kaydedildi; "
+                        f"{import_result.duplicate_count} yinelenen rapor "
+                        "atlanıldı."
+                    )
+                    st.rerun()
+
         report_snapshots = list_company_report_snapshots(symbol)
         if report_snapshots:
             stored_reports = [
@@ -1210,6 +1257,24 @@ def render_dashboard() -> None:
                 for snapshot in report_snapshots
             ]
             st.markdown("**Rapor geçmişi**")
+            report_package = build_company_report_exchange_package(
+                stored_reports
+            )
+            st.download_button(
+                "Rapor geçmişini JSON olarak indir",
+                data=serialize_company_report_exchange_package(
+                    report_package
+                ),
+                file_name=(
+                    f"alphabist_rapor_gecmisi_{symbol}_"
+                    f"{date.today():%Y%m%d}.json"
+                ),
+                mime="application/json",
+                icon=":material/download:",
+                on_click="ignore",
+                width="content",
+                key="company_report_package_download",
+            )
             history_rows = [
                 {
                     "Kayıt zamanı": snapshot.created_at,
@@ -1258,14 +1323,38 @@ def render_dashboard() -> None:
             )
 
             if len(stored_reports) >= 2:
-                comparison = compare_company_reports(
-                    stored_reports[1],
-                    stored_reports[0],
+                report_options = {
+                    (
+                        f"{report.generated_at:%d.%m.%Y %H:%M} · "
+                        f"{report.alpha_score:.1f} · "
+                        f"{report.report_fingerprint[:12]}"
+                    ): report
+                    for report in stored_reports
+                }
+                selected_report_labels = st.multiselect(
+                    "Karşılaştırılacak iki rapor",
+                    list(report_options),
+                    default=list(report_options)[:2],
+                    max_selections=2,
+                    key="company_report_comparison_selection",
+                    help=(
+                        "Rapor zamanı, Alpha Score ve kısa içerik "
+                        "kimliğine göre iki kayıt seçin."
+                    ),
                 )
-                with st.expander("Son iki raporu karşılaştır"):
-                    if not comparison.changed:
+                if len(selected_report_labels) == 2:
+                    comparison = compare_company_reports(
+                        report_options[selected_report_labels[0]],
+                        report_options[selected_report_labels[1]],
+                    )
+                else:
+                    comparison = None
+                with st.expander("Seçilen raporları karşılaştır"):
+                    if comparison is None:
+                        st.info("Karşılaştırmak için iki rapor seçin.")
+                    elif not comparison.changed:
                         st.info(
-                            "Son iki raporun karşılaştırılan alanları aynı."
+                            "Seçilen raporların karşılaştırılan alanları aynı."
                         )
                     else:
                         comparison_rows = [
