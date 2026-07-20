@@ -109,6 +109,11 @@ from app.parser.models import (
 from app.portfolio.models import PortfolioMarketPrice, PortfolioPosition
 from app.portfolio.service import build_portfolio_summary
 from app.reporting.models import REPORT_FRESHNESS_LABELS, ReportFreshnessStatus
+from app.reporting.company_report import (
+    build_company_investment_report,
+    render_company_report_markdown,
+    serialize_company_report_markdown,
+)
 from app.reporting.service import assess_report_period, report_period_regresses
 from app.scoring.engine import calculate_alpha_score
 from app.scoring.labels import get_category_evidence, get_category_label
@@ -1124,6 +1129,61 @@ def render_dashboard() -> None:
                     st.markdown(f"- {item}")
             else:
                 st.caption("Belirgin risk veya eksik gösterge bulunamadı.")
+
+    report_technical = build_technical_quality_summary(
+        [symbol],
+        {symbol: list_technical_score_history(symbol)},
+    ).rows[0]
+    investment_report = build_company_investment_report(
+        company,
+        score,
+        confidence,
+        latest_audit,
+        report_technical,
+    )
+    report_markdown = render_company_report_markdown(investment_report)
+    with st.container(border=True):
+        st.subheader("Standart analiz raporu")
+        st.write(investment_report.summary)
+        with st.container(horizontal=True):
+            st.metric(
+                "Alpha Score",
+                f"{investment_report.alpha_score:.1f}/100",
+                border=True,
+            )
+            st.metric(
+                "Analiz güveni",
+                f"{investment_report.confidence_score:.1f}/100",
+                border=True,
+            )
+            st.metric(
+                "Teknik puan",
+                (
+                    f"{investment_report.technical_score:.1f}/100"
+                    if investment_report.technical_score is not None
+                    else "Mevcut değil"
+                ),
+                border=True,
+            )
+            st.metric(
+                "Birleşik karar",
+                investment_report.combined_decision,
+                border=True,
+            )
+        with st.expander("Rapor önizleme"):
+            st.markdown(report_markdown)
+        st.download_button(
+            "Analiz raporunu indir",
+            data=serialize_company_report_markdown(investment_report),
+            file_name=(
+                f"alphabist_analiz_{symbol}_{date.today():%Y%m%d}.md"
+            ),
+            mime="text/markdown",
+            icon=":material/download:",
+            on_click="ignore",
+            width="content",
+            key="company_report_download",
+        )
 
     if comparable_score_history:
         with st.container(border=True):
