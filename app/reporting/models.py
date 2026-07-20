@@ -92,3 +92,15 @@ class CompanyReportComparison(BaseModel):
     @property
     def changed(self) -> bool:
         return bool(self.changes)
+
+
+class CompanyReportExchangePackage(BaseModel):
+    schema_version: str = "company-report-package-1"
+    exported_at: datetime
+    symbol: str
+    report_count: int = Field(ge=1)
+    reports: list[CompanyInvestmentReport] = Field(min_length=1)
+    content_fingerprint: str = Field(
+        default="",
+        pattern=r"^(?:[0-9a-f]{64})?$",
+    )
