@@ -33,12 +33,14 @@ from app.core.exceptions import PdfParsingError, ValidationError as AppValidatio
 from app.core.settings import settings
 from app.database.repository import (
     add_company_data_audit,
+    add_company_report_snapshot,
     add_score_history,
     add_technical_score_history,
     get_company,
     get_latest_company_data_audit,
     list_companies,
     list_company_data_audits,
+    list_company_report_snapshots,
     list_document_usages,
     list_latest_company_data_audits,
     list_portfolio_positions,
@@ -108,9 +110,14 @@ from app.parser.models import (
 )
 from app.portfolio.models import PortfolioMarketPrice, PortfolioPosition
 from app.portfolio.service import build_portfolio_summary
-from app.reporting.models import REPORT_FRESHNESS_LABELS, ReportFreshnessStatus
+from app.reporting.models import (
+    REPORT_FRESHNESS_LABELS,
+    CompanyInvestmentReport,
+    ReportFreshnessStatus,
+)
 from app.reporting.company_report import (
     build_company_investment_report,
+    compare_company_reports,
     render_company_report_markdown,
     serialize_company_report_markdown,
 )
@@ -1184,6 +1191,113 @@ def render_dashboard() -> None:
             width="content",
             key="company_report_download",
         )
+        if st.button(
+            "Rapor anlık görüntüsünü kaydet",
+            icon=":material/save:",
+            key="company_report_snapshot_save",
+        ):
+            if add_company_report_snapshot(investment_report):
+                st.success("Rapor anlık görüntüsü geçmişe kaydedildi.")
+            else:
+                st.info("Aynı rapor içeriği geçmişte zaten kayıtlı.")
+
+        report_snapshots = list_company_report_snapshots(symbol)
+        if report_snapshots:
+            stored_reports = [
+                CompanyInvestmentReport.model_validate(
+                    snapshot.report_payload
+                )
+                for snapshot in report_snapshots
+            ]
+            st.markdown("**Rapor geçmişi**")
+            history_rows = [
+                {
+                    "Kayıt zamanı": snapshot.created_at,
+                    "Finansal dönem": report.report_period_end,
+                    "Alpha Score": report.alpha_score,
+                    "Analiz güveni": report.confidence_score,
+                    "Teknik puan": report.technical_score,
+                    "Birleşik puan": report.combined_score,
+                    "Birleşik karar": report.combined_decision,
+                    "İçerik kimliği": report.report_fingerprint[:12],
+                }
+                for snapshot, report in zip(
+                    report_snapshots,
+                    stored_reports,
+                )
+            ]
+            st.dataframe(
+                pd.DataFrame(history_rows),
+                hide_index=True,
+                width="stretch",
+                column_config={
+                    "Kayıt zamanı": st.column_config.DatetimeColumn(
+                        format="DD.MM.YYYY HH:mm"
+                    ),
+                    "Finansal dönem": st.column_config.DateColumn(
+                        format="DD.MM.YYYY"
+                    ),
+                    "Alpha Score": st.column_config.NumberColumn(
+                        format="%.1f"
+                    ),
+                    "Analiz güveni": st.column_config.ProgressColumn(
+                        min_value=0,
+                        max_value=100,
+                        format="%.1f",
+                    ),
+                    "Teknik puan": st.column_config.NumberColumn(
+                        format="%.1f"
+                    ),
+                    "Birleşik puan": st.column_config.NumberColumn(
+                        format="%.1f"
+                    ),
+                    "İçerik kimliği": st.column_config.TextColumn(
+                        help="Rapor içeriğinin kısa SHA-256 kimliği."
+                    ),
+                },
+            )
+
+            if len(stored_reports) >= 2:
+                comparison = compare_company_reports(
+                    stored_reports[1],
+                    stored_reports[0],
+                )
+                with st.expander("Son iki raporu karşılaştır"):
+                    if not comparison.changed:
+                        st.info(
+                            "Son iki raporun karşılaştırılan alanları aynı."
+                        )
+                    else:
+                        comparison_rows = [
+                            {
+                                "Alan": change.label,
+                                "Önceki": change.previous_value,
+                                "Güncel": change.current_value,
+                                "Değişim": change.numeric_delta,
+                            }
+                            for change in comparison.changes
+                        ]
+                        st.dataframe(
+                            pd.DataFrame(comparison_rows),
+                            hide_index=True,
+                            width="stretch",
+                            column_config={
+                                "Alan": st.column_config.TextColumn(
+                                    pinned=True
+                                ),
+                                "Değişim": st.column_config.NumberColumn(
+                                    format="%+.2f"
+                                ),
+                            },
+                        )
+                        st.caption(
+                            "Karşılaştırma öncesinde iki raporun içerik "
+                            "parmak izi yeniden doğrulandı."
+                        )
+        else:
+            st.caption(
+                "Henüz kaydedilmiş rapor anlık görüntüsü bulunmuyor."
+            )
 
     if comparable_score_history:
         with st.container(border=True):
