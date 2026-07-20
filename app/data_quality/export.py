@@ -2,7 +2,7 @@ import csv
 from collections.abc import Sequence
 from io import StringIO
 
-from app.data_quality.models import DataQualityRow
+from app.data_quality.models import DataQualityRow, RemediationQueueRow
 from app.sector.profiles import PROFILE_LABELS
 
 
@@ -37,6 +37,40 @@ def build_data_quality_csv(rows: Sequence[DataQualityRow]) -> bytes:
                 "Uyarılar": " | ".join(row.warnings),
                 "Hatalar": " | ".join(row.errors),
                 "Hesap kontrolü": row.calculation_check_status,
+            }
+        )
+    return output.getvalue().encode("utf-8-sig")
+
+
+def build_remediation_queue_csv(
+    rows: Sequence[RemediationQueueRow],
+) -> bytes:
+    output = StringIO(newline="")
+    writer = csv.DictWriter(
+        output,
+        fieldnames=[
+            "Hisse",
+            "Şirket",
+            "Sektör profili",
+            "Öncelik",
+            "Öncelik puanı",
+            "Görev türü",
+            "Yapılacak işlem",
+            "Karar engelleri",
+        ],
+    )
+    writer.writeheader()
+    for row in rows:
+        writer.writerow(
+            {
+                "Hisse": row.symbol,
+                "Şirket": row.company_name,
+                "Sektör profili": PROFILE_LABELS[row.company_profile],
+                "Öncelik": row.priority_level,
+                "Öncelik puanı": row.priority_score,
+                "Görev türü": row.task_category,
+                "Yapılacak işlem": row.recommended_action,
+                "Karar engelleri": " | ".join(row.blockers),
             }
         )
     return output.getvalue().encode("utf-8-sig")

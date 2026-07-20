@@ -58,7 +58,10 @@ from app.database.backup import (
     validate_database_backup,
 )
 from app.data_quality.service import FIELD_LABELS, build_data_quality_summary
-from app.data_quality.export import build_data_quality_csv
+from app.data_quality.export import (
+    build_data_quality_csv,
+    build_remediation_queue_csv,
+)
 from app.data_quality.evidence import (
     build_validation_evidence_package,
     compare_validation_evidence_packages,
@@ -1921,6 +1924,18 @@ def render_data_quality() -> None:
                         format="%d",
                     ),
                 },
+            )
+            st.download_button(
+                "Düzeltme kuyruğunu indir",
+                data=build_remediation_queue_csv(filtered_remediation),
+                file_name=(
+                    f"alphabist_duzeltme_kuyrugu_{date.today():%Y%m%d}.csv"
+                ),
+                mime="text/csv",
+                icon=":material/download:",
+                on_click="ignore",
+                width="content",
+                key="quality_remediation_download",
             )
 
     default_refresh_symbols = select_technical_refresh_candidates(
