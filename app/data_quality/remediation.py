@@ -1,5 +1,6 @@
 from collections.abc import Mapping, Sequence
 from hashlib import sha256
+import json
 
 from app.data_quality.models import (
     DataQualitySummary,
@@ -40,6 +41,31 @@ PROFILE_FINANCIAL_ACTIONS = {
 def remediation_task_id(symbol: str, task_category: str) -> str:
     normalized = f"{symbol.upper().strip()}|{task_category.strip()}"
     return sha256(normalized.encode("utf-8")).hexdigest()[:20]
+
+
+def remediation_issue_fingerprint(
+    symbol: str,
+    company_profile: CompanyProfile,
+    task_category: str,
+    recommended_action: str,
+    blockers: Sequence[str],
+) -> str:
+    payload = {
+        "symbol": symbol.upper().strip(),
+        "company_profile": company_profile.value,
+        "task_category": task_category.strip(),
+        "recommended_action": recommended_action.strip(),
+        "blockers": sorted(
+            blocker.strip() for blocker in blockers if blocker.strip()
+        ),
+    }
+    canonical = json.dumps(
+        payload,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return sha256(canonical).hexdigest()
 
 
 def _priority_level(score: int) -> str:
@@ -106,21 +132,30 @@ def build_remediation_queue(
             task_category = "Teknik"
 
         priority_score = min(priority_score, 100)
+        recommended_action = "; ".join(dict.fromkeys(actions))
         task_id = remediation_task_id(
             readiness_row.symbol,
             task_category,
+        )
+        issue_fingerprint = remediation_issue_fingerprint(
+            readiness_row.symbol,
+            company.company_profile,
+            task_category,
+            recommended_action,
+            readiness_row.blockers,
         )
         state = states.get(task_id)
         rows.append(
             RemediationQueueRow(
                 task_id=task_id,
+                issue_fingerprint=issue_fingerprint,
                 symbol=readiness_row.symbol,
                 company_name=readiness_row.company_name,
                 company_profile=company.company_profile,
                 priority_score=priority_score,
                 priority_level=_priority_level(priority_score),
                 task_category=task_category,
-                recommended_action="; ".join(dict.fromkeys(actions)),
+                recommended_action=recommended_action,
                 blockers=readiness_row.blockers,
                 workflow_status=(
                     state.status if state else "Açık"

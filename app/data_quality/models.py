@@ -66,6 +66,7 @@ class RemediationTaskStatus(str, Enum):
 
 class RemediationQueueRow(BaseModel):
     task_id: str
+    issue_fingerprint: str = ""
     symbol: str
     company_name: str
     company_profile: CompanyProfile
@@ -85,6 +86,7 @@ class RemediationTaskState(BaseModel):
     task_category: str
     status: RemediationTaskStatus = RemediationTaskStatus.OPEN
     note: str = Field(default="", max_length=1000)
+    issue_fingerprint: str = ""
     updated_at: datetime | None = None
 
 

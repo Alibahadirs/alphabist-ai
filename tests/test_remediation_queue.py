@@ -8,6 +8,7 @@ from app.data_quality.models import (
 )
 from app.data_quality.remediation import (
     build_remediation_queue,
+    remediation_issue_fingerprint,
     remediation_task_id,
 )
 from app.scoring.models import FinancialMetrics
@@ -135,6 +136,34 @@ def test_remediation_task_id_is_normalized_and_stable():
     assert first == second
     assert len(first) == 20
     assert first != remediation_task_id("BANK", "Teknik")
+
+
+def test_remediation_issue_fingerprint_tracks_issue_content():
+    first = remediation_issue_fingerprint(
+        "bank",
+        CompanyProfile.BANK,
+        "Finansal",
+        "Sermaye yeterliliğini doğrula",
+        ["Teknik kayıt yok", "Rapor eski"],
+    )
+    reordered = remediation_issue_fingerprint(
+        "BANK",
+        CompanyProfile.BANK,
+        "Finansal",
+        "Sermaye yeterliliğini doğrula",
+        ["Rapor eski", "Teknik kayıt yok"],
+    )
+    changed = remediation_issue_fingerprint(
+        "BANK",
+        CompanyProfile.BANK,
+        "Finansal",
+        "Takipteki kredileri doğrula",
+        ["Rapor eski", "Teknik kayıt yok"],
+    )
+
+    assert first == reordered
+    assert len(first) == 64
+    assert first != changed
 
 
 def test_remediation_queue_applies_persisted_workflow_state():
