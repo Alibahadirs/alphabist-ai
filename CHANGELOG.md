@@ -1,5 +1,15 @@
 # Değişiklik günlüğü
 
+## 1.2.0 - 2026-07-20
+
+### Standart şirket analiz raporu
+
+- Şirket kimliği, sektör, dönem, temel puan, güven, teknik görünüm ve metodolojileri birleştiren rapor modeli eklendi.
+- Birleşik puan yalnız finansal karar kapısı ve güncel teknik kalite kaydı birlikte doğrulandığında üretildi.
+- Mevcut sektör analiz motorundan güçlü yönler, riskler, göstergeler ve veri kalite notları rapora taşındı.
+- Yüzde, oran, puan ve tarihleri alan türüne göre biçimleyen UTF-8 Markdown rapor üreticisi eklendi.
+- Genel bakış ekranına standart rapor özeti, önizleme ve tek tık Markdown indirme eklendi.
+
 ## 1.1.0 - 2026-07-20
 
 ### Görev olay denetimi

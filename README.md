@@ -80,6 +80,11 @@ yerel Streamlit uygulaması.
 - Geçmiş müdahalesini tespit eden SHA-256 bağlantılı görev olay zinciri
 - Zincir bütünlüğü bozuk görevlerde yeni kayıt engeli
 - Görev zaman çizelgesi ve olay zinciri bilgilerini içeren UTF-8 CSV raporu
+- Şirket, sektör, dönem, Alpha Score, güven ve teknik görünümü birleştiren standart analiz raporu
+- Yalnız doğrulanmış finansal ve teknik verilerle birleşik puan/karar üretimi
+- Sektör profiline göre güçlü yön, risk ve gösterge değerlendirmesi
+- Yüzde, oran, puan ve tarih alanlarını türüne göre biçimleyen Markdown raporu
+- Şirket detay ekranından rapor önizleme ve UTF-8 Markdown indirme
 - PDF kaynak tutarlarını düzeltme ve oranları anında yeniden hesaplama
 - Her analiz için ham finansal tutar anlık görüntüsü ve hesap izi
 - Dönem bazlı gösterge değeri, birim ve kaynak anlık görüntüsü
