@@ -66,9 +66,11 @@ from app.data_quality.evidence import (
     verify_validation_evidence_package,
 )
 from app.data_quality.readiness import (
+    PRIORITY_LEVEL_OPTIONS,
     READINESS_STATUS_OPTIONS,
     build_decision_readiness_summary,
 )
+from app.data_quality.remediation import build_remediation_queue
 from app.market_data.provider import get_history, get_quote
 from app.market_data.freshness import assess_price_freshness
 from app.market_data.validation import validate_quote_history_alignment
@@ -1671,6 +1673,11 @@ def render_data_quality() -> None:
         confidences,
         technical_quality,
     )
+    remediation_queue = build_remediation_queue(
+        companies,
+        readiness_summary,
+        summary,
+    )
     readiness_by_symbol = {
         row.symbol: row for row in readiness_summary.rows
     }
@@ -1822,6 +1829,99 @@ def render_data_quality() -> None:
             readiness_summary.combined_issue_count,
             border=True,
         )
+
+    with st.container(border=True):
+        st.subheader("Düzeltme kuyruğu")
+        st.caption(
+            "Kararı engelleyen finansal ve teknik sorunlar önemine göre "
+            "sıralanır. Finansal öneriler şirketin sektör profiline göre "
+            "değişir."
+        )
+        with st.container(horizontal=True):
+            st.metric(
+                "Toplam görev",
+                remediation_queue.total_tasks,
+                border=True,
+            )
+            st.metric(
+                "Acil",
+                remediation_queue.urgent_count,
+                border=True,
+            )
+            st.metric(
+                "Yüksek",
+                remediation_queue.high_count,
+                border=True,
+            )
+            st.metric(
+                "Finansal iş",
+                remediation_queue.financial_task_count,
+                border=True,
+            )
+            st.metric(
+                "Teknik iş",
+                remediation_queue.technical_task_count,
+                border=True,
+            )
+
+        queue_filter_left, queue_filter_right = st.columns(2)
+        with queue_filter_left:
+            selected_priority_levels = st.multiselect(
+                "Görev önceliği",
+                PRIORITY_LEVEL_OPTIONS[:-1],
+                default=PRIORITY_LEVEL_OPTIONS[:-1],
+                key="quality_remediation_priorities",
+            )
+        with queue_filter_right:
+            task_categories = [
+                "Finansal + teknik",
+                "Finansal",
+                "Teknik",
+            ]
+            selected_task_categories = st.multiselect(
+                "Görev türü",
+                task_categories,
+                default=task_categories,
+                key="quality_remediation_categories",
+            )
+
+        filtered_remediation = [
+            row
+            for row in remediation_queue.rows
+            if row.priority_level in selected_priority_levels
+            and row.task_category in selected_task_categories
+        ]
+        if not filtered_remediation:
+            st.info("Seçilen filtrelere uyan düzeltme görevi bulunmuyor.")
+        else:
+            st.dataframe(
+                [
+                    {
+                        "Hisse": row.symbol,
+                        "Şirket": row.company_name,
+                        "Profil": PROFILE_LABELS[row.company_profile],
+                        "Öncelik": row.priority_level,
+                        "Öncelik puanı": row.priority_score,
+                        "Görev türü": row.task_category,
+                        "Yapılacak işlem": row.recommended_action,
+                        "Karar engelleri": (
+                            " | ".join(row.blockers) or "Yok"
+                        ),
+                    }
+                    for row in filtered_remediation
+                ],
+                hide_index=True,
+                width="stretch",
+                column_config={
+                    "Hisse": st.column_config.TextColumn(pinned=True),
+                    "Öncelik puanı": st.column_config.ProgressColumn(
+                        "Öncelik puanı",
+                        min_value=0,
+                        max_value=100,
+                        format="%d",
+                    ),
+                },
+            )
 
     default_refresh_symbols = select_technical_refresh_candidates(
         technical_quality
