@@ -34,6 +34,7 @@ def test_remediation_state_repository_adds_and_updates(
     )
 
     states = repository.list_remediation_task_states()
+    events = repository.list_remediation_task_events("task-1")
 
     assert len(states) == 1
     assert states[0].symbol == "TEST"
@@ -41,6 +42,32 @@ def test_remediation_state_repository_adds_and_updates(
     assert states[0].note == "KAP raporuyla doğrulandı"
     assert states[0].issue_fingerprint == "b" * 64
     assert states[0].updated_at is not None
+    assert len(events) == 2
+    assert events[0].previous_status is None
+    assert events[0].new_status == RemediationTaskStatus.IN_PROGRESS
+    assert events[1].previous_status == RemediationTaskStatus.IN_PROGRESS
+    assert events[1].new_status == RemediationTaskStatus.COMPLETED
+
+
+def test_remediation_state_does_not_duplicate_unchanged_event(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setattr(repository, "DB_PATH", tmp_path / "test.db")
+    repository.init_db()
+    state = RemediationTaskState(
+        task_id="task-1",
+        symbol="TEST",
+        task_category="Finansal",
+        status=RemediationTaskStatus.OPEN,
+        note="Aynı",
+        issue_fingerprint="a" * 64,
+    )
+
+    repository.upsert_remediation_task_state(state)
+    repository.upsert_remediation_task_state(state)
+
+    assert len(repository.list_remediation_task_events("task-1")) == 1
 
 
 def test_remediation_state_migrates_legacy_table(

@@ -92,6 +92,20 @@ class RemediationTaskState(BaseModel):
     updated_at: datetime | None = None
 
 
+class RemediationTaskEvent(BaseModel):
+    id: int | None = None
+    task_id: str
+    symbol: str
+    task_category: str
+    previous_status: RemediationTaskStatus | None = None
+    new_status: RemediationTaskStatus
+    note: str = ""
+    issue_fingerprint: str = ""
+    previous_event_hash: str = ""
+    event_hash: str = ""
+    created_at: datetime | None = None
+
+
 class RemediationQueueSummary(BaseModel):
     rows: list[RemediationQueueRow] = Field(default_factory=list)
     total_tasks: int = Field(ge=0)

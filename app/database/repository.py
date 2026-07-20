@@ -5,7 +5,10 @@ from pathlib import Path
 
 from app.audit.models import CompanyDataAudit
 from app.core.settings import settings
-from app.data_quality.models import RemediationTaskState
+from app.data_quality.models import (
+    RemediationTaskEvent,
+    RemediationTaskState,
+)
 from app.history.models import ScoreHistoryEntry
 from app.portfolio.models import PortfolioPosition
 from app.scoring.models import FinancialMetrics, ScoreBreakdown
@@ -230,6 +233,24 @@ def init_db():
         conn.execute(
             """CREATE INDEX IF NOT EXISTS idx_remediation_state_symbol
             ON remediation_task_state(symbol, updated_at)"""
+        )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS remediation_task_event(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_id TEXT NOT NULL,
+            symbol TEXT NOT NULL,
+            task_category TEXT NOT NULL,
+            previous_status TEXT,
+            new_status TEXT NOT NULL,
+            note TEXT NOT NULL DEFAULT '',
+            issue_fingerprint TEXT NOT NULL DEFAULT '',
+            previous_event_hash TEXT NOT NULL DEFAULT '',
+            event_hash TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"""
+        )
+        conn.execute(
+            """CREATE INDEX IF NOT EXISTS idx_remediation_event_task_id
+            ON remediation_task_event(task_id, id)"""
         )
 
 def upsert_company(m):
@@ -658,6 +679,18 @@ def upsert_remediation_task_state(
     state: RemediationTaskState,
 ) -> None:
     with connect() as conn:
+        current = conn.execute(
+            """SELECT status, note, issue_fingerprint
+            FROM remediation_task_state WHERE task_id=?""",
+            (state.task_id,),
+        ).fetchone()
+        normalized_note = state.note.strip()
+        changed = bool(
+            current is None
+            or current["status"] != state.status.value
+            or current["note"] != normalized_note
+            or current["issue_fingerprint"] != state.issue_fingerprint
+        )
         conn.execute(
             """INSERT INTO remediation_task_state(
             task_id, symbol, task_category, status, note, issue_fingerprint)
@@ -674,10 +707,26 @@ def upsert_remediation_task_state(
                 state.symbol.upper().strip(),
                 state.task_category,
                 state.status.value,
-                state.note.strip(),
+                normalized_note,
                 state.issue_fingerprint,
             ),
         )
+        if changed:
+            conn.execute(
+                """INSERT INTO remediation_task_event(
+                task_id, symbol, task_category, previous_status, new_status,
+                note, issue_fingerprint)
+                VALUES(?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    state.task_id,
+                    state.symbol.upper().strip(),
+                    state.task_category,
+                    current["status"] if current else None,
+                    state.status.value,
+                    normalized_note,
+                    state.issue_fingerprint,
+                ),
+            )
 
 
 def list_remediation_task_states() -> list[RemediationTaskState]:
@@ -689,6 +738,30 @@ def list_remediation_task_states() -> list[RemediationTaskState]:
             ORDER BY updated_at DESC, task_id"""
         ).fetchall()
     return [RemediationTaskState(**dict(row)) for row in rows]
+
+
+def list_remediation_task_events(
+    task_id: str | None = None,
+) -> list[RemediationTaskEvent]:
+    with connect() as conn:
+        if task_id:
+            rows = conn.execute(
+                """SELECT id, task_id, symbol, task_category,
+                previous_status, new_status, note, issue_fingerprint,
+                previous_event_hash, event_hash, created_at
+                FROM remediation_task_event
+                WHERE task_id=? ORDER BY id""",
+                (task_id,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """SELECT id, task_id, symbol, task_category,
+                previous_status, new_status, note, issue_fingerprint,
+                previous_event_hash, event_hash, created_at
+                FROM remediation_task_event
+                ORDER BY id"""
+            ).fetchall()
+    return [RemediationTaskEvent(**dict(row)) for row in rows]
 
 def seed_demo_data():
     if list_companies():
