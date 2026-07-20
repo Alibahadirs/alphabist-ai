@@ -63,3 +63,11 @@ class CompanyInvestmentReport(BaseModel):
         default="",
         pattern=r"^(?:[0-9a-f]{64})?$",
     )
+
+
+class CompanyReportSnapshot(BaseModel):
+    id: int | None = None
+    symbol: str
+    report_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+    report_payload: dict[str, Any]
+    created_at: datetime | None = None

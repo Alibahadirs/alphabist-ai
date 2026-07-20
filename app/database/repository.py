@@ -12,6 +12,11 @@ from app.data_quality.models import (
 from app.data_quality.remediation import remediation_event_hash
 from app.history.models import ScoreHistoryEntry
 from app.portfolio.models import PortfolioPosition
+from app.reporting.company_report import company_report_fingerprint
+from app.reporting.models import (
+    CompanyInvestmentReport,
+    CompanyReportSnapshot,
+)
 from app.scoring.models import FinancialMetrics, ScoreBreakdown
 from app.technical.models import (
     TechnicalHistoryEntry,
@@ -252,6 +257,20 @@ def init_db():
         conn.execute(
             """CREATE INDEX IF NOT EXISTS idx_remediation_event_task_id
             ON remediation_task_event(task_id, id)"""
+        )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS company_report_snapshot(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            symbol TEXT NOT NULL,
+            report_fingerprint TEXT NOT NULL,
+            report_payload TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(symbol, report_fingerprint),
+            FOREIGN KEY(symbol) REFERENCES companies(symbol))"""
+        )
+        conn.execute(
+            """CREATE INDEX IF NOT EXISTS idx_company_report_snapshot_symbol_id
+            ON company_report_snapshot(symbol, id)"""
         )
 
 def upsert_company(m):
@@ -783,6 +802,57 @@ def list_remediation_task_events(
                 ORDER BY id"""
             ).fetchall()
     return [RemediationTaskEvent(**dict(row)) for row in rows]
+
+
+def add_company_report_snapshot(
+    report: CompanyInvestmentReport,
+) -> bool:
+    expected_fingerprint = company_report_fingerprint(report)
+    if report.report_fingerprint != expected_fingerprint:
+        raise ValueError("Rapor içerik parmak izi doğrulanamadı.")
+    payload = json.dumps(
+        report.model_dump(mode="json"),
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+    with connect() as conn:
+        cursor = conn.execute(
+            """INSERT OR IGNORE INTO company_report_snapshot(
+            symbol, report_fingerprint, report_payload)
+            VALUES(?, ?, ?)""",
+            (
+                report.symbol.upper().strip(),
+                report.report_fingerprint,
+                payload,
+            ),
+        )
+    return cursor.rowcount > 0
+
+
+def list_company_report_snapshots(
+    symbol: str,
+    limit: int = 20,
+) -> list[CompanyReportSnapshot]:
+    safe_limit = max(1, min(limit, 200))
+    with connect() as conn:
+        rows = conn.execute(
+            """SELECT id, symbol, report_fingerprint, report_payload,
+            created_at
+            FROM company_report_snapshot
+            WHERE symbol=?
+            ORDER BY id DESC LIMIT ?""",
+            (symbol.upper().strip(), safe_limit),
+        ).fetchall()
+    return [
+        CompanyReportSnapshot(
+            id=row["id"],
+            symbol=row["symbol"],
+            report_fingerprint=row["report_fingerprint"],
+            report_payload=json.loads(row["report_payload"]),
+            created_at=row["created_at"],
+        )
+        for row in rows
+    ]
 
 def seed_demo_data():
     if list_companies():
