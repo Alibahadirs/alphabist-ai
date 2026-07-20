@@ -110,3 +110,10 @@ class CompanyReportPackageValidation(BaseModel):
     valid: bool
     package: CompanyReportExchangePackage | None = None
     errors: list[str] = Field(default_factory=list)
+
+
+class CompanyReportImportResult(BaseModel):
+    valid: bool
+    imported_count: int = Field(default=0, ge=0)
+    duplicate_count: int = Field(default=0, ge=0)
+    errors: list[str] = Field(default_factory=list)
