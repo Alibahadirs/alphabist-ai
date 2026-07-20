@@ -104,3 +104,9 @@ class CompanyReportExchangePackage(BaseModel):
         default="",
         pattern=r"^(?:[0-9a-f]{64})?$",
     )
+
+
+class CompanyReportPackageValidation(BaseModel):
+    valid: bool
+    package: CompanyReportExchangePackage | None = None
+    errors: list[str] = Field(default_factory=list)

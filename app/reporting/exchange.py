@@ -2,11 +2,16 @@ import hashlib
 import json
 from datetime import datetime, timezone
 
+from pydantic import ValidationError
+
 from app.reporting.company_report import company_report_fingerprint
 from app.reporting.models import (
     CompanyInvestmentReport,
     CompanyReportExchangePackage,
+    CompanyReportPackageValidation,
 )
+
+COMPANY_REPORT_PACKAGE_SCHEMA = "company-report-package-1"
 
 
 def company_report_package_fingerprint(
@@ -68,3 +73,66 @@ def serialize_company_report_exchange_package(
         sort_keys=True,
     )
     return payload.encode("utf-8-sig")
+
+
+def validate_company_report_exchange_package(
+    payload: bytes | str,
+) -> CompanyReportPackageValidation:
+    try:
+        text = (
+            payload.decode("utf-8-sig")
+            if isinstance(payload, bytes)
+            else payload.lstrip("\ufeff")
+        )
+        raw_package = json.loads(text)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        return CompanyReportPackageValidation(
+            valid=False,
+            errors=[f"JSON paketi okunamadı: {exc}"],
+        )
+
+    try:
+        package = CompanyReportExchangePackage.model_validate(raw_package)
+    except ValidationError as exc:
+        return CompanyReportPackageValidation(
+            valid=False,
+            errors=[f"Paket şeması geçersiz: {exc.errors()[0]['msg']}"],
+        )
+
+    errors: list[str] = []
+    if package.schema_version != COMPANY_REPORT_PACKAGE_SCHEMA:
+        errors.append(
+            "Desteklenmeyen paket şeması: "
+            f"{package.schema_version}."
+        )
+    if package.report_count != len(package.reports):
+        errors.append(
+            "Paket rapor sayısı ile içerikteki rapor sayısı uyuşmuyor."
+        )
+    normalized_symbol = package.symbol.upper().strip()
+    if any(
+        report.symbol.upper().strip() != normalized_symbol
+        for report in package.reports
+    ):
+        errors.append("Paket farklı şirketlere ait raporlar içeriyor.")
+    for index, report in enumerate(package.reports, start=1):
+        if (
+            not report.report_fingerprint
+            or report.report_fingerprint
+            != company_report_fingerprint(report)
+        ):
+            errors.append(
+                f"{index}. raporun içerik parmak izi doğrulanamadı."
+            )
+    if (
+        not package.content_fingerprint
+        or package.content_fingerprint
+        != company_report_package_fingerprint(package)
+    ):
+        errors.append("Paket bütünlük parmak izi doğrulanamadı.")
+
+    return CompanyReportPackageValidation(
+        valid=not errors,
+        package=package,
+        errors=errors,
+    )

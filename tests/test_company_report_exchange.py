@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timezone
 
 import pytest
@@ -7,6 +8,7 @@ from app.reporting.exchange import (
     build_company_report_exchange_package,
     company_report_package_fingerprint,
     serialize_company_report_exchange_package,
+    validate_company_report_exchange_package,
 )
 from app.reporting.models import CompanyInvestmentReport
 from app.sector.profiles import CompanyProfile
@@ -67,3 +69,37 @@ def test_company_report_exchange_package_rejects_mixed_symbols():
         build_company_report_exchange_package(
             [_report("TEST"), _report("OTHER")]
         )
+
+
+def test_company_report_exchange_validation_accepts_untouched_package():
+    payload = serialize_company_report_exchange_package(
+        build_company_report_exchange_package([_report()])
+    )
+
+    result = validate_company_report_exchange_package(payload)
+
+    assert result.valid is True
+    assert result.package is not None
+    assert result.errors == []
+
+
+def test_company_report_exchange_validation_detects_report_tampering():
+    package = build_company_report_exchange_package([_report()])
+    raw = package.model_dump(mode="json")
+    raw["reports"][0]["alpha_score"] = 5
+
+    result = validate_company_report_exchange_package(
+        json.dumps(raw, ensure_ascii=False)
+    )
+
+    assert result.valid is False
+    assert any("raporun içerik parmak izi" in item for item in result.errors)
+    assert any("Paket bütünlük" in item for item in result.errors)
+
+
+def test_company_report_exchange_validation_rejects_invalid_json():
+    result = validate_company_report_exchange_package(b"{not-json")
+
+    assert result.valid is False
+    assert result.package is None
+    assert "JSON paketi okunamadı" in result.errors[0]
