@@ -45,6 +45,86 @@ class RemediationTransitionResult:
     message: str
 
 
+@dataclass(frozen=True)
+class RemediationEventChainResult:
+    valid: bool
+    status: str
+    invalid_event_id: int | None = None
+
+
+def remediation_event_hash(
+    *,
+    previous_event_hash: str,
+    task_id: str,
+    symbol: str,
+    task_category: str,
+    previous_status: RemediationTaskStatus | str | None,
+    new_status: RemediationTaskStatus | str,
+    note: str,
+    issue_fingerprint: str,
+) -> str:
+    payload = {
+        "previous_event_hash": previous_event_hash,
+        "task_id": task_id,
+        "symbol": symbol.upper().strip(),
+        "task_category": task_category,
+        "previous_status": (
+            previous_status.value
+            if isinstance(previous_status, RemediationTaskStatus)
+            else previous_status
+        ),
+        "new_status": (
+            new_status.value
+            if isinstance(new_status, RemediationTaskStatus)
+            else new_status
+        ),
+        "note": note,
+        "issue_fingerprint": issue_fingerprint,
+    }
+    canonical = json.dumps(
+        payload,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return sha256(canonical).hexdigest()
+
+
+def verify_remediation_event_chain(
+    events: Sequence,
+) -> RemediationEventChainResult:
+    previous_hash = ""
+    for event in events:
+        expected_hash = remediation_event_hash(
+            previous_event_hash=previous_hash,
+            task_id=event.task_id,
+            symbol=event.symbol,
+            task_category=event.task_category,
+            previous_status=event.previous_status,
+            new_status=event.new_status,
+            note=event.note,
+            issue_fingerprint=event.issue_fingerprint,
+        )
+        if (
+            event.previous_event_hash != previous_hash
+            or event.event_hash != expected_hash
+        ):
+            return RemediationEventChainResult(
+                valid=False,
+                status="Görev olay zinciri bütünlüğü bozuk.",
+                invalid_event_id=event.id,
+            )
+        previous_hash = event.event_hash
+    return RemediationEventChainResult(
+        valid=True,
+        status=(
+            "Görev olay zinciri doğrulandı."
+            if events
+            else "Doğrulanacak görev olayı yok."
+        ),
+    )
+
+
 def validate_remediation_transition(
     current: RemediationTaskStatus,
     requested: RemediationTaskStatus,

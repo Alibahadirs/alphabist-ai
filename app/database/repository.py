@@ -9,6 +9,7 @@ from app.data_quality.models import (
     RemediationTaskEvent,
     RemediationTaskState,
 )
+from app.data_quality.remediation import remediation_event_hash
 from app.history.models import ScoreHistoryEntry
 from app.portfolio.models import PortfolioPosition
 from app.scoring.models import FinancialMetrics, ScoreBreakdown
@@ -712,11 +713,29 @@ def upsert_remediation_task_state(
             ),
         )
         if changed:
+            previous_event = conn.execute(
+                """SELECT event_hash FROM remediation_task_event
+                WHERE task_id=? ORDER BY id DESC LIMIT 1""",
+                (state.task_id,),
+            ).fetchone()
+            previous_event_hash = (
+                previous_event["event_hash"] if previous_event else ""
+            )
+            event_hash = remediation_event_hash(
+                previous_event_hash=previous_event_hash,
+                task_id=state.task_id,
+                symbol=state.symbol,
+                task_category=state.task_category,
+                previous_status=current["status"] if current else None,
+                new_status=state.status,
+                note=normalized_note,
+                issue_fingerprint=state.issue_fingerprint,
+            )
             conn.execute(
                 """INSERT INTO remediation_task_event(
                 task_id, symbol, task_category, previous_status, new_status,
-                note, issue_fingerprint)
-                VALUES(?, ?, ?, ?, ?, ?, ?)""",
+                note, issue_fingerprint, previous_event_hash, event_hash)
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     state.task_id,
                     state.symbol.upper().strip(),
@@ -725,6 +744,8 @@ def upsert_remediation_task_state(
                     state.status.value,
                     normalized_note,
                     state.issue_fingerprint,
+                    previous_event_hash,
+                    event_hash,
                 ),
             )
 

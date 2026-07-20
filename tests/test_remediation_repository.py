@@ -3,6 +3,7 @@ from app.data_quality.models import (
     RemediationTaskStatus,
 )
 from app.database import repository
+from app.data_quality.remediation import verify_remediation_event_chain
 
 
 def test_remediation_state_repository_adds_and_updates(
@@ -47,6 +48,10 @@ def test_remediation_state_repository_adds_and_updates(
     assert events[0].new_status == RemediationTaskStatus.IN_PROGRESS
     assert events[1].previous_status == RemediationTaskStatus.IN_PROGRESS
     assert events[1].new_status == RemediationTaskStatus.COMPLETED
+    assert events[0].previous_event_hash == ""
+    assert events[0].event_hash
+    assert events[1].previous_event_hash == events[0].event_hash
+    assert verify_remediation_event_chain(events).valid is True
 
 
 def test_remediation_state_does_not_duplicate_unchanged_event(
@@ -68,6 +73,36 @@ def test_remediation_state_does_not_duplicate_unchanged_event(
     repository.upsert_remediation_task_state(state)
 
     assert len(repository.list_remediation_task_events("task-1")) == 1
+
+
+def test_remediation_event_chain_detects_database_tampering(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setattr(repository, "DB_PATH", tmp_path / "test.db")
+    repository.init_db()
+    repository.upsert_remediation_task_state(
+        RemediationTaskState(
+            task_id="task-1",
+            symbol="TEST",
+            task_category="Finansal",
+            status=RemediationTaskStatus.OPEN,
+            note="İlk kayıt",
+            issue_fingerprint="a" * 64,
+        )
+    )
+    with repository.connect() as conn:
+        conn.execute(
+            """UPDATE remediation_task_event SET note='Değiştirildi'
+            WHERE task_id='task-1'"""
+        )
+
+    result = verify_remediation_event_chain(
+        repository.list_remediation_task_events("task-1")
+    )
+
+    assert result.valid is False
+    assert result.invalid_event_id is not None
 
 
 def test_remediation_state_migrates_legacy_table(
