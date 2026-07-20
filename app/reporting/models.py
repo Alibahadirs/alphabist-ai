@@ -124,3 +124,33 @@ class CompanyReportComparability(BaseModel):
     technical_comparable: bool
     combined_comparable: bool
     notes: list[str] = Field(default_factory=list)
+
+
+class ReportTrendAlertSeverity(str, Enum):
+    INFO = "Bilgi"
+    WARNING = "Uyarı"
+    CRITICAL = "Kritik"
+
+
+class CompanyReportTrendAlert(BaseModel):
+    code: str
+    severity: ReportTrendAlertSeverity
+    message: str
+
+
+class CompanyReportTrendSummary(BaseModel):
+    symbol: str
+    report_count: int = Field(ge=1)
+    latest_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+    previous_fingerprint: str | None = Field(
+        default=None,
+        pattern=r"^[0-9a-f]{64}$",
+    )
+    trend_label: str
+    comparability: CompanyReportComparability | None = None
+    alpha_delta: float | None = None
+    confidence_delta: float | None = None
+    technical_delta: float | None = None
+    combined_delta: float | None = None
+    category_deltas: dict[str, float] = Field(default_factory=dict)
+    alerts: list[CompanyReportTrendAlert] = Field(default_factory=list)
