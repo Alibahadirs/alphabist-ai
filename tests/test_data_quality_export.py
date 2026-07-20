@@ -40,6 +40,7 @@ def test_data_quality_csv_preserves_turkish_text_and_warning_evidence():
 def test_remediation_queue_csv_preserves_actions_and_priorities():
     row = RemediationQueueRow(
         task_id="task-123",
+        issue_fingerprint="c" * 64,
         symbol="TBNK",
         company_name="Test Bankası A.Ş.",
         company_profile=CompanyProfile.BANK,
@@ -63,6 +64,8 @@ def test_remediation_queue_csv_preserves_actions_and_priorities():
     assert records[0]["Öncelik puanı"] == "95"
     assert records[0]["Görev türü"] == "Finansal + teknik"
     assert records[0]["Görev durumu"] == "Devam ediyor"
+    assert records[0]["Sorun kanıtı"] == "Güncel"
+    assert records[0]["Sorun parmak izi"] == "c" * 64
     assert records[0]["Çalışma notu"] == "KAP raporu bekleniyor"
     assert "Sermaye yeterliliğini" in records[0]["Yapılacak işlem"]
     assert records[0]["Karar engelleri"] == (

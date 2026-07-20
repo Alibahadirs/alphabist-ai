@@ -1898,6 +1898,11 @@ def render_data_quality() -> None:
                 remediation_queue.dismissed_count,
                 border=True,
             )
+            st.metric(
+                "Yeniden açılmalı",
+                remediation_queue.reopen_required_count,
+                border=True,
+            )
 
         (
             queue_filter_left,
@@ -1953,6 +1958,11 @@ def render_data_quality() -> None:
                         "Öncelik puanı": row.priority_score,
                         "Görev türü": row.task_category,
                         "Görev durumu": row.workflow_status.value,
+                        "Sorun kanıtı": (
+                            "Güncel"
+                            if row.issue_fingerprint_matches
+                            else "Değişti - yeniden aç"
+                        ),
                         "Çalışma notu": row.workflow_note or "-",
                         "Son güncelleme": row.workflow_updated_at,
                         "Yapılacak işlem": row.recommended_action,
@@ -2004,16 +2014,35 @@ def render_data_quality() -> None:
                 key="quality_remediation_task",
             )
             selected_task = remediation_by_id[selected_task_id]
-            status_options = list(RemediationTaskStatus)
+            if (
+                selected_task.workflow_status
+                == RemediationTaskStatus.REOPEN_REQUIRED
+            ):
+                st.warning(
+                    "Bu görevin dayanağı son kayıttan sonra değişti. "
+                    "Güncel sorunu inceleyip görevi yeniden açın.",
+                    icon=":material/restart_alt:",
+                )
+            editable_status_options = [
+                status
+                for status in RemediationTaskStatus
+                if status != RemediationTaskStatus.REOPEN_REQUIRED
+            ]
+            current_editable_status = (
+                selected_task.workflow_status
+                if selected_task.workflow_status
+                in editable_status_options
+                else RemediationTaskStatus.OPEN
+            )
             with st.form(
                 f"quality_remediation_form_{selected_task_id}",
                 border=False,
             ):
                 workflow_status = st.selectbox(
                     "Görev durumu",
-                    status_options,
-                    index=status_options.index(
-                        selected_task.workflow_status
+                    editable_status_options,
+                    index=editable_status_options.index(
+                        current_editable_status
                     ),
                     format_func=lambda status: status.value,
                     key=f"quality_remediation_status_{selected_task_id}",
@@ -2040,6 +2069,9 @@ def render_data_quality() -> None:
                         task_category=selected_task.task_category,
                         status=workflow_status,
                         note=workflow_note,
+                        issue_fingerprint=(
+                            selected_task.issue_fingerprint
+                        ),
                     )
                 )
                 st.success("Görev durumu ve notu kaydedildi.")
@@ -2053,6 +2085,11 @@ def render_data_quality() -> None:
                             "Hisse": state.symbol,
                             "Görev türü": state.task_category,
                             "Durum": state.status.value,
+                            "Sorun parmak izi": (
+                                f"{state.issue_fingerprint[:12]}…"
+                                if state.issue_fingerprint
+                                else "Eski kayıt"
+                            ),
                             "Not": state.note or "-",
                             "Son güncelleme": state.updated_at,
                         }
