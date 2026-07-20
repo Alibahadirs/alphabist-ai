@@ -52,3 +52,24 @@ class DecisionReadinessSummary(BaseModel):
     financial_only_count: int = Field(ge=0)
     technical_only_count: int = Field(ge=0)
     combined_issue_count: int = Field(ge=0)
+
+
+class RemediationQueueRow(BaseModel):
+    symbol: str
+    company_name: str
+    company_profile: CompanyProfile
+    priority_score: int = Field(ge=0, le=100)
+    priority_level: str
+    task_category: str
+    recommended_action: str
+    blockers: list[str] = Field(default_factory=list)
+
+
+class RemediationQueueSummary(BaseModel):
+    rows: list[RemediationQueueRow] = Field(default_factory=list)
+    total_tasks: int = Field(ge=0)
+    urgent_count: int = Field(ge=0)
+    high_count: int = Field(ge=0)
+    financial_task_count: int = Field(ge=0)
+    technical_task_count: int = Field(ge=0)
+    profile_counts: dict[str, int] = Field(default_factory=dict)
