@@ -88,6 +88,10 @@ yerel Streamlit uygulaması.
 - Standart analiz raporları için zaman bilgisinden bağımsız SHA-256 içerik kimliği
 - Aynı rapor içeriğinin yinelenmesini engelleyen SQLite anlık görüntü geçmişi
 - Son iki doğrulanmış raporda puan, karar, dönem ve metodoloji değişimi karşılaştırması
+- Rapor geçmişini sürümlü ve bütünlük kontrollü UTF-8 JSON paketi olarak dışa aktarma
+- JSON paketinde şema, şirket, rapor sayısı, rapor ve paket parmak izi doğrulaması
+- Doğrulanmış rapor paketini seçili şirkete yinelenmeden güvenli içe aktarma
+- Geçmişten seçilen herhangi iki doğrulanmış şirket raporunu karşılaştırma
 - PDF kaynak tutarlarını düzeltme ve oranları anında yeniden hesaplama
 - Her analiz için ham finansal tutar anlık görüntüsü ve hesap izi
 - Dönem bazlı gösterge değeri, birim ve kaynak anlık görüntüsü

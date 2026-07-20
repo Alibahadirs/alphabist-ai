@@ -1,5 +1,16 @@
 # Değişiklik günlüğü
 
+## 1.4.0 - 2026-07-20
+
+### Taşınabilir ve doğrulanmış rapor geçmişi
+
+- Şirket raporu geçmişi için sürümlü, UTF-8 JSON aktarım paketi modeli eklendi.
+- Paketin genel içeriği oluşturulma saatinden bağımsız SHA-256 özetiyle korundu.
+- İçe aktarmada JSON şeması, şirket kodu, rapor sayısı, her raporun kimliği ve paket bütünlüğü doğrulandı.
+- Geçersiz veya farklı şirkete ait paketlerin SQLite geçmişine yazılması engellendi.
+- Yeni ve yinelenen raporları ayrı sayan güvenli içe aktarma servisi eklendi.
+- Şirket ekranına rapor geçmişi indirme, paket yükleme ve geçmişten seçilen iki raporu karşılaştırma eklendi.
+
 ## 1.3.0 - 2026-07-20
 
 ### Doğrulanmış şirket raporu geçmişi
