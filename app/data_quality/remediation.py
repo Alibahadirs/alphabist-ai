@@ -6,6 +6,7 @@ from app.data_quality.models import (
     DecisionReadinessSummary,
     RemediationQueueRow,
     RemediationQueueSummary,
+    RemediationTaskState,
 )
 from app.scoring.models import FinancialMetrics
 from app.sector.profiles import CompanyProfile
@@ -56,6 +57,7 @@ def build_remediation_queue(
     companies: Sequence[FinancialMetrics],
     readiness: DecisionReadinessSummary,
     data_quality: DataQualitySummary,
+    task_states: Mapping[str, RemediationTaskState] | None = None,
 ) -> RemediationQueueSummary:
     companies_by_symbol: Mapping[str, FinancialMetrics] = {
         company.symbol.upper().strip(): company for company in companies
@@ -64,6 +66,7 @@ def build_remediation_queue(
         row.symbol.upper().strip(): row for row in data_quality.rows
     }
     rows: list[RemediationQueueRow] = []
+    states = task_states or {}
 
     for readiness_row in readiness.rows:
         if readiness_row.financial_ready and readiness_row.technical_ready:
@@ -102,12 +105,14 @@ def build_remediation_queue(
             task_category = "Teknik"
 
         priority_score = min(priority_score, 100)
+        task_id = remediation_task_id(
+            readiness_row.symbol,
+            task_category,
+        )
+        state = states.get(task_id)
         rows.append(
             RemediationQueueRow(
-                task_id=remediation_task_id(
-                    readiness_row.symbol,
-                    task_category,
-                ),
+                task_id=task_id,
                 symbol=readiness_row.symbol,
                 company_name=readiness_row.company_name,
                 company_profile=company.company_profile,
@@ -116,6 +121,13 @@ def build_remediation_queue(
                 task_category=task_category,
                 recommended_action="; ".join(dict.fromkeys(actions)),
                 blockers=readiness_row.blockers,
+                workflow_status=(
+                    state.status if state else "Açık"
+                ),
+                workflow_note=state.note if state else "",
+                workflow_updated_at=(
+                    state.updated_at if state else None
+                ),
             )
         )
 

@@ -5,6 +5,7 @@ from pathlib import Path
 
 from app.audit.models import CompanyDataAudit
 from app.core.settings import settings
+from app.data_quality.models import RemediationTaskState
 from app.history.models import ScoreHistoryEntry
 from app.portfolio.models import PortfolioPosition
 from app.scoring.models import FinancialMetrics, ScoreBreakdown
@@ -204,6 +205,19 @@ def init_db():
         conn.execute(
             """CREATE INDEX IF NOT EXISTS idx_company_data_audit_activity_hash
             ON company_data_audit(activity_report_hash)"""
+        )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS remediation_task_state(
+            task_id TEXT PRIMARY KEY,
+            symbol TEXT NOT NULL,
+            task_category TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'Açık',
+            note TEXT NOT NULL DEFAULT '',
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"""
+        )
+        conn.execute(
+            """CREATE INDEX IF NOT EXISTS idx_remediation_state_symbol
+            ON remediation_task_state(symbol, updated_at)"""
         )
 
 def upsert_company(m):
@@ -626,6 +640,40 @@ def list_watchlist_entries() -> list[WatchlistEntry]:
             FROM watchlist ORDER BY created_at, symbol"""
         ).fetchall()
     return [WatchlistEntry(**dict(row)) for row in rows]
+
+
+def upsert_remediation_task_state(
+    state: RemediationTaskState,
+) -> None:
+    with connect() as conn:
+        conn.execute(
+            """INSERT INTO remediation_task_state(
+            task_id, symbol, task_category, status, note)
+            VALUES(?, ?, ?, ?, ?)
+            ON CONFLICT(task_id) DO UPDATE SET
+            symbol=excluded.symbol,
+            task_category=excluded.task_category,
+            status=excluded.status,
+            note=excluded.note,
+            updated_at=CURRENT_TIMESTAMP""",
+            (
+                state.task_id,
+                state.symbol.upper().strip(),
+                state.task_category,
+                state.status.value,
+                state.note.strip(),
+            ),
+        )
+
+
+def list_remediation_task_states() -> list[RemediationTaskState]:
+    with connect() as conn:
+        rows = conn.execute(
+            """SELECT task_id, symbol, task_category, status, note, updated_at
+            FROM remediation_task_state
+            ORDER BY updated_at DESC, task_id"""
+        ).fetchall()
+    return [RemediationTaskState(**dict(row)) for row in rows]
 
 def seed_demo_data():
     if list_companies():

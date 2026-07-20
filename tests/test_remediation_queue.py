@@ -3,6 +3,8 @@ from app.data_quality.models import (
     DataQualitySummary,
     DecisionReadinessRow,
     DecisionReadinessSummary,
+    RemediationTaskState,
+    RemediationTaskStatus,
 )
 from app.data_quality.remediation import (
     build_remediation_queue,
@@ -133,3 +135,46 @@ def test_remediation_task_id_is_normalized_and_stable():
     assert first == second
     assert len(first) == 20
     assert first != remediation_task_id("BANK", "Teknik")
+
+
+def test_remediation_queue_applies_persisted_workflow_state():
+    company = FinancialMetrics(
+        symbol="BANK",
+        company_name="Test Bankası",
+        company_profile=CompanyProfile.BANK,
+    )
+    readiness = _readiness_summary(
+        [
+            DecisionReadinessRow(
+                symbol="BANK",
+                company_name=company.company_name,
+                financial_ready=False,
+                technical_ready=True,
+                status="Finansal doğrulama gerekli",
+                recommended_action="Finansal raporu doğrula",
+                priority_score=55,
+                priority_level="Orta",
+            )
+        ]
+    )
+    quality = _quality_summary([])
+    task_id = remediation_task_id("BANK", "Finansal")
+    state = RemediationTaskState(
+        task_id=task_id,
+        symbol="BANK",
+        task_category="Finansal",
+        status=RemediationTaskStatus.IN_PROGRESS,
+        note="Denetim raporu bekleniyor",
+    )
+
+    queue = build_remediation_queue(
+        [company],
+        readiness,
+        quality,
+        {task_id: state},
+    )
+
+    assert queue.rows[0].workflow_status == (
+        RemediationTaskStatus.IN_PROGRESS
+    )
+    assert queue.rows[0].workflow_note == "Denetim raporu bekleniyor"
