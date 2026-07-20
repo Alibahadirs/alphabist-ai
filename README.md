@@ -61,6 +61,11 @@ yerel Streamlit uygulaması.
 - Kanıt paketlerinde içerik değişikliğini tespit eden SHA-256 bütünlük özeti
 - Yüklenen kanıt JSON'unda şema, bütünlük ve uyarı kanıtı doğrulaması
 - Aynı şirkete ait iki kanıt paketi arasında doğrulamalı değişiklik karşılaştırması
+- Karara hazırlık sorunları için 0-100 öncelik puanı ve önem seviyesi
+- Banka, sigorta, GYO, finansal hizmet ve standart şirketlere özel düzeltme görevleri
+- Kritik hesap hatalarını öncelik sırasında yükselten düzeltme kuyruğu
+- Öncelik ve görev türüne göre filtrelenebilir veri kalite iş listesi
+- Filtrelenmiş düzeltme kuyruğunu UTF-8 CSV olarak indirme
 - PDF kaynak tutarlarını düzeltme ve oranları anında yeniden hesaplama
 - Her analiz için ham finansal tutar anlık görüntüsü ve hesap izi
 - Dönem bazlı gösterge değeri, birim ve kaynak anlık görüntüsü

@@ -1,5 +1,15 @@
 # Değişiklik günlüğü
 
+## 0.98.0 - 2026-07-20
+
+### Sektör duyarlı düzeltme kuyruğu
+
+- Karara hazırlık sorunlarına finansal ve teknik önem ağırlıklı 0-100 öncelik puanı eklendi.
+- Eksik finansal veya teknik değerlendirmeler acil görev sırasında ayrıca yükseltildi.
+- Banka, sigorta, GYO, finansal hizmet ve standart şirketler için ayrı doğrulama görevleri üretildi.
+- Kritik veri ve hesaplama hataları düzeltme kuyruğunda önceliklendirildi.
+- Veri kalite merkezine görev özetleri, öncelik/görev türü filtreleri ve UTF-8 CSV indirme eklendi.
+
 ## 0.97.0 - 2026-07-19
 
 ### Kanıt bütünlüğü ve yeniden doğrulama
