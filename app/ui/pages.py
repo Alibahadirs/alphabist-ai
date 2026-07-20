@@ -42,6 +42,7 @@ from app.database.repository import (
     list_document_usages,
     list_latest_company_data_audits,
     list_portfolio_positions,
+    list_remediation_task_events,
     list_remediation_task_states,
     list_score_history,
     list_technical_score_history,
@@ -66,6 +67,7 @@ from app.data_quality.models import (
 )
 from app.data_quality.export import (
     build_data_quality_csv,
+    build_remediation_event_csv,
     build_remediation_queue_csv,
 )
 from app.data_quality.evidence import (
@@ -79,7 +81,11 @@ from app.data_quality.readiness import (
     READINESS_STATUS_OPTIONS,
     build_decision_readiness_summary,
 )
-from app.data_quality.remediation import build_remediation_queue
+from app.data_quality.remediation import (
+    build_remediation_queue,
+    validate_remediation_transition,
+    verify_remediation_event_chain,
+)
 from app.market_data.provider import get_history, get_quote
 from app.market_data.freshness import assess_price_freshness
 from app.market_data.validation import validate_quote_history_alignment
@@ -2014,6 +2020,22 @@ def render_data_quality() -> None:
                 key="quality_remediation_task",
             )
             selected_task = remediation_by_id[selected_task_id]
+            selected_task_events = list_remediation_task_events(
+                selected_task_id
+            )
+            event_chain = verify_remediation_event_chain(
+                selected_task_events
+            )
+            if event_chain.valid:
+                st.success(
+                    event_chain.status,
+                    icon=":material/link:",
+                )
+            else:
+                st.error(
+                    f"{event_chain.status} Yeni kayıt engellendi.",
+                    icon=":material/broken_image:",
+                )
             if (
                 selected_task.workflow_status
                 == RemediationTaskStatus.REOPEN_REQUIRED
@@ -2060,22 +2082,73 @@ def render_data_quality() -> None:
                 workflow_saved = st.form_submit_button(
                     "Görev durumunu kaydet",
                     icon=":material/save:",
+                    disabled=not event_chain.valid,
                 )
             if workflow_saved:
-                upsert_remediation_task_state(
-                    RemediationTaskState(
-                        task_id=selected_task.task_id,
-                        symbol=selected_task.symbol,
-                        task_category=selected_task.task_category,
-                        status=workflow_status,
-                        note=workflow_note,
-                        issue_fingerprint=(
-                            selected_task.issue_fingerprint
-                        ),
-                    )
+                transition = validate_remediation_transition(
+                    selected_task.workflow_status,
+                    workflow_status,
                 )
-                st.success("Görev durumu ve notu kaydedildi.")
-                st.rerun()
+                if not transition.allowed:
+                    st.error(transition.message)
+                else:
+                    upsert_remediation_task_state(
+                        RemediationTaskState(
+                            task_id=selected_task.task_id,
+                            symbol=selected_task.symbol,
+                            task_category=selected_task.task_category,
+                            status=workflow_status,
+                            note=workflow_note,
+                            issue_fingerprint=(
+                                selected_task.issue_fingerprint
+                            ),
+                        )
+                    )
+                    st.success("Görev durumu ve notu kaydedildi.")
+                    st.rerun()
+
+            if selected_task_events:
+                st.markdown("**Görev zaman çizelgesi**")
+                st.dataframe(
+                    [
+                        {
+                            "Zaman": event.created_at,
+                            "Önceki": (
+                                event.previous_status.value
+                                if event.previous_status
+                                else "İlk kayıt"
+                            ),
+                            "Yeni": event.new_status.value,
+                            "Not": event.note or "-",
+                            "Olay özeti": f"{event.event_hash[:12]}…",
+                        }
+                        for event in reversed(selected_task_events)
+                    ],
+                    hide_index=True,
+                    width="stretch",
+                    column_config={
+                        "Zaman": st.column_config.DatetimeColumn(
+                            "Zaman",
+                            format="DD.MM.YYYY HH:mm",
+                        ),
+                    },
+                )
+                st.download_button(
+                    "Görev olay geçmişini indir",
+                    data=build_remediation_event_csv(
+                        selected_task_events
+                    ),
+                    file_name=(
+                        f"alphabist_gorev_gecmisi_"
+                        f"{selected_task.symbol}_"
+                        f"{date.today():%Y%m%d}.csv"
+                    ),
+                    mime="text/csv",
+                    icon=":material/history:",
+                    on_click="ignore",
+                    width="content",
+                    key="quality_remediation_event_download",
+                )
 
         if remediation_task_states:
             with st.expander("Kaydedilmiş görev geçmişi"):

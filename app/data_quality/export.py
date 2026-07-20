@@ -2,7 +2,11 @@ import csv
 from collections.abc import Sequence
 from io import StringIO
 
-from app.data_quality.models import DataQualityRow, RemediationQueueRow
+from app.data_quality.models import (
+    DataQualityRow,
+    RemediationQueueRow,
+    RemediationTaskEvent,
+)
 from app.sector.profiles import PROFILE_LABELS
 
 
@@ -89,6 +93,52 @@ def build_remediation_queue_csv(
                 ),
                 "Yapılacak işlem": row.recommended_action,
                 "Karar engelleri": " | ".join(row.blockers),
+            }
+        )
+    return output.getvalue().encode("utf-8-sig")
+
+
+def build_remediation_event_csv(
+    events: Sequence[RemediationTaskEvent],
+) -> bytes:
+    output = StringIO(newline="")
+    writer = csv.DictWriter(
+        output,
+        fieldnames=[
+            "Olay",
+            "Hisse",
+            "Görev türü",
+            "Önceki durum",
+            "Yeni durum",
+            "Not",
+            "Sorun parmak izi",
+            "Önceki olay özeti",
+            "Olay özeti",
+            "Zaman",
+        ],
+    )
+    writer.writeheader()
+    for event in events:
+        writer.writerow(
+            {
+                "Olay": event.id,
+                "Hisse": event.symbol,
+                "Görev türü": event.task_category,
+                "Önceki durum": (
+                    event.previous_status.value
+                    if event.previous_status
+                    else "İlk kayıt"
+                ),
+                "Yeni durum": event.new_status.value,
+                "Not": event.note,
+                "Sorun parmak izi": event.issue_fingerprint,
+                "Önceki olay özeti": event.previous_event_hash,
+                "Olay özeti": event.event_hash,
+                "Zaman": (
+                    event.created_at.isoformat()
+                    if event.created_at
+                    else ""
+                ),
             }
         )
     return output.getvalue().encode("utf-8-sig")

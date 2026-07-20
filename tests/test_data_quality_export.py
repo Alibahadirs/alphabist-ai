@@ -1,11 +1,17 @@
 import csv
+from datetime import datetime
 from io import StringIO
 
 from app.data_quality.export import (
     build_data_quality_csv,
+    build_remediation_event_csv,
     build_remediation_queue_csv,
 )
-from app.data_quality.models import DataQualityRow, RemediationQueueRow
+from app.data_quality.models import (
+    DataQualityRow,
+    RemediationQueueRow,
+    RemediationTaskEvent,
+)
 from app.sector.profiles import CompanyProfile
 from app.validation.service import WarningConfirmationStatus
 
@@ -71,3 +77,32 @@ def test_remediation_queue_csv_preserves_actions_and_priorities():
     assert records[0]["Karar engelleri"] == (
         "Finansal güven düşük | Teknik kayıt yok"
     )
+
+
+def test_remediation_event_csv_preserves_audit_chain():
+    event = RemediationTaskEvent(
+        id=3,
+        task_id="task-1",
+        symbol="TBNK",
+        task_category="Finansal",
+        previous_status="Açık",
+        new_status="Devam ediyor",
+        note="KAP raporu bekleniyor",
+        issue_fingerprint="a" * 64,
+        previous_event_hash="b" * 64,
+        event_hash="c" * 64,
+        created_at=datetime(2026, 7, 20, 12, 30),
+    )
+
+    records = list(
+        csv.DictReader(
+            StringIO(
+                build_remediation_event_csv([event]).decode("utf-8-sig")
+            )
+        )
+    )
+
+    assert records[0]["Olay"] == "3"
+    assert records[0]["Önceki durum"] == "Açık"
+    assert records[0]["Yeni durum"] == "Devam ediyor"
+    assert records[0]["Olay özeti"] == "c" * 64
