@@ -1,5 +1,15 @@
 # Değişiklik günlüğü
 
+## 1.0.0 - 2026-07-20
+
+### Düzeltme görevi kanıt güvenliği
+
+- Her düzeltme görevi için sektör, görev türü, işlem ve engellerden SHA-256 sorun parmak izi üretildi.
+- Devam eden, tamamlanan veya geçersiz görevin dayanağı değiştiğinde durum otomatik `Yeniden açılmalı` yapıldı.
+- Sorun parmak izi SQLite görev durumuna eklendi ve eski veritabanları için otomatik migrasyon yazıldı.
+- Yeniden açılmalı görev sayacı, filtre durumu, tablo uyarısı ve güncel kanıtla yeniden kaydetme akışı eklendi.
+- CSV ve görev geçmişi görünümüne sorun kanıtı ile parmak izi bilgileri eklendi.
+
 ## 0.99.0 - 2026-07-20
 
 ### Düzeltme görevi yaşam döngüsü

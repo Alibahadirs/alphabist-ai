@@ -71,6 +71,10 @@ yerel Streamlit uygulaması.
 - Görev durumu ile çalışma notlarını SQLite'ta kalıcı saklama
 - Veri kalite ekranından görev durumu ve not güncelleme
 - Durum sayaçları, görev geçmişi ve yaşam döngüsü bilgili CSV raporu
+- Düzeltme görevinin güncel dayanağını izleyen SHA-256 sorun parmak izi
+- Değişen görev dayanağında otomatik `Yeniden açılmalı` güvenlik durumu
+- Eski görev kayıtları için güvenli SQLite parmak izi migrasyonu
+- Sorun kanıtı durumu, parmak izi ve yeniden açma uyarısını içeren görev raporu
 - PDF kaynak tutarlarını düzeltme ve oranları anında yeniden hesaplama
 - Her analiz için ham finansal tutar anlık görüntüsü ve hesap izi
 - Dönem bazlı gösterge değeri, birim ve kaynak anlık görüntüsü
