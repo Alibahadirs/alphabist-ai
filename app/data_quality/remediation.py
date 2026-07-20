@@ -1,4 +1,5 @@
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from hashlib import sha256
 import json
 
@@ -36,6 +37,46 @@ PROFILE_FINANCIAL_ACTIONS = {
         "göstergelerini finansal hizmet raporundan doğrula"
     ),
 }
+
+
+@dataclass(frozen=True)
+class RemediationTransitionResult:
+    allowed: bool
+    message: str
+
+
+def validate_remediation_transition(
+    current: RemediationTaskStatus,
+    requested: RemediationTaskStatus,
+) -> RemediationTransitionResult:
+    if requested == RemediationTaskStatus.REOPEN_REQUIRED:
+        return RemediationTransitionResult(
+            allowed=False,
+            message="Yeniden açılmalı durumu yalnız sistem tarafından atanır.",
+        )
+    if current == requested:
+        return RemediationTransitionResult(
+            allowed=True,
+            message="Görev durumu korunarak not güncellenebilir.",
+        )
+    if current in {
+        RemediationTaskStatus.COMPLETED,
+        RemediationTaskStatus.DISMISSED,
+        RemediationTaskStatus.REOPEN_REQUIRED,
+    } and requested not in {
+        RemediationTaskStatus.OPEN,
+        RemediationTaskStatus.IN_PROGRESS,
+    }:
+        return RemediationTransitionResult(
+            allowed=False,
+            message=(
+                "Kapalı veya kanıtı değişmiş görev önce yeniden açılmalıdır."
+            ),
+        )
+    return RemediationTransitionResult(
+        allowed=True,
+        message="Görev durumu değiştirilebilir.",
+    )
 
 
 def remediation_task_id(symbol: str, task_category: str) -> str:

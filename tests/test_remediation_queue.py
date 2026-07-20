@@ -10,6 +10,7 @@ from app.data_quality.remediation import (
     build_remediation_queue,
     remediation_issue_fingerprint,
     remediation_task_id,
+    validate_remediation_transition,
 )
 from app.scoring.models import FinancialMetrics
 from app.sector.profiles import CompanyProfile
@@ -266,3 +267,28 @@ def test_changed_issue_reopens_non_open_workflow_state():
     assert queue.rows[0].issue_fingerprint_matches is False
     assert queue.reopen_required_count == 1
     assert queue.completed_count == 0
+
+
+def test_remediation_transition_requires_closed_task_to_reopen():
+    blocked = validate_remediation_transition(
+        RemediationTaskStatus.COMPLETED,
+        RemediationTaskStatus.DISMISSED,
+    )
+    reopened = validate_remediation_transition(
+        RemediationTaskStatus.COMPLETED,
+        RemediationTaskStatus.OPEN,
+    )
+
+    assert blocked.allowed is False
+    assert "önce yeniden açılmalıdır" in blocked.message
+    assert reopened.allowed is True
+
+
+def test_system_reopen_status_cannot_be_selected_manually():
+    result = validate_remediation_transition(
+        RemediationTaskStatus.OPEN,
+        RemediationTaskStatus.REOPEN_REQUIRED,
+    )
+
+    assert result.allowed is False
+    assert "yalnız sistem" in result.message
