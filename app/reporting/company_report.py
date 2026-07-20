@@ -5,6 +5,7 @@ from app.audit.models import CompanyDataAudit
 from app.confidence.models import AnalysisConfidence
 from app.core.settings import settings
 from app.reporting.models import CompanyInvestmentReport
+from app.scoring.labels import get_category_label
 from app.scoring.models import FinancialMetrics, ScoreBreakdown
 from app.sector.profiles import PROFILE_LABELS
 from app.technical.engine import calculate_verified_combined_score
@@ -136,3 +137,150 @@ def build_company_investment_report(
             settings.technical_methodology_version
         ),
     )
+
+
+def _format_decimal(value: float, digits: int = 2) -> str:
+    formatted = f"{value:,.{digits}f}"
+    return (
+        formatted.replace(",", "\0")
+        .replace(".", ",")
+        .replace("\0", ".")
+    )
+
+
+def _format_indicator_value(
+    value: float | None,
+    unit: str,
+) -> str:
+    if value is None:
+        return "-"
+    formatted = _format_decimal(value)
+    if unit == "%":
+        return f"%{formatted}"
+    if unit == "x":
+        return f"{formatted}x"
+    return f"{formatted} {unit}".strip()
+
+
+def _markdown_cell(value: object) -> str:
+    return str(value).replace("|", r"\|").replace("\n", " ")
+
+
+def render_company_report_markdown(
+    report: CompanyInvestmentReport,
+) -> str:
+    technical_score = (
+        f"{_format_decimal(report.technical_score, 1)}/100"
+        if report.technical_score is not None
+        else "-"
+    )
+    combined_score = (
+        f"{_format_decimal(report.combined_score, 1)}/100"
+        if report.combined_score is not None
+        else "-"
+    )
+    lines = [
+        f"# {report.symbol} - {report.company_name}",
+        "",
+        "## Rapor özeti",
+        "",
+        "| Alan | Değer |",
+        "|---|---|",
+        f"| Sektör profili | {PROFILE_LABELS[report.company_profile]} |",
+        (
+            "| Finansal dönem | "
+            f"{report.report_period_end:%d.%m.%Y} |"
+            if report.report_period_end
+            else "| Finansal dönem | - |"
+        ),
+        f"| Alpha Score | {_format_decimal(report.alpha_score, 1)}/100 |",
+        f"| Alpha notu | {_markdown_cell(report.alpha_grade)} |",
+        f"| Temel karar | {_markdown_cell(report.alpha_decision)} |",
+        (
+            "| Analiz güveni | "
+            f"{_format_decimal(report.confidence_score, 1)}/100 "
+            f"({report.confidence_status}) |"
+        ),
+        f"| Teknik puan | {technical_score} |",
+        (
+            "| Teknik sinyal | "
+            f"{_markdown_cell(report.technical_signal or '-')} |"
+        ),
+        f"| Birleşik puan | {combined_score} |",
+        (
+            "| Birleşik karar | "
+            f"{_markdown_cell(report.combined_decision)} |"
+        ),
+        "",
+        report.summary,
+        "",
+        "## Kategori puanları",
+        "",
+        "| Kategori | Puan |",
+        "|---|---:|",
+    ]
+    for category, value in report.category_scores.items():
+        lines.append(
+            "| "
+            f"{get_category_label(report.company_profile, category)} | "
+            f"{_format_decimal(value, 1)} |"
+        )
+
+    lines.extend(
+        [
+            "",
+            "## Sektör göstergeleri",
+            "",
+            "| Gösterge | Değer | Durum | Yorum |",
+            "|---|---:|---|---|",
+        ]
+    )
+    for indicator in report.indicators:
+        lines.append(
+            "| "
+            f"{_markdown_cell(indicator['label'])} | "
+            f"{_format_indicator_value(indicator.get('value'), indicator['unit'])} | "
+            f"{_markdown_cell(indicator['status'])} | "
+            f"{_markdown_cell(indicator['interpretation'])} |"
+        )
+
+    for title, items, empty_message in (
+        ("Güçlü yönler", report.strengths, "Doğrulanmış güçlü yön bulunamadı."),
+        ("Riskler ve eksikler", report.risks, "Belirgin risk kaydedilmedi."),
+        (
+            "Veri kalitesi notları",
+            report.data_quality_notes,
+            "Ek veri kalitesi notu bulunmuyor.",
+        ),
+    ):
+        lines.extend(["", f"## {title}", ""])
+        if items:
+            lines.extend(f"- {item}" for item in items)
+        else:
+            lines.append(empty_message)
+
+    lines.extend(
+        [
+            "",
+            "## Metodoloji",
+            "",
+            (
+                f"- Temel analiz: `{report.scoring_methodology_version}`"
+            ),
+            (
+                f"- Teknik analiz: `{report.technical_methodology_version}`"
+            ),
+            f"- Oluşturulma zamanı: `{report.generated_at.isoformat()}`",
+            "",
+            "> Bu rapor yatırım tavsiyesi değildir. Finansal veriler resmi "
+            "KAP/SPK kaynaklarıyla doğrulanmalıdır.",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def serialize_company_report_markdown(
+    report: CompanyInvestmentReport,
+) -> bytes:
+    return render_company_report_markdown(report).encode("utf-8-sig")

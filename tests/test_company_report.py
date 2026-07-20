@@ -2,7 +2,11 @@ from datetime import date, datetime, timezone
 
 from app.audit.models import CompanyDataAudit, DataSourceType
 from app.confidence.models import AnalysisConfidence
-from app.reporting.company_report import build_company_investment_report
+from app.reporting.company_report import (
+    build_company_investment_report,
+    render_company_report_markdown,
+    serialize_company_report_markdown,
+)
 from app.reporting.models import CompanyInvestmentReport
 from app.scoring.engine import calculate_alpha_score
 from app.scoring.models import FinancialMetrics
@@ -122,3 +126,32 @@ def test_company_report_blocks_combined_decision_when_financial_not_ready():
     assert "audit kaydı bulunmuyor" in " ".join(
         report.data_quality_notes
     )
+
+
+def test_company_report_markdown_formats_units_and_missing_values():
+    company = FinancialMetrics(
+        symbol="TEST",
+        company_name="Test A.Ş.",
+        revenue_growth=18.5,
+        current_ratio=1.25,
+    )
+    score = calculate_alpha_score(company)
+    report = build_company_investment_report(
+        company,
+        score,
+        _confidence(False),
+        None,
+        None,
+        generated_at=datetime(2026, 7, 20, tzinfo=timezone.utc),
+    )
+
+    markdown = render_company_report_markdown(report)
+    payload = serialize_company_report_markdown(report)
+
+    assert "# TEST - Test A.Ş." in markdown
+    assert "%18,50" in markdown
+    assert "1,25x" in markdown
+    assert "| Teknik puan | - |" in markdown
+    assert "| Birleşik puan | - |" in markdown
+    assert "yatırım tavsiyesi değildir" in markdown
+    assert payload.startswith(b"\xef\xbb\xbf")
