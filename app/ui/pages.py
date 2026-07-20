@@ -42,6 +42,7 @@ from app.database.repository import (
     list_document_usages,
     list_latest_company_data_audits,
     list_portfolio_positions,
+    list_remediation_task_states,
     list_score_history,
     list_technical_score_history,
     list_watchlist_entries,
@@ -49,6 +50,7 @@ from app.database.repository import (
     remove_portfolio_position,
     upsert_company,
     upsert_portfolio_position,
+    upsert_remediation_task_state,
     upsert_watchlist_entry,
 )
 from app.database.backup import (
@@ -58,6 +60,10 @@ from app.database.backup import (
     validate_database_backup,
 )
 from app.data_quality.service import FIELD_LABELS, build_data_quality_summary
+from app.data_quality.models import (
+    RemediationTaskState,
+    RemediationTaskStatus,
+)
 from app.data_quality.export import (
     build_data_quality_csv,
     build_remediation_queue_csv,
@@ -1676,10 +1682,15 @@ def render_data_quality() -> None:
         confidences,
         technical_quality,
     )
+    remediation_task_states = {
+        state.task_id: state
+        for state in list_remediation_task_states()
+    }
     remediation_queue = build_remediation_queue(
         companies,
         readiness_summary,
         summary,
+        remediation_task_states,
     )
     readiness_by_symbol = {
         row.symbol: row for row in readiness_summary.rows
@@ -1937,6 +1948,60 @@ def render_data_quality() -> None:
                 width="content",
                 key="quality_remediation_download",
             )
+            remediation_by_id = {
+                row.task_id: row for row in remediation_queue.rows
+            }
+            selected_task_id = st.selectbox(
+                "Güncellenecek görev",
+                list(remediation_by_id),
+                format_func=lambda task_id: (
+                    f"{remediation_by_id[task_id].symbol} · "
+                    f"{remediation_by_id[task_id].task_category} · "
+                    f"{remediation_by_id[task_id].priority_level}"
+                ),
+                key="quality_remediation_task",
+            )
+            selected_task = remediation_by_id[selected_task_id]
+            status_options = list(RemediationTaskStatus)
+            with st.form(
+                f"quality_remediation_form_{selected_task_id}",
+                border=False,
+            ):
+                workflow_status = st.selectbox(
+                    "Görev durumu",
+                    status_options,
+                    index=status_options.index(
+                        selected_task.workflow_status
+                    ),
+                    format_func=lambda status: status.value,
+                    key=f"quality_remediation_status_{selected_task_id}",
+                )
+                workflow_note = st.text_area(
+                    "Çalışma notu",
+                    value=selected_task.workflow_note,
+                    max_chars=1000,
+                    placeholder=(
+                        "Doğrulanan kaynak, beklenen belge veya yapılan "
+                        "düzeltmeyi yazın."
+                    ),
+                    key=f"quality_remediation_note_{selected_task_id}",
+                )
+                workflow_saved = st.form_submit_button(
+                    "Görev durumunu kaydet",
+                    icon=":material/save:",
+                )
+            if workflow_saved:
+                upsert_remediation_task_state(
+                    RemediationTaskState(
+                        task_id=selected_task.task_id,
+                        symbol=selected_task.symbol,
+                        task_category=selected_task.task_category,
+                        status=workflow_status,
+                        note=workflow_note,
+                    )
+                )
+                st.success("Görev durumu ve notu kaydedildi.")
+                st.rerun()
 
     default_refresh_symbols = select_technical_refresh_candidates(
         technical_quality
