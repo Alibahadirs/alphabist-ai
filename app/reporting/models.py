@@ -1,6 +1,10 @@
+from datetime import date, datetime
 from enum import Enum
+from typing import Any
 
 from pydantic import BaseModel, Field
+
+from app.sector.profiles import CompanyProfile
 
 
 class ReportFreshnessStatus(str, Enum):
@@ -28,3 +32,30 @@ class ReportPeriodAssessment(BaseModel):
     confidence_points: float = Field(ge=0, le=5)
     blocks_decision: bool = False
     message: str
+
+
+class CompanyInvestmentReport(BaseModel):
+    symbol: str
+    company_name: str
+    company_profile: CompanyProfile
+    generated_at: datetime
+    report_period_end: date | None = None
+    alpha_score: float = Field(ge=0, le=100)
+    alpha_grade: str
+    alpha_decision: str
+    confidence_score: float = Field(ge=0, le=100)
+    confidence_status: str
+    decision_ready: bool
+    technical_score: float | None = Field(default=None, ge=0, le=100)
+    technical_signal: str | None = None
+    technical_price_date: date | None = None
+    combined_score: float | None = Field(default=None, ge=0, le=100)
+    combined_decision: str
+    summary: str
+    strengths: list[str] = Field(default_factory=list)
+    risks: list[str] = Field(default_factory=list)
+    data_quality_notes: list[str] = Field(default_factory=list)
+    category_scores: dict[str, float] = Field(default_factory=dict)
+    indicators: list[dict[str, Any]] = Field(default_factory=list)
+    scoring_methodology_version: str
+    technical_methodology_version: str
