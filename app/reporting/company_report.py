@@ -6,7 +6,11 @@ from app.analysis.service import build_company_analysis
 from app.audit.models import CompanyDataAudit
 from app.confidence.models import AnalysisConfidence
 from app.core.settings import settings
-from app.reporting.models import CompanyInvestmentReport
+from app.reporting.models import (
+    CompanyInvestmentReport,
+    CompanyReportChange,
+    CompanyReportComparison,
+)
 from app.scoring.labels import get_category_label
 from app.scoring.models import FinancialMetrics, ScoreBreakdown
 from app.sector.profiles import PROFILE_LABELS
@@ -28,6 +32,130 @@ def company_report_fingerprint(
         separators=(",", ":"),
     )
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _verify_company_report(report: CompanyInvestmentReport) -> None:
+    expected = company_report_fingerprint(report)
+    if not report.report_fingerprint or report.report_fingerprint != expected:
+        raise ValueError("Rapor içerik parmak izi doğrulanamadı.")
+
+
+def compare_company_reports(
+    first: CompanyInvestmentReport,
+    second: CompanyInvestmentReport,
+) -> CompanyReportComparison:
+    _verify_company_report(first)
+    _verify_company_report(second)
+    if first.symbol.upper().strip() != second.symbol.upper().strip():
+        raise ValueError("Yalnızca aynı şirkete ait raporlar karşılaştırılabilir.")
+
+    previous, current = (
+        (first, second)
+        if first.generated_at <= second.generated_at
+        else (second, first)
+    )
+    fields: list[tuple[str, str, object, object]] = [
+        (
+            "report_period_end",
+            "Finansal dönem",
+            previous.report_period_end,
+            current.report_period_end,
+        ),
+        (
+            "alpha_score",
+            "Alpha Score",
+            previous.alpha_score,
+            current.alpha_score,
+        ),
+        (
+            "confidence_score",
+            "Analiz güveni",
+            previous.confidence_score,
+            current.confidence_score,
+        ),
+        (
+            "technical_score",
+            "Teknik puan",
+            previous.technical_score,
+            current.technical_score,
+        ),
+        (
+            "combined_score",
+            "Birleşik puan",
+            previous.combined_score,
+            current.combined_score,
+        ),
+        (
+            "alpha_decision",
+            "Temel karar",
+            previous.alpha_decision,
+            current.alpha_decision,
+        ),
+        (
+            "combined_decision",
+            "Birleşik karar",
+            previous.combined_decision,
+            current.combined_decision,
+        ),
+        (
+            "scoring_methodology_version",
+            "Temel analiz metodolojisi",
+            previous.scoring_methodology_version,
+            current.scoring_methodology_version,
+        ),
+        (
+            "technical_methodology_version",
+            "Teknik analiz metodolojisi",
+            previous.technical_methodology_version,
+            current.technical_methodology_version,
+        ),
+    ]
+    category_keys = sorted(
+        set(previous.category_scores) | set(current.category_scores)
+    )
+    fields.extend(
+        (
+            f"category_scores.{key}",
+            get_category_label(current.company_profile, key),
+            previous.category_scores.get(key),
+            current.category_scores.get(key),
+        )
+        for key in category_keys
+    )
+
+    changes = []
+    for field, label, previous_value, current_value in fields:
+        if previous_value == current_value:
+            continue
+        numeric_delta = None
+        if (
+            isinstance(previous_value, (int, float))
+            and not isinstance(previous_value, bool)
+            and isinstance(current_value, (int, float))
+            and not isinstance(current_value, bool)
+        ):
+            numeric_delta = round(
+                float(current_value) - float(previous_value),
+                2,
+            )
+        changes.append(
+            CompanyReportChange(
+                field=field,
+                label=label,
+                previous_value=previous_value,
+                current_value=current_value,
+                numeric_delta=numeric_delta,
+            )
+        )
+
+    return CompanyReportComparison(
+        symbol=current.symbol,
+        previous_fingerprint=previous.report_fingerprint,
+        current_fingerprint=current.report_fingerprint,
+        previous_generated_at=previous.generated_at,
+        current_generated_at=current.generated_at,
+        changes=changes,
+    )
 
 
 def _combined_decision(score: float | None) -> str:

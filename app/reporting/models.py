@@ -71,3 +71,24 @@ class CompanyReportSnapshot(BaseModel):
     report_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
     report_payload: dict[str, Any]
     created_at: datetime | None = None
+
+
+class CompanyReportChange(BaseModel):
+    field: str
+    label: str
+    previous_value: Any = None
+    current_value: Any = None
+    numeric_delta: float | None = None
+
+
+class CompanyReportComparison(BaseModel):
+    symbol: str
+    previous_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+    current_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+    previous_generated_at: datetime
+    current_generated_at: datetime
+    changes: list[CompanyReportChange] = Field(default_factory=list)
+
+    @property
+    def changed(self) -> bool:
+        return bool(self.changes)
