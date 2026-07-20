@@ -4,7 +4,10 @@ from app.data_quality.models import (
     DecisionReadinessRow,
     DecisionReadinessSummary,
 )
-from app.data_quality.remediation import build_remediation_queue
+from app.data_quality.remediation import (
+    build_remediation_queue,
+    remediation_task_id,
+)
 from app.scoring.models import FinancialMetrics
 from app.sector.profiles import CompanyProfile
 
@@ -69,6 +72,10 @@ def test_remediation_queue_uses_sector_specific_financial_action():
 
     assert queue.total_tasks == 1
     assert queue.financial_task_count == 1
+    assert queue.rows[0].task_id == remediation_task_id(
+        "BANK",
+        "Finansal",
+    )
     assert "sermaye yeterliliği" in queue.rows[0].recommended_action
     assert "takipteki kredi" in queue.rows[0].recommended_action
 
@@ -117,3 +124,12 @@ def test_remediation_queue_elevates_critical_errors_and_combined_work():
     assert "teknik puanı yeniden hesapla" in row.recommended_action
     assert queue.urgent_count == 1
     assert queue.technical_task_count == 1
+
+
+def test_remediation_task_id_is_normalized_and_stable():
+    first = remediation_task_id(" bank ", "Finansal")
+    second = remediation_task_id("BANK", "Finansal")
+
+    assert first == second
+    assert len(first) == 20
+    assert first != remediation_task_id("BANK", "Teknik")

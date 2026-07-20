@@ -1,3 +1,6 @@
+from datetime import datetime
+from enum import Enum
+
 from pydantic import BaseModel, Field
 
 from app.sector.profiles import CompanyProfile
@@ -54,7 +57,15 @@ class DecisionReadinessSummary(BaseModel):
     combined_issue_count: int = Field(ge=0)
 
 
+class RemediationTaskStatus(str, Enum):
+    OPEN = "Açık"
+    IN_PROGRESS = "Devam ediyor"
+    COMPLETED = "Tamamlandı"
+    DISMISSED = "Geçersiz"
+
+
 class RemediationQueueRow(BaseModel):
+    task_id: str
     symbol: str
     company_name: str
     company_profile: CompanyProfile
@@ -63,6 +74,18 @@ class RemediationQueueRow(BaseModel):
     task_category: str
     recommended_action: str
     blockers: list[str] = Field(default_factory=list)
+    workflow_status: RemediationTaskStatus = RemediationTaskStatus.OPEN
+    workflow_note: str = ""
+    workflow_updated_at: datetime | None = None
+
+
+class RemediationTaskState(BaseModel):
+    task_id: str
+    symbol: str
+    task_category: str
+    status: RemediationTaskStatus = RemediationTaskStatus.OPEN
+    note: str = Field(default="", max_length=1000)
+    updated_at: datetime | None = None
 
 
 class RemediationQueueSummary(BaseModel):

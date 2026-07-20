@@ -1,4 +1,5 @@
 from collections.abc import Mapping, Sequence
+from hashlib import sha256
 
 from app.data_quality.models import (
     DataQualitySummary,
@@ -32,6 +33,11 @@ PROFILE_FINANCIAL_ACTIONS = {
         "göstergelerini finansal hizmet raporundan doğrula"
     ),
 }
+
+
+def remediation_task_id(symbol: str, task_category: str) -> str:
+    normalized = f"{symbol.upper().strip()}|{task_category.strip()}"
+    return sha256(normalized.encode("utf-8")).hexdigest()[:20]
 
 
 def _priority_level(score: int) -> str:
@@ -98,6 +104,10 @@ def build_remediation_queue(
         priority_score = min(priority_score, 100)
         rows.append(
             RemediationQueueRow(
+                task_id=remediation_task_id(
+                    readiness_row.symbol,
+                    task_category,
+                ),
                 symbol=readiness_row.symbol,
                 company_name=readiness_row.company_name,
                 company_profile=company.company_profile,

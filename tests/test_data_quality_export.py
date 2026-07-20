@@ -39,6 +39,7 @@ def test_data_quality_csv_preserves_turkish_text_and_warning_evidence():
 
 def test_remediation_queue_csv_preserves_actions_and_priorities():
     row = RemediationQueueRow(
+        task_id="task-123",
         symbol="TBNK",
         company_name="Test Bankası A.Ş.",
         company_profile=CompanyProfile.BANK,
