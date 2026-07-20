@@ -213,8 +213,20 @@ def init_db():
             task_category TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'Açık',
             note TEXT NOT NULL DEFAULT '',
+            issue_fingerprint TEXT NOT NULL DEFAULT '',
             updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"""
         )
+        remediation_columns = {
+            row[1]
+            for row in conn.execute(
+                "PRAGMA table_info(remediation_task_state)"
+            ).fetchall()
+        }
+        if "issue_fingerprint" not in remediation_columns:
+            conn.execute(
+                """ALTER TABLE remediation_task_state
+                ADD COLUMN issue_fingerprint TEXT NOT NULL DEFAULT ''"""
+            )
         conn.execute(
             """CREATE INDEX IF NOT EXISTS idx_remediation_state_symbol
             ON remediation_task_state(symbol, updated_at)"""
@@ -648,13 +660,14 @@ def upsert_remediation_task_state(
     with connect() as conn:
         conn.execute(
             """INSERT INTO remediation_task_state(
-            task_id, symbol, task_category, status, note)
-            VALUES(?, ?, ?, ?, ?)
+            task_id, symbol, task_category, status, note, issue_fingerprint)
+            VALUES(?, ?, ?, ?, ?, ?)
             ON CONFLICT(task_id) DO UPDATE SET
             symbol=excluded.symbol,
             task_category=excluded.task_category,
             status=excluded.status,
             note=excluded.note,
+            issue_fingerprint=excluded.issue_fingerprint,
             updated_at=CURRENT_TIMESTAMP""",
             (
                 state.task_id,
@@ -662,6 +675,7 @@ def upsert_remediation_task_state(
                 state.task_category,
                 state.status.value,
                 state.note.strip(),
+                state.issue_fingerprint,
             ),
         )
 
@@ -669,7 +683,8 @@ def upsert_remediation_task_state(
 def list_remediation_task_states() -> list[RemediationTaskState]:
     with connect() as conn:
         rows = conn.execute(
-            """SELECT task_id, symbol, task_category, status, note, updated_at
+            """SELECT task_id, symbol, task_category, status, note,
+            issue_fingerprint, updated_at
             FROM remediation_task_state
             ORDER BY updated_at DESC, task_id"""
         ).fetchall()

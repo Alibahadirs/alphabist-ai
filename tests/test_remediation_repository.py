@@ -19,6 +19,7 @@ def test_remediation_state_repository_adds_and_updates(
             task_category="Finansal",
             status=RemediationTaskStatus.IN_PROGRESS,
             note="Rapor bekleniyor",
+            issue_fingerprint="a" * 64,
         )
     )
     repository.upsert_remediation_task_state(
@@ -28,6 +29,7 @@ def test_remediation_state_repository_adds_and_updates(
             task_category="Finansal",
             status=RemediationTaskStatus.COMPLETED,
             note="KAP raporuyla doğrulandı",
+            issue_fingerprint="b" * 64,
         )
     )
 
@@ -37,4 +39,33 @@ def test_remediation_state_repository_adds_and_updates(
     assert states[0].symbol == "TEST"
     assert states[0].status == RemediationTaskStatus.COMPLETED
     assert states[0].note == "KAP raporuyla doğrulandı"
+    assert states[0].issue_fingerprint == "b" * 64
     assert states[0].updated_at is not None
+
+
+def test_remediation_state_migrates_legacy_table(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setattr(repository, "DB_PATH", tmp_path / "legacy.db")
+    with repository.connect() as conn:
+        conn.execute(
+            """CREATE TABLE remediation_task_state(
+            task_id TEXT PRIMARY KEY,
+            symbol TEXT NOT NULL,
+            task_category TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'Açık',
+            note TEXT NOT NULL DEFAULT '',
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"""
+        )
+        conn.execute(
+            """INSERT INTO remediation_task_state(
+            task_id, symbol, task_category, status, note)
+            VALUES('legacy-1', 'TEST', 'Finansal', 'Tamamlandı', 'Eski')"""
+        )
+
+    repository.init_db()
+    states = repository.list_remediation_task_states()
+
+    assert states[0].task_id == "legacy-1"
+    assert states[0].issue_fingerprint == ""
