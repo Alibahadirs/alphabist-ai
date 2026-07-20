@@ -117,3 +117,10 @@ class CompanyReportImportResult(BaseModel):
     imported_count: int = Field(default=0, ge=0)
     duplicate_count: int = Field(default=0, ge=0)
     errors: list[str] = Field(default_factory=list)
+
+
+class CompanyReportComparability(BaseModel):
+    financial_comparable: bool
+    technical_comparable: bool
+    combined_comparable: bool
+    notes: list[str] = Field(default_factory=list)
