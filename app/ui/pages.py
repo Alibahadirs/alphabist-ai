@@ -121,12 +121,20 @@ from app.reporting.company_report import (
     render_company_report_markdown,
     serialize_company_report_markdown,
 )
+from app.reporting.comparability import (
+    assess_company_report_comparability,
+)
 from app.reporting.exchange import (
     build_company_report_exchange_package,
     serialize_company_report_exchange_package,
 )
 from app.reporting.importer import (
     import_company_report_exchange_package,
+)
+from app.reporting.models import ReportTrendAlertSeverity
+from app.reporting.trend import build_company_report_trend
+from app.reporting.trend_export import (
+    serialize_company_report_trend_csv,
 )
 from app.reporting.service import assess_report_period, report_period_regresses
 from app.scoring.engine import calculate_alpha_score
@@ -1321,6 +1329,101 @@ def render_dashboard() -> None:
                     ),
                 },
             )
+            report_trend = build_company_report_trend(stored_reports)
+            with st.container(border=True):
+                st.markdown("**Rapor geçmişi trendi**")
+                with st.container(horizontal=True):
+                    st.metric(
+                        "Trend",
+                        report_trend.trend_label,
+                        border=True,
+                    )
+                    st.metric(
+                        "Alpha değişimi",
+                        (
+                            f"{report_trend.alpha_delta:+.1f}"
+                            if report_trend.alpha_delta is not None
+                            else "Kıyas yok"
+                        ),
+                        border=True,
+                    )
+                    st.metric(
+                        "Teknik değişim",
+                        (
+                            f"{report_trend.technical_delta:+.1f}"
+                            if report_trend.technical_delta is not None
+                            else "Kıyas yok"
+                        ),
+                        border=True,
+                    )
+                    st.metric(
+                        "Birleşik değişim",
+                        (
+                            f"{report_trend.combined_delta:+.1f}"
+                            if report_trend.combined_delta is not None
+                            else "Kıyas yok"
+                        ),
+                        border=True,
+                    )
+
+                latest_report = stored_reports[0]
+                comparable_history = sorted(
+                    (
+                        report
+                        for report in stored_reports
+                        if report.scoring_methodology_version
+                        == latest_report.scoring_methodology_version
+                        and report.company_profile
+                        == latest_report.company_profile
+                    ),
+                    key=lambda report: report.generated_at,
+                )
+                if len(comparable_history) >= 2:
+                    st.line_chart(
+                        pd.DataFrame(
+                            [
+                                {
+                                    "Tarih": report.generated_at,
+                                    "Alpha Score": report.alpha_score,
+                                }
+                                for report in comparable_history
+                            ]
+                        ),
+                        x="Tarih",
+                        y="Alpha Score",
+                        y_label="Puan",
+                    )
+                    st.caption(
+                        "Grafik yalnızca güncel temel analiz metodolojisi "
+                        "ve aynı sektör profiline ait kayıtları içerir."
+                    )
+
+                for alert in report_trend.alerts:
+                    if (
+                        alert.severity
+                        == ReportTrendAlertSeverity.CRITICAL
+                    ):
+                        st.error(alert.message)
+                    elif (
+                        alert.severity
+                        == ReportTrendAlertSeverity.WARNING
+                    ):
+                        st.warning(alert.message)
+                    else:
+                        st.info(alert.message)
+                st.download_button(
+                    "Trend raporunu CSV olarak indir",
+                    data=serialize_company_report_trend_csv(report_trend),
+                    file_name=(
+                        f"alphabist_rapor_trendi_{symbol}_"
+                        f"{date.today():%Y%m%d}.csv"
+                    ),
+                    mime="text/csv",
+                    icon=":material/download:",
+                    on_click="ignore",
+                    width="content",
+                    key="company_report_trend_download",
+                )
 
             if len(stored_reports) >= 2:
                 report_options = {
@@ -1343,12 +1446,25 @@ def render_dashboard() -> None:
                     ),
                 )
                 if len(selected_report_labels) == 2:
+                    selected_first = report_options[
+                        selected_report_labels[0]
+                    ]
+                    selected_second = report_options[
+                        selected_report_labels[1]
+                    ]
                     comparison = compare_company_reports(
-                        report_options[selected_report_labels[0]],
-                        report_options[selected_report_labels[1]],
+                        selected_first,
+                        selected_second,
+                    )
+                    comparison_assessment = (
+                        assess_company_report_comparability(
+                            selected_first,
+                            selected_second,
+                        )
                     )
                 else:
                     comparison = None
+                    comparison_assessment = None
                 with st.expander("Seçilen raporları karşılaştır"):
                     if comparison is None:
                         st.info("Karşılaştırmak için iki rapor seçin.")
@@ -1357,12 +1473,37 @@ def render_dashboard() -> None:
                             "Seçilen raporların karşılaştırılan alanları aynı."
                         )
                     else:
+                        for note in comparison_assessment.notes:
+                            st.warning(note)
+
+                        def comparable_delta(field: str) -> bool:
+                            if field.startswith("category_scores.") or field in {
+                                "alpha_score",
+                                "confidence_score",
+                            }:
+                                return (
+                                    comparison_assessment.financial_comparable
+                                )
+                            if field == "technical_score":
+                                return (
+                                    comparison_assessment.technical_comparable
+                                )
+                            if field == "combined_score":
+                                return (
+                                    comparison_assessment.combined_comparable
+                                )
+                            return True
+
                         comparison_rows = [
                             {
                                 "Alan": change.label,
                                 "Önceki": change.previous_value,
                                 "Güncel": change.current_value,
-                                "Değişim": change.numeric_delta,
+                                "Değişim": (
+                                    change.numeric_delta
+                                    if comparable_delta(change.field)
+                                    else None
+                                ),
                             }
                             for change in comparison.changes
                         ]
