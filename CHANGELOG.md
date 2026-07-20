@@ -1,5 +1,15 @@
 # Değişiklik günlüğü
 
+## 1.3.0 - 2026-07-20
+
+### Doğrulanmış şirket raporu geçmişi
+
+- Standart analiz raporlarına oluşturulma saatinden bağımsız SHA-256 içerik parmak izi eklendi.
+- Rapor anlık görüntüleri SQLite'ta şirket ve içerik kimliğine göre yinelenmeden saklandı.
+- Kaydedilen raporun parmak izi veritabanına yazılmadan önce yeniden doğrulandı.
+- İki raporun puan, karar, dönem, kategori ve metodoloji değişimlerini karşılaştıran motor eklendi.
+- Şirket detay ekranına rapor kaydetme, geçmiş tablosu ve son iki doğrulanmış raporu karşılaştırma görünümü eklendi.
+
 ## 1.2.0 - 2026-07-20
 
 ### Standart şirket analiz raporu

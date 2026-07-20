@@ -85,6 +85,9 @@ yerel Streamlit uygulaması.
 - Sektör profiline göre güçlü yön, risk ve gösterge değerlendirmesi
 - Yüzde, oran, puan ve tarih alanlarını türüne göre biçimleyen Markdown raporu
 - Şirket detay ekranından rapor önizleme ve UTF-8 Markdown indirme
+- Standart analiz raporları için zaman bilgisinden bağımsız SHA-256 içerik kimliği
+- Aynı rapor içeriğinin yinelenmesini engelleyen SQLite anlık görüntü geçmişi
+- Son iki doğrulanmış raporda puan, karar, dönem ve metodoloji değişimi karşılaştırması
 - PDF kaynak tutarlarını düzeltme ve oranları anında yeniden hesaplama
 - Her analiz için ham finansal tutar anlık görüntüsü ve hesap izi
 - Dönem bazlı gösterge değeri, birim ve kaynak anlık görüntüsü
