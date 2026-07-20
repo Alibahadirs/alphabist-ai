@@ -1,5 +1,16 @@
 # Değişiklik günlüğü
 
+## 1.5.0 - 2026-07-20
+
+### Metodoloji duyarlı rapor trendi
+
+- Rapor çiftleri için temel, teknik ve birleşik karşılaştırılabilirlik kuralları eklendi.
+- Metodoloji, sektör profili, finansal dönem ve teknik fiyat tarihi uyumsuzlukları ayrı nedenlerle raporlandı.
+- Yalnız karşılaştırılabilir raporlarda Alpha, güven, teknik, birleşik ve kategori puanı değişimleri hesaplandı.
+- Belirgin puan düşüşleri ve doğrulama nedeniyle kapanan yatırım kararı önem seviyeli erken uyarılara dönüştürüldü.
+- Trend özeti, karşılaştırılabilirlik durumu, kategori değişimleri ve uyarılar UTF-8 CSV olarak dışa aktarılabilir hale getirildi.
+- Şirket ekranına trend KPI'ları, metodoloji uyumlu geçmiş grafiği, uyarılar ve güvenli seçmeli karşılaştırma eklendi.
+
 ## 1.4.0 - 2026-07-20
 
 ### Taşınabilir ve doğrulanmış rapor geçmişi

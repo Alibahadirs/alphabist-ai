@@ -92,6 +92,11 @@ yerel Streamlit uygulaması.
 - JSON paketinde şema, şirket, rapor sayısı, rapor ve paket parmak izi doğrulaması
 - Doğrulanmış rapor paketini seçili şirkete yinelenmeden güvenli içe aktarma
 - Geçmişten seçilen herhangi iki doğrulanmış şirket raporunu karşılaştırma
+- Rapor çiftlerinde metodoloji, sektör profili ve dönem sırası karşılaştırılabilirlik kontrolü
+- Yalnız karşılaştırılabilir kayıtlardan Alpha, güven, teknik ve birleşik puan trendi
+- Belirgin puan düşüşleri ve karar kilidi için önem seviyeli erken uyarılar
+- Güncel metodoloji ve sektör profiline göre filtrelenen Alpha Score geçmiş grafiği
+- Trend özeti, karşılaştırılabilirlik notları ve uyarıları içeren UTF-8 CSV raporu
 - PDF kaynak tutarlarını düzeltme ve oranları anında yeniden hesaplama
 - Her analiz için ham finansal tutar anlık görüntüsü ve hesap izi
 - Dönem bazlı gösterge değeri, birim ve kaynak anlık görüntüsü
