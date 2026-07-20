@@ -194,6 +194,16 @@ def test_remediation_queue_applies_persisted_workflow_state():
         task_category="Finansal",
         status=RemediationTaskStatus.IN_PROGRESS,
         note="Denetim raporu bekleniyor",
+        issue_fingerprint=remediation_issue_fingerprint(
+            "BANK",
+            CompanyProfile.BANK,
+            "Finansal",
+            (
+                "Net dönem kârı, özkaynak, sermaye yeterliliği ve "
+                "takipteki kredi göstergelerini banka raporundan doğrula"
+            ),
+            [],
+        ),
     )
 
     queue = build_remediation_queue(
@@ -209,4 +219,50 @@ def test_remediation_queue_applies_persisted_workflow_state():
     assert queue.rows[0].workflow_note == "Denetim raporu bekleniyor"
     assert queue.in_progress_count == 1
     assert queue.open_count == 0
+    assert queue.completed_count == 0
+
+
+def test_changed_issue_reopens_non_open_workflow_state():
+    company = FinancialMetrics(
+        symbol="BANK",
+        company_name="Test Bankası",
+        company_profile=CompanyProfile.BANK,
+    )
+    readiness = _readiness_summary(
+        [
+            DecisionReadinessRow(
+                symbol="BANK",
+                company_name=company.company_name,
+                financial_ready=False,
+                technical_ready=True,
+                status="Finansal doğrulama gerekli",
+                recommended_action="Finansal raporu doğrula",
+                blockers=["Yeni rapor dönemi doğrulanmadı."],
+                priority_score=55,
+                priority_level="Orta",
+            )
+        ]
+    )
+    task_id = remediation_task_id("BANK", "Finansal")
+    old_state = RemediationTaskState(
+        task_id=task_id,
+        symbol="BANK",
+        task_category="Finansal",
+        status=RemediationTaskStatus.COMPLETED,
+        note="Önceki dönem tamamlandı",
+        issue_fingerprint="a" * 64,
+    )
+
+    queue = build_remediation_queue(
+        [company],
+        readiness,
+        _quality_summary([]),
+        {task_id: old_state},
+    )
+
+    assert queue.rows[0].workflow_status == (
+        RemediationTaskStatus.REOPEN_REQUIRED
+    )
+    assert queue.rows[0].issue_fingerprint_matches is False
+    assert queue.reopen_required_count == 1
     assert queue.completed_count == 0

@@ -62,6 +62,7 @@ class RemediationTaskStatus(str, Enum):
     IN_PROGRESS = "Devam ediyor"
     COMPLETED = "Tamamlandı"
     DISMISSED = "Geçersiz"
+    REOPEN_REQUIRED = "Yeniden açılmalı"
 
 
 class RemediationQueueRow(BaseModel):
@@ -78,6 +79,7 @@ class RemediationQueueRow(BaseModel):
     workflow_status: RemediationTaskStatus = RemediationTaskStatus.OPEN
     workflow_note: str = ""
     workflow_updated_at: datetime | None = None
+    issue_fingerprint_matches: bool = True
 
 
 class RemediationTaskState(BaseModel):
@@ -102,3 +104,4 @@ class RemediationQueueSummary(BaseModel):
     in_progress_count: int = Field(ge=0)
     completed_count: int = Field(ge=0)
     dismissed_count: int = Field(ge=0)
+    reopen_required_count: int = Field(ge=0)

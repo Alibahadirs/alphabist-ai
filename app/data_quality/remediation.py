@@ -145,6 +145,17 @@ def build_remediation_queue(
             readiness_row.blockers,
         )
         state = states.get(task_id)
+        issue_fingerprint_matches = bool(
+            not state
+            or state.status == RemediationTaskStatus.OPEN
+            or (
+                state.issue_fingerprint
+                and state.issue_fingerprint == issue_fingerprint
+            )
+        )
+        workflow_status = state.status if state else RemediationTaskStatus.OPEN
+        if state and not issue_fingerprint_matches:
+            workflow_status = RemediationTaskStatus.REOPEN_REQUIRED
         rows.append(
             RemediationQueueRow(
                 task_id=task_id,
@@ -157,13 +168,12 @@ def build_remediation_queue(
                 task_category=task_category,
                 recommended_action=recommended_action,
                 blockers=readiness_row.blockers,
-                workflow_status=(
-                    state.status if state else "Açık"
-                ),
+                workflow_status=workflow_status,
                 workflow_note=state.note if state else "",
                 workflow_updated_at=(
                     state.updated_at if state else None
                 ),
+                issue_fingerprint_matches=issue_fingerprint_matches,
             )
         )
 
@@ -202,6 +212,11 @@ def build_remediation_queue(
         ),
         dismissed_count=sum(
             row.workflow_status == RemediationTaskStatus.DISMISSED
+            for row in rows
+        ),
+        reopen_required_count=sum(
+            row.workflow_status
+            == RemediationTaskStatus.REOPEN_REQUIRED
             for row in rows
         ),
     )
