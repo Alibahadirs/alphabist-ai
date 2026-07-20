@@ -46,6 +46,8 @@ def test_remediation_queue_csv_preserves_actions_and_priorities():
         priority_score=95,
         priority_level="Acil",
         task_category="Finansal + teknik",
+        workflow_status="Devam ediyor",
+        workflow_note="KAP raporu bekleniyor",
         recommended_action="Sermaye yeterliliğini doğrula",
         blockers=["Finansal güven düşük", "Teknik kayıt yok"],
     )
@@ -60,6 +62,8 @@ def test_remediation_queue_csv_preserves_actions_and_priorities():
     assert records[0]["Öncelik"] == "Acil"
     assert records[0]["Öncelik puanı"] == "95"
     assert records[0]["Görev türü"] == "Finansal + teknik"
+    assert records[0]["Görev durumu"] == "Devam ediyor"
+    assert records[0]["Çalışma notu"] == "KAP raporu bekleniyor"
     assert "Sermaye yeterliliğini" in records[0]["Yapılacak işlem"]
     assert records[0]["Karar engelleri"] == (
         "Finansal güven düşük | Teknik kayıt yok"

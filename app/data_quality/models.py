@@ -96,3 +96,7 @@ class RemediationQueueSummary(BaseModel):
     financial_task_count: int = Field(ge=0)
     technical_task_count: int = Field(ge=0)
     profile_counts: dict[str, int] = Field(default_factory=dict)
+    open_count: int = Field(ge=0)
+    in_progress_count: int = Field(ge=0)
+    completed_count: int = Field(ge=0)
+    dismissed_count: int = Field(ge=0)

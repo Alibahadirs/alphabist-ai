@@ -1877,8 +1877,33 @@ def render_data_quality() -> None:
                 remediation_queue.technical_task_count,
                 border=True,
             )
+        with st.container(horizontal=True):
+            st.metric(
+                "Açık görev",
+                remediation_queue.open_count,
+                border=True,
+            )
+            st.metric(
+                "Devam ediyor",
+                remediation_queue.in_progress_count,
+                border=True,
+            )
+            st.metric(
+                "Tamamlandı",
+                remediation_queue.completed_count,
+                border=True,
+            )
+            st.metric(
+                "Geçersiz",
+                remediation_queue.dismissed_count,
+                border=True,
+            )
 
-        queue_filter_left, queue_filter_right = st.columns(2)
+        (
+            queue_filter_left,
+            queue_filter_middle,
+            queue_filter_right,
+        ) = st.columns(3)
         with queue_filter_left:
             selected_priority_levels = st.multiselect(
                 "Görev önceliği",
@@ -1886,7 +1911,7 @@ def render_data_quality() -> None:
                 default=PRIORITY_LEVEL_OPTIONS[:-1],
                 key="quality_remediation_priorities",
             )
-        with queue_filter_right:
+        with queue_filter_middle:
             task_categories = [
                 "Finansal + teknik",
                 "Finansal",
@@ -1898,12 +1923,22 @@ def render_data_quality() -> None:
                 default=task_categories,
                 key="quality_remediation_categories",
             )
+        with queue_filter_right:
+            workflow_status_options = list(RemediationTaskStatus)
+            selected_workflow_statuses = st.multiselect(
+                "Görev durumu",
+                workflow_status_options,
+                default=workflow_status_options,
+                format_func=lambda status: status.value,
+                key="quality_remediation_workflow_statuses",
+            )
 
         filtered_remediation = [
             row
             for row in remediation_queue.rows
             if row.priority_level in selected_priority_levels
             and row.task_category in selected_task_categories
+            and row.workflow_status in selected_workflow_statuses
         ]
         if not filtered_remediation:
             st.info("Seçilen filtrelere uyan düzeltme görevi bulunmuyor.")
@@ -1917,6 +1952,9 @@ def render_data_quality() -> None:
                         "Öncelik": row.priority_level,
                         "Öncelik puanı": row.priority_score,
                         "Görev türü": row.task_category,
+                        "Görev durumu": row.workflow_status.value,
+                        "Çalışma notu": row.workflow_note or "-",
+                        "Son güncelleme": row.workflow_updated_at,
                         "Yapılacak işlem": row.recommended_action,
                         "Karar engelleri": (
                             " | ".join(row.blockers) or "Yok"
@@ -1933,6 +1971,10 @@ def render_data_quality() -> None:
                         min_value=0,
                         max_value=100,
                         format="%d",
+                    ),
+                    "Son güncelleme": st.column_config.DatetimeColumn(
+                        "Son güncelleme",
+                        format="DD.MM.YYYY HH:mm",
                     ),
                 },
             )
@@ -2002,6 +2044,30 @@ def render_data_quality() -> None:
                 )
                 st.success("Görev durumu ve notu kaydedildi.")
                 st.rerun()
+
+        if remediation_task_states:
+            with st.expander("Kaydedilmiş görev geçmişi"):
+                st.dataframe(
+                    [
+                        {
+                            "Hisse": state.symbol,
+                            "Görev türü": state.task_category,
+                            "Durum": state.status.value,
+                            "Not": state.note or "-",
+                            "Son güncelleme": state.updated_at,
+                        }
+                        for state in remediation_task_states.values()
+                    ],
+                    hide_index=True,
+                    width="stretch",
+                    column_config={
+                        "Hisse": st.column_config.TextColumn(pinned=True),
+                        "Son güncelleme": st.column_config.DatetimeColumn(
+                            "Son güncelleme",
+                            format="DD.MM.YYYY HH:mm",
+                        ),
+                    },
+                )
 
     default_refresh_symbols = select_technical_refresh_candidates(
         technical_quality

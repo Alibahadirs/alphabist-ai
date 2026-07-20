@@ -178,3 +178,6 @@ def test_remediation_queue_applies_persisted_workflow_state():
         RemediationTaskStatus.IN_PROGRESS
     )
     assert queue.rows[0].workflow_note == "Denetim raporu bekleniyor"
+    assert queue.in_progress_count == 1
+    assert queue.open_count == 0
+    assert queue.completed_count == 0

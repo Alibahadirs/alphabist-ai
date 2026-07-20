@@ -7,6 +7,7 @@ from app.data_quality.models import (
     RemediationQueueRow,
     RemediationQueueSummary,
     RemediationTaskState,
+    RemediationTaskStatus,
 )
 from app.scoring.models import FinancialMetrics
 from app.sector.profiles import CompanyProfile
@@ -152,4 +153,20 @@ def build_remediation_queue(
             for row in rows
         ),
         profile_counts=profile_counts,
+        open_count=sum(
+            row.workflow_status == RemediationTaskStatus.OPEN
+            for row in rows
+        ),
+        in_progress_count=sum(
+            row.workflow_status == RemediationTaskStatus.IN_PROGRESS
+            for row in rows
+        ),
+        completed_count=sum(
+            row.workflow_status == RemediationTaskStatus.COMPLETED
+            for row in rows
+        ),
+        dismissed_count=sum(
+            row.workflow_status == RemediationTaskStatus.DISMISSED
+            for row in rows
+        ),
     )

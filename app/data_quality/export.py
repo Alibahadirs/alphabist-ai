@@ -55,6 +55,9 @@ def build_remediation_queue_csv(
             "Öncelik",
             "Öncelik puanı",
             "Görev türü",
+            "Görev durumu",
+            "Çalışma notu",
+            "Son güncelleme",
             "Yapılacak işlem",
             "Karar engelleri",
         ],
@@ -69,6 +72,13 @@ def build_remediation_queue_csv(
                 "Öncelik": row.priority_level,
                 "Öncelik puanı": row.priority_score,
                 "Görev türü": row.task_category,
+                "Görev durumu": row.workflow_status.value,
+                "Çalışma notu": row.workflow_note,
+                "Son güncelleme": (
+                    row.workflow_updated_at.isoformat()
+                    if row.workflow_updated_at
+                    else ""
+                ),
                 "Yapılacak işlem": row.recommended_action,
                 "Karar engelleri": " | ".join(row.blockers),
             }
