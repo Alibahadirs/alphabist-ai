@@ -6,6 +6,7 @@ from app.ui.pages import (
     _audit_warning_confirmation_label,
     _format_metric_snapshot_value,
     _format_turkish_amount,
+    _market_data_disclosure,
     _pdf_source_fields,
     _subjective_score_confirmation_error,
     _validation_warning_confirmation_error,
@@ -86,3 +87,27 @@ def test_warning_confirmation_filter_contains_every_status():
     assert set(WARNING_CONFIRMATION_OPTIONS) == {
         status.value for status in WarningConfirmationStatus
     }
+
+
+def test_market_data_disclosure_never_calls_delayed_data_live():
+    primary = _market_data_disclosure(
+        {
+            "data_mode": "delayed",
+            "official": False,
+            "fallback_used": False,
+        }
+    )
+    fallback = _market_data_disclosure(
+        {
+            "data_mode": "delayed",
+            "official": False,
+            "fallback_used": True,
+        }
+    )
+
+    assert primary == (
+        "Gecikmeli veri | Resmi BIST kaynağı değil | Birincil sağlayıcı"
+    )
+    assert fallback.endswith("Yedek sağlayıcı kullanıldı")
+    assert "Canlı" not in primary
+    assert "Canlı" not in fallback

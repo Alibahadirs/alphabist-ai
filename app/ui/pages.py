@@ -333,6 +333,25 @@ def _quote_date(quote: dict) -> date | None:
     return date.fromisoformat(str(value)) if value else None
 
 
+def _market_data_disclosure(quote: dict) -> str:
+    mode = (
+        "Gecikmeli veri"
+        if quote.get("data_mode") == "delayed"
+        else "Veri modu bilinmiyor"
+    )
+    official = (
+        "Resmi kaynak"
+        if quote.get("official") is True
+        else "Resmi BIST kaynağı değil"
+    )
+    fallback = (
+        "Yedek sağlayıcı kullanıldı"
+        if quote.get("fallback_used") is True
+        else "Birincil sağlayıcı"
+    )
+    return f"{mode} | {official} | {fallback}"
+
+
 def _score_table(score: ScoreBreakdown) -> pd.DataFrame:
     profile = CompanyProfile(score.company_profile)
     rows = []
@@ -1644,11 +1663,22 @@ def render_dashboard() -> None:
             )
         st.caption(
             f"Kaynak: {quote.get('source') or 'Bilinmiyor'} | "
+            f"{_market_data_disclosure(quote)} | "
             "Fiyat tarihi: "
             f"{quote_date.strftime('%d.%m.%Y') if quote_date else '-'} | "
             f"Durum: {quote_freshness.status} | "
             f"Fiyat-grafik kontrolü: {market_alignment.status}"
         )
+        if quote.get("fallback_used") is True:
+            st.warning(
+                "Yahoo Finance doğrudan bağlantısı başarısız olduğu için "
+                "gecikmeli borsa-api yedek kaynağı kullanıldı."
+            )
+        if quote.get("percent_corrected") is True:
+            st.info(
+                "Sağlayıcının değişim yüzdesi tutarsızdı; oran son fiyat ve "
+                "önceki kapanıştan yeniden hesaplandı."
+            )
         if not market_data_ready and not confidence.decision_ready:
             st.warning(
                 "Finansal analiz ve teknik piyasa verisi doğrulanmadan "
