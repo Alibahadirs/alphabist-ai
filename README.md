@@ -102,6 +102,11 @@ yerel Streamlit uygulaması.
 - Şirket, önem, trend, sektör, minimum öncelik ve karar kilidi filtreleri
 - Filtrelenmiş toplu trend listesini UTF-8 CSV olarak dışa aktarma
 - Sol menüde kritik ve zayıflayan şirketleri gösteren bağımsız Rapor Trendleri ekranı
+- Trend uyarıları için şirket bazında kararlı görev kimliği ve içeriğe duyarlı SHA-256 sorun parmak izi
+- Açık, inceleniyor, çözüldü ve geçersiz trend inceleme durumlarını SQLite'ta saklama
+- Kapanmış veya incelenen görevin dayanağı değiştiğinde otomatik Yeniden açılmalı durumu
+- İnceleme durumu, not, yeniden açma bilgisi ve sorun kimliğini filtre ve CSV raporuna taşıma
+- Rapor Trendleri ekranından seçilen şirket için kalıcı durum ve inceleme notu yönetimi
 - PDF kaynak tutarlarını düzeltme ve oranları anında yeniden hesaplama
 - Her analiz için ham finansal tutar anlık görüntüsü ve hesap izi
 - Dönem bazlı gösterge değeri, birim ve kaynak anlık görüntüsü

@@ -1,5 +1,16 @@
 # Değişiklik günlüğü
 
+## 1.7.0 - 2026-07-21
+
+### Rapor trendi inceleme iş akışı
+
+- Her şirket trendi için kararlı görev kimliği ve güncel rapor/uyarı içeriğine bağlı SHA-256 sorun parmak izi eklendi.
+- Açık, inceleniyor, çözüldü ve geçersiz inceleme durumları ile kullanıcı notları SQLite'ta kalıcı hale getirildi.
+- Çözülmüş, geçersiz veya incelenen görevin sorun parmak izi değiştiğinde durum otomatik Yeniden açılmalı yapıldı.
+- İnceleme durumu, not, yeniden açma bilgisi ve sorun parmak izi filtrelenmiş CSV raporuna eklendi.
+- Rapor Trendleri ekranına yeniden açılmalı sayacı, durum filtresi ve görev durum/not güncelleme formu eklendi.
+- Çözüldü veya geçersiz durumlarında açıklayıcı kullanıcı notu zorunlu hale getirildi.
+
 ## 1.6.0 - 2026-07-21
 
 ### Toplu rapor trend izleme merkezi
