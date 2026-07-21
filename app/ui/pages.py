@@ -94,6 +94,7 @@ from app.data_quality.remediation import (
     verify_remediation_event_chain,
 )
 from app.market_data.provider import get_history, get_quote
+from app.market_data.readiness import assess_quote_readiness
 from app.market_data.diagnostics import (
     MarketDiagnostic,
     diagnose_market_data,
@@ -1604,22 +1605,16 @@ def render_dashboard() -> None:
         with st.spinner("Piyasa verisi ve teknik göstergeler hesaplanıyor..."):
             quote, history = _load_market_data(symbol)
             quote_date = _quote_date(quote)
-            quote_freshness = assess_price_freshness(quote_date)
-            market_alignment = validate_quote_history_alignment(
+            quote_readiness = assess_quote_readiness(
                 quote,
                 history,
             )
+            quote_freshness = quote_readiness.freshness
+            market_alignment = quote_readiness.alignment
+            if market_alignment is None:
+                raise ValueError("Fiyat-grafik uyum kontrolü oluşturulamadı.")
             technical_source = str(quote.get("source") or "").strip()
-            technical_source_ready = technical_source.casefold() not in {
-                "",
-                "bilinmiyor",
-                "unknown",
-            }
-            market_data_ready = (
-                quote_freshness.current
-                and market_alignment.valid
-                and technical_source_ready
-            )
+            market_data_ready = quote_readiness.ready
             technical_score = calculate_technical_score(history)
             if market_data_ready and quote_date is not None:
                 add_technical_score_history(
@@ -1692,6 +1687,11 @@ def render_dashboard() -> None:
             st.info(
                 "Sağlayıcının değişim yüzdesi tutarsızdı; oran son fiyat ve "
                 "önceki kapanıştan yeniden hesaplandı."
+            )
+        if not quote_readiness.source_eligible:
+            st.error(
+                "Piyasa veri kaynağı karar hesaplarına uygun değil: "
+                f"{quote_readiness.status}"
             )
         if not market_data_ready and not confidence.decision_ready:
             st.warning(
