@@ -4414,22 +4414,17 @@ def render_comparison() -> None:
             for symbol in selected_symbols:
                 try:
                     quote, history = _load_market_data(symbol)
-                    freshness = assess_price_freshness(
-                        _quote_date(quote)
-                    )
-                    alignment = validate_quote_history_alignment(
+                    readiness = assess_quote_readiness(
                         quote,
                         history,
                     )
-                    if freshness.current and alignment.valid:
+                    if readiness.ready:
                         technical_scores[symbol] = (
                             calculate_technical_score(history)
                         )
                         market_data_statuses[symbol] = "Doğrulandı"
                     else:
-                        market_data_statuses[symbol] = (
-                            f"{freshness.status}; {alignment.status}"
-                        )
+                        market_data_statuses[symbol] = readiness.status
                 except Exception:
                     failed_symbols.append(symbol)
                     market_data_statuses[symbol] = "Veri alınamadı"
@@ -4620,16 +4615,16 @@ def render_watchlist() -> None:
         for row in summary.rows:
             try:
                 quote = _load_quote(row.symbol)
-                freshness = assess_price_freshness(_quote_date(quote))
-                watchlist_quotes[row.symbol] = (quote, freshness)
+                readiness = assess_quote_readiness(quote)
+                watchlist_quotes[row.symbol] = (quote, readiness)
             except Exception:
                 watchlist_quotes[row.symbol] = (
                     None,
-                    assess_price_freshness(None),
+                    assess_quote_readiness({}),
                 )
     current_quote_count = sum(
-        freshness.current
-        for _, freshness in watchlist_quotes.values()
+        readiness.ready
+        for _, readiness in watchlist_quotes.values()
     )
 
     with st.container(horizontal=True):
@@ -4823,16 +4818,25 @@ def render_portfolio() -> None:
         for position in positions:
             try:
                 quote = _load_quote(position.symbol)
+                readiness = assess_quote_readiness(quote)
                 quote_date = (
                     date.fromisoformat(str(quote["as_of_date"]))
                     if quote.get("as_of_date")
                     else None
                 )
-                prices[position.symbol] = PortfolioMarketPrice(
-                    value=float(quote["last"]),
-                    as_of_date=quote_date,
-                    source=str(quote.get("source") or ""),
-                )
+                if readiness.ready:
+                    prices[position.symbol] = PortfolioMarketPrice(
+                        value=float(quote["last"]),
+                        as_of_date=quote_date,
+                        source=str(quote.get("source") or ""),
+                    )
+                else:
+                    prices[position.symbol] = PortfolioMarketPrice(
+                        value=None,
+                        as_of_date=quote_date,
+                        source=str(quote.get("source") or ""),
+                    )
+                    failed_symbols.append(position.symbol)
             except Exception:
                 prices[position.symbol] = PortfolioMarketPrice(value=None)
                 failed_symbols.append(position.symbol)
@@ -4853,7 +4857,8 @@ def render_portfolio() -> None:
     )
     if failed_symbols:
         st.warning(
-            "Fiyat alınamayan hisselerde güncel değer yerine maliyet kullanıldı: "
+            "Karara uygun fiyat bulunamayan hisselerde güncel değer yerine "
+            "maliyet kullanıldı: "
             + ", ".join(failed_symbols)
         )
     stale_symbols = [
