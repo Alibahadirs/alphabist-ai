@@ -1,5 +1,18 @@
 # Değişiklik günlüğü
 
+## 1.12.0 - 2026-07-21
+
+### Toplu piyasa veri sağlığı
+
+- En fazla 20 kayıtlı şirketi tek işlemde denetleyen güvenli toplu piyasa kontrolü eklendi.
+- Hisse kodları temizlenip tekilleştirildi; bir sağlayıcı hatasının tüm toplu işlemi durdurması engellendi.
+- Toplu kontrol kayıtları parmak izi doğrulamasından sonra tek SQLite transaction'ında kaydedildi.
+- Aynı piyasa anlık görüntüsünün tekrar kaydedilmesi `INSERT OR IGNORE` ile engellendi.
+- Her şirketin son kaydı doğrulandı, kısmi, veri yok, eski veya bütünlük hatası olarak sınıflandırıldı.
+- Sorunlu şirketleri önceleyen toplu piyasa sağlığı tablosu ve KPI'ları eklendi.
+- Toplu sonuçlar ve son sağlık özeti UTF-8 CSV olarak dışa aktarılabilir hale getirildi.
+- Ağ çağrıları yalnız kullanıcı toplu kontrol formunu gönderdiğinde çalışacak şekilde sınırlandı.
+
 ## 1.11.0 - 2026-07-21
 
 ### Uygulama genelinde piyasa verisi karar kapısı

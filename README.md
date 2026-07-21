@@ -16,6 +16,9 @@ yerel Streamlit uygulaması.
 - Fiyat, tarih ve günlük değişimi karşılaştıran piyasa veri kontrolü ekranı
 - Piyasa kontrolleri için SHA-256 korumalı ve yinelenmeyen SQLite geçmişi
 - Çapraz doğrulama oranı, ardışık sorunlar ve CSV kontrol geçmişi
+- En fazla 20 kayıtlı şirket için kullanıcı kontrollü toplu piyasa denetimi
+- Son kaydı eski, kısmi, eksik veya bütünlüğü bozuk şirketleri önceleyen sağlık özeti
+- Tek transaction ile yinelenmeyen toplu piyasa geçmişi ve UTF-8 sağlık CSV'si
 - Kaynak politikası, güncellik ve fiyat-grafik uyumunu birleştiren merkezi karar kapısı
 - Teknik puan, karşılaştırma, takip listesi ve portföyde ortak piyasa veri denetimi
 - Temel ve teknik puanı birleştiren AI puanı
