@@ -1,5 +1,6 @@
 import json
 import sqlite3
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
@@ -32,6 +33,12 @@ from app.watchlist.models import WatchlistEntry
 from app.sector.profiles import CompanyProfile, detect_company_profile
 
 DB_PATH = Path(__file__).resolve().parents[2] / 'data' / 'alphabist.db'
+
+
+@dataclass(frozen=True)
+class MarketSnapshotSaveSummary:
+    inserted: int
+    skipped: int
 
 def connect():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -491,48 +498,36 @@ def list_technical_score_history(
 def add_market_diagnostic_snapshot(
     snapshot: MarketDiagnosticSnapshot,
 ) -> bool:
-    expected_fingerprint = market_snapshot_fingerprint(snapshot)
-    if snapshot.fingerprint != expected_fingerprint:
-        raise ValueError("Piyasa kontrolü parmak izi geçersiz.")
+    result = add_market_diagnostic_snapshots([snapshot])
+    return result.inserted == 1
+
+
+def add_market_diagnostic_snapshots(
+    snapshots: list[MarketDiagnosticSnapshot],
+) -> MarketSnapshotSaveSummary:
+    for snapshot in snapshots:
+        expected_fingerprint = market_snapshot_fingerprint(snapshot)
+        if snapshot.fingerprint != expected_fingerprint:
+            raise ValueError("Piyasa kontrolü parmak izi geçersiz.")
+
+    inserted = 0
     with connect() as conn:
-        existing = conn.execute(
-            """SELECT id FROM market_diagnostic_history
-            WHERE fingerprint=?""",
-            (snapshot.fingerprint,),
-        ).fetchone()
-        if existing is not None:
-            return False
-        conn.execute(
-            """INSERT INTO market_diagnostic_history(
-            symbol, primary_available, secondary_available,
-            primary_eligible, secondary_eligible, primary_price,
-            secondary_price, primary_date, secondary_date,
-            price_difference_percent, change_difference_points,
-            date_gap_days, cross_verified, status, fingerprint)
-            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (
-                snapshot.symbol.strip().upper(),
-                int(snapshot.primary_available),
-                int(snapshot.secondary_available),
-                int(snapshot.primary_eligible),
-                int(snapshot.secondary_eligible),
-                snapshot.primary_price,
-                snapshot.secondary_price,
-                snapshot.primary_date.isoformat()
-                if snapshot.primary_date
-                else None,
-                snapshot.secondary_date.isoformat()
-                if snapshot.secondary_date
-                else None,
-                snapshot.price_difference_percent,
-                snapshot.change_difference_points,
-                snapshot.date_gap_days,
-                int(snapshot.cross_verified),
-                snapshot.status,
-                snapshot.fingerprint,
-            ),
-        )
-    return True
+        for snapshot in snapshots:
+            cursor = conn.execute(
+                """INSERT OR IGNORE INTO market_diagnostic_history(
+                symbol, primary_available, secondary_available,
+                primary_eligible, secondary_eligible, primary_price,
+                secondary_price, primary_date, secondary_date,
+                price_difference_percent, change_difference_points,
+                date_gap_days, cross_verified, status, fingerprint)
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                _market_snapshot_values(snapshot),
+            )
+            inserted += max(cursor.rowcount, 0)
+    return MarketSnapshotSaveSummary(
+        inserted=inserted,
+        skipped=len(snapshots) - inserted,
+    )
 
 
 def list_market_diagnostic_snapshots(
@@ -553,19 +548,81 @@ def list_market_diagnostic_snapshots(
             LIMIT ?""",
             (symbol.strip().upper(), safe_limit),
         ).fetchall()
-    snapshots = []
-    for row in reversed(rows):
-        values = dict(row)
-        for field in (
-            "primary_available",
-            "secondary_available",
-            "primary_eligible",
-            "secondary_eligible",
-            "cross_verified",
-        ):
-            values[field] = bool(values[field])
-        snapshots.append(MarketDiagnosticSnapshot(**values))
-    return snapshots
+    return [_market_snapshot_from_row(row) for row in reversed(rows)]
+
+
+def list_latest_market_diagnostic_snapshots(
+    symbols: list[str] | None = None,
+) -> list[MarketDiagnosticSnapshot]:
+    normalized = sorted(
+        {symbol.strip().upper() for symbol in (symbols or []) if symbol.strip()}
+    )
+    where_clause = ""
+    parameters: tuple[object, ...] = ()
+    if normalized:
+        placeholders = ",".join("?" for _ in normalized)
+        where_clause = f"WHERE symbol IN ({placeholders})"
+        parameters = tuple(normalized)
+
+    with connect() as conn:
+        rows = conn.execute(
+            f"""SELECT history.id, history.symbol,
+            history.primary_available, history.secondary_available,
+            history.primary_eligible, history.secondary_eligible,
+            history.primary_price, history.secondary_price,
+            history.primary_date, history.secondary_date,
+            history.price_difference_percent,
+            history.change_difference_points, history.date_gap_days,
+            history.cross_verified, history.status, history.fingerprint,
+            history.created_at
+            FROM market_diagnostic_history AS history
+            INNER JOIN (
+                SELECT symbol, MAX(id) AS latest_id
+                FROM market_diagnostic_history
+                {where_clause}
+                GROUP BY symbol
+            ) AS latest ON latest.latest_id = history.id
+            ORDER BY history.symbol""",
+            parameters,
+        ).fetchall()
+    return [_market_snapshot_from_row(row) for row in rows]
+
+
+def _market_snapshot_values(
+    snapshot: MarketDiagnosticSnapshot,
+) -> tuple[object, ...]:
+    return (
+        snapshot.symbol.strip().upper(),
+        int(snapshot.primary_available),
+        int(snapshot.secondary_available),
+        int(snapshot.primary_eligible),
+        int(snapshot.secondary_eligible),
+        snapshot.primary_price,
+        snapshot.secondary_price,
+        snapshot.primary_date.isoformat() if snapshot.primary_date else None,
+        snapshot.secondary_date.isoformat() if snapshot.secondary_date else None,
+        snapshot.price_difference_percent,
+        snapshot.change_difference_points,
+        snapshot.date_gap_days,
+        int(snapshot.cross_verified),
+        snapshot.status,
+        snapshot.fingerprint,
+    )
+
+
+def _market_snapshot_from_row(
+    row: sqlite3.Row,
+) -> MarketDiagnosticSnapshot:
+    values = dict(row)
+    for field in (
+        "primary_available",
+        "secondary_available",
+        "primary_eligible",
+        "secondary_eligible",
+        "cross_verified",
+    ):
+        values[field] = bool(values[field])
+    return MarketDiagnosticSnapshot(**values)
 
 
 def add_company_data_audit(audit: CompanyDataAudit) -> None:
