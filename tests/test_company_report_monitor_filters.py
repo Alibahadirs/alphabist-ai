@@ -6,9 +6,14 @@ from app.reporting.models import (
     CompanyReportTrendMonitor,
     CompanyReportTrendMonitorFilters,
     CompanyReportTrendMonitorRow,
+    CompanyReportTrendReviewState,
     ReportTrendAlertSeverity,
+    ReportTrendReviewStatus,
 )
-from app.reporting.monitor import filter_company_report_trend_monitor
+from app.reporting.monitor import (
+    apply_report_trend_review_states,
+    filter_company_report_trend_monitor,
+)
 from app.reporting.monitor_export import (
     serialize_company_report_trend_monitor_csv,
 )
@@ -97,3 +102,42 @@ def test_company_report_monitor_csv_exports_filtered_rows():
     assert len(rows) == 1
     assert rows[0]["Hisse"] == "AAA"
     assert rows[0]["Önem"] == "Uyarı"
+
+
+def test_company_report_monitor_reopens_changed_closed_issue():
+    monitor = _monitor()
+    state = CompanyReportTrendReviewState(
+        task_id="report-trend:AAA",
+        symbol="AAA",
+        status=ReportTrendReviewStatus.RESOLVED,
+        note="Önceki sorun çözüldü",
+        issue_fingerprint="f" * 64,
+    )
+
+    enriched = apply_report_trend_review_states(monitor, [state])
+    row = next(row for row in enriched.rows if row.symbol == "AAA")
+
+    assert row.review_status == ReportTrendReviewStatus.REOPEN_REQUIRED
+    assert row.review_needs_reopen is True
+    assert enriched.reopen_required_count == 1
+
+
+def test_company_report_monitor_filters_review_status():
+    state = CompanyReportTrendReviewState(
+        task_id="report-trend:AAA",
+        symbol="AAA",
+        status=ReportTrendReviewStatus.IN_REVIEW,
+        note="İnceleniyor",
+        issue_fingerprint="a" * 64,
+    )
+    enriched = apply_report_trend_review_states(_monitor(), [state])
+
+    filtered = filter_company_report_trend_monitor(
+        enriched,
+        CompanyReportTrendMonitorFilters(
+            review_statuses=[ReportTrendReviewStatus.IN_REVIEW]
+        ),
+    )
+
+    assert filtered.company_count == 1
+    assert filtered.rows[0].symbol == "AAA"

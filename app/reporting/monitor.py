@@ -6,8 +6,10 @@ from app.reporting.models import (
     CompanyReportTrendMonitor,
     CompanyReportTrendMonitorFilters,
     CompanyReportTrendMonitorRow,
+    CompanyReportTrendReviewState,
     CompanyReportTrendSummary,
     ReportTrendAlertSeverity,
+    ReportTrendReviewStatus,
 )
 from app.reporting.trend import build_company_report_trend
 
@@ -165,6 +167,10 @@ def filter_company_report_trend_monitor(
             not filters.company_profiles
             or row.company_profile in filters.company_profiles
         )
+        and (
+            not filters.review_statuses
+            or row.review_status in filters.review_statuses
+        )
         and row.priority_score >= filters.minimum_priority
         and (not filters.decision_blocked_only or not row.decision_ready)
     ]
@@ -182,4 +188,51 @@ def filter_company_report_trend_monitor(
         weakening_count=sum(
             row.trend_label == "Zayıflıyor" for row in rows
         ),
+        reopen_required_count=sum(
+            row.review_needs_reopen for row in rows
+        ),
+    )
+
+
+def apply_report_trend_review_states(
+    monitor: CompanyReportTrendMonitor,
+    states: list[CompanyReportTrendReviewState],
+) -> CompanyReportTrendMonitor:
+    states_by_task = {state.task_id: state for state in states}
+    rows: list[CompanyReportTrendMonitorRow] = []
+    for row in monitor.rows:
+        state = states_by_task.get(row.task_id)
+        if state is None:
+            rows.append(row)
+            continue
+        issue_changed = state.issue_fingerprint != row.issue_fingerprint
+        needs_reopen = bool(
+            issue_changed
+            and state.status
+            in {
+                ReportTrendReviewStatus.IN_REVIEW,
+                ReportTrendReviewStatus.RESOLVED,
+                ReportTrendReviewStatus.DISMISSED,
+            }
+        )
+        rows.append(
+            row.model_copy(
+                update={
+                    "review_status": (
+                        ReportTrendReviewStatus.REOPEN_REQUIRED
+                        if needs_reopen
+                        else state.status
+                    ),
+                    "review_note": state.note,
+                    "review_needs_reopen": needs_reopen,
+                }
+            )
+        )
+    return monitor.model_copy(
+        update={
+            "rows": rows,
+            "reopen_required_count": sum(
+                row.review_needs_reopen for row in rows
+            ),
+        }
     )

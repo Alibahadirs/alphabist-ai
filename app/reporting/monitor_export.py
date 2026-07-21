@@ -25,6 +25,10 @@ def serialize_company_report_trend_monitor_csv(
         "Uyarı sayısı",
         "Öncelik puanı",
         "Öncelikli uyarı",
+        "İnceleme durumu",
+        "İnceleme notu",
+        "Yeniden açılmalı",
+        "Sorun parmak izi",
     ]
     writer = csv.DictWriter(output, fieldnames=fieldnames)
     writer.writeheader()
@@ -54,6 +58,12 @@ def serialize_company_report_trend_monitor_csv(
                 "Uyarı sayısı": row.alert_count,
                 "Öncelik puanı": row.priority_score,
                 "Öncelikli uyarı": row.primary_alert,
+                "İnceleme durumu": row.review_status.value,
+                "İnceleme notu": row.review_note,
+                "Yeniden açılmalı": (
+                    "Evet" if row.review_needs_reopen else "Hayır"
+                ),
+                "Sorun parmak izi": row.issue_fingerprint,
             }
         )
     return output.getvalue().encode("utf-8-sig")

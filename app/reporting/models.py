@@ -156,6 +156,14 @@ class CompanyReportTrendSummary(BaseModel):
     alerts: list[CompanyReportTrendAlert] = Field(default_factory=list)
 
 
+class ReportTrendReviewStatus(str, Enum):
+    OPEN = "Açık"
+    IN_REVIEW = "İnceleniyor"
+    RESOLVED = "Çözüldü"
+    DISMISSED = "Geçersiz"
+    REOPEN_REQUIRED = "Yeniden açılmalı"
+
+
 class CompanyReportTrendMonitorRow(BaseModel):
     task_id: str
     issue_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -174,6 +182,9 @@ class CompanyReportTrendMonitorRow(BaseModel):
     alert_count: int = Field(ge=0)
     primary_alert: str
     priority_score: float = Field(ge=0, le=100)
+    review_status: ReportTrendReviewStatus = ReportTrendReviewStatus.OPEN
+    review_note: str = ""
+    review_needs_reopen: bool = False
 
 
 class CompanyReportTrendMonitor(BaseModel):
@@ -182,6 +193,7 @@ class CompanyReportTrendMonitor(BaseModel):
     critical_count: int = Field(ge=0)
     warning_count: int = Field(ge=0)
     weakening_count: int = Field(ge=0)
+    reopen_required_count: int = Field(default=0, ge=0)
 
 
 class CompanyReportTrendMonitorFilters(BaseModel):
@@ -189,16 +201,11 @@ class CompanyReportTrendMonitorFilters(BaseModel):
     severities: list[ReportTrendAlertSeverity] = Field(default_factory=list)
     trend_labels: list[str] = Field(default_factory=list)
     company_profiles: list[CompanyProfile] = Field(default_factory=list)
+    review_statuses: list[ReportTrendReviewStatus] = Field(
+        default_factory=list
+    )
     minimum_priority: float = Field(default=0, ge=0, le=100)
     decision_blocked_only: bool = False
-
-
-class ReportTrendReviewStatus(str, Enum):
-    OPEN = "Açık"
-    IN_REVIEW = "İnceleniyor"
-    RESOLVED = "Çözüldü"
-    DISMISSED = "Geçersiz"
-    REOPEN_REQUIRED = "Yeniden açılmalı"
 
 
 class CompanyReportTrendReviewState(BaseModel):
