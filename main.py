@@ -11,6 +11,7 @@ from app.ui.pages import (
     render_data_backup,
     render_pdf_analysis,
     render_portfolio,
+    render_report_trends,
     render_scanner,
     render_watchlist,
 )
@@ -33,6 +34,7 @@ page = st.sidebar.radio(
     [
         "Genel bakış",
         "Veri kalite merkezi",
+        "Rapor trendleri",
         "Hisse tarayıcı",
         "Şirket karşılaştırma",
         "Takip listesi",
@@ -48,6 +50,8 @@ if page == "Genel bakış":
     render_dashboard()
 elif page == "Veri kalite merkezi":
     render_data_quality()
+elif page == "Rapor trendleri":
+    render_report_trends()
 elif page == "Hisse tarayıcı":
     render_scanner()
 elif page == "Şirket karşılaştırma":

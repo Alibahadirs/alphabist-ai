@@ -41,6 +41,7 @@ from app.database.repository import (
     list_companies,
     list_company_data_audits,
     list_company_report_snapshots,
+    list_company_report_snapshots_by_symbol,
     list_document_usages,
     list_latest_company_data_audits,
     list_portfolio_positions,
@@ -113,7 +114,9 @@ from app.portfolio.service import build_portfolio_summary
 from app.reporting.models import (
     REPORT_FRESHNESS_LABELS,
     CompanyInvestmentReport,
+    CompanyReportTrendMonitorFilters,
     ReportFreshnessStatus,
+    ReportTrendAlertSeverity,
 )
 from app.reporting.company_report import (
     build_company_investment_report,
@@ -131,7 +134,13 @@ from app.reporting.exchange import (
 from app.reporting.importer import (
     import_company_report_exchange_package,
 )
-from app.reporting.models import ReportTrendAlertSeverity
+from app.reporting.monitor import (
+    build_company_report_trend_monitor,
+    filter_company_report_trend_monitor,
+)
+from app.reporting.monitor_export import (
+    serialize_company_report_trend_monitor_csv,
+)
 from app.reporting.trend import build_company_report_trend
 from app.reporting.trend_export import (
     serialize_company_report_trend_csv,
@@ -1950,6 +1959,175 @@ def _render_quality_correction_form() -> None:
     st.success(
         f"{corrected.symbol} doğrulandı ve kaydedildi. Veri yeterliliği "
         f"%{validation.completeness:.1f}, Alpha Score {score.total:.1f}/100."
+    )
+
+
+def render_report_trends() -> None:
+    st.title("Rapor trendleri")
+    st.caption(
+        "Kaydedilmiş şirket raporlarını karşılaştırılabilirlik, trend ve "
+        "karar güvenliği açısından toplu izleyin."
+    )
+
+    snapshots_by_symbol = list_company_report_snapshots_by_symbol(20)
+    if not snapshots_by_symbol:
+        st.info(
+            "Trend izlemek için şirket detay ekranından en az bir rapor "
+            "anlık görüntüsü kaydedin."
+        )
+        return
+
+    reports_by_symbol: dict[str, list[CompanyInvestmentReport]] = {}
+    invalid_snapshot_count = 0
+    for symbol, snapshots in snapshots_by_symbol.items():
+        reports = []
+        for snapshot in snapshots:
+            try:
+                reports.append(
+                    CompanyInvestmentReport.model_validate(
+                        snapshot.report_payload
+                    )
+                )
+            except ValidationError:
+                invalid_snapshot_count += 1
+        if reports:
+            reports_by_symbol[symbol] = reports
+
+    if invalid_snapshot_count:
+        st.warning(
+            f"Şeması geçersiz {invalid_snapshot_count} eski rapor kaydı "
+            "izleme dışında bırakıldı."
+        )
+    if not reports_by_symbol:
+        st.error("İzlenebilir geçerli şirket raporu bulunmuyor.")
+        return
+
+    monitor = build_company_report_trend_monitor(reports_by_symbol)
+    with st.container(horizontal=True):
+        st.metric("İzlenen şirket", monitor.company_count, border=True)
+        st.metric("Kritik", monitor.critical_count, border=True)
+        st.metric("Uyarı", monitor.warning_count, border=True)
+        st.metric("Zayıflıyor", monitor.weakening_count, border=True)
+
+    available_severities = sorted(
+        {row.alert_severity for row in monitor.rows},
+        key=lambda severity: severity.value,
+    )
+    available_trends = sorted({row.trend_label for row in monitor.rows})
+    available_profiles = sorted(
+        {row.company_profile for row in monitor.rows},
+        key=lambda profile: PROFILE_LABELS[profile],
+    )
+    with st.expander("Filtreler", expanded=True):
+        search = st.text_input(
+            "Şirket ara",
+            placeholder="Hisse kodu veya şirket adı",
+            key="report_trend_monitor_search",
+        )
+        filter_left, filter_middle, filter_right = st.columns(3)
+        with filter_left:
+            severities = st.multiselect(
+                "Önem seviyesi",
+                available_severities,
+                format_func=lambda severity: severity.value,
+                key="report_trend_monitor_severity",
+            )
+            minimum_priority = st.slider(
+                "Minimum öncelik",
+                min_value=0,
+                max_value=100,
+                value=0,
+                key="report_trend_monitor_priority",
+            )
+        with filter_middle:
+            trend_labels = st.multiselect(
+                "Trend",
+                available_trends,
+                key="report_trend_monitor_trend",
+            )
+            decision_blocked_only = st.toggle(
+                "Yalnız karar kilitli",
+                value=False,
+                key="report_trend_monitor_decision_blocked",
+            )
+        with filter_right:
+            company_profiles = st.multiselect(
+                "Sektör profili",
+                available_profiles,
+                format_func=lambda profile: PROFILE_LABELS[profile],
+                key="report_trend_monitor_profile",
+            )
+
+    filtered = filter_company_report_trend_monitor(
+        monitor,
+        CompanyReportTrendMonitorFilters(
+            search=search,
+            severities=severities,
+            trend_labels=trend_labels,
+            company_profiles=company_profiles,
+            minimum_priority=minimum_priority,
+            decision_blocked_only=decision_blocked_only,
+        ),
+    )
+    st.caption(
+        f"{monitor.company_count} şirketten {filtered.company_count} tanesi "
+        "gösteriliyor."
+    )
+    if not filtered.rows:
+        st.info("Seçilen filtrelerle eşleşen rapor trendi bulunmuyor.")
+        return
+
+    rows = [
+        {
+            "Hisse": row.symbol,
+            "Şirket": row.company_name,
+            "Profil": PROFILE_LABELS[row.company_profile],
+            "Rapor": row.report_count,
+            "Finansal dönem": row.latest_report_period_end,
+            "Alpha Score": row.latest_alpha_score,
+            "Alpha değişimi": row.alpha_delta,
+            "Birleşik değişim": row.combined_delta,
+            "Trend": row.trend_label,
+            "Karara hazır": row.decision_ready,
+            "Önem": row.alert_severity.value,
+            "Öncelik": row.priority_score,
+            "Öncelikli uyarı": row.primary_alert,
+        }
+        for row in filtered.rows
+    ]
+    st.dataframe(
+        pd.DataFrame(rows),
+        hide_index=True,
+        width="stretch",
+        column_config={
+            "Hisse": st.column_config.TextColumn(pinned=True),
+            "Finansal dönem": st.column_config.DateColumn(
+                format="DD.MM.YYYY"
+            ),
+            "Alpha Score": st.column_config.ProgressColumn(
+                min_value=0,
+                max_value=100,
+                format="%.1f",
+            ),
+            "Alpha değişimi": st.column_config.NumberColumn(format="%+.1f"),
+            "Birleşik değişim": st.column_config.NumberColumn(format="%+.1f"),
+            "Karara hazır": st.column_config.CheckboxColumn(),
+            "Öncelik": st.column_config.ProgressColumn(
+                min_value=0,
+                max_value=100,
+                format="%.1f",
+            ),
+        },
+    )
+    st.download_button(
+        "Filtrelenmiş trend listesini indir",
+        data=serialize_company_report_trend_monitor_csv(filtered),
+        file_name=f"alphabist_rapor_trendleri_{date.today():%Y%m%d}.csv",
+        mime="text/csv",
+        icon=":material/download:",
+        on_click="ignore",
+        width="content",
+        key="report_trend_monitor_download",
     )
 
 
