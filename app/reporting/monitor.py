@@ -1,8 +1,12 @@
+import hashlib
+import json
+
 from app.reporting.models import (
     CompanyInvestmentReport,
     CompanyReportTrendMonitor,
     CompanyReportTrendMonitorFilters,
     CompanyReportTrendMonitorRow,
+    CompanyReportTrendSummary,
     ReportTrendAlertSeverity,
 )
 from app.reporting.trend import build_company_report_trend
@@ -13,6 +17,37 @@ _SEVERITY_RANK = {
     ReportTrendAlertSeverity.WARNING: 1,
     ReportTrendAlertSeverity.CRITICAL: 2,
 }
+
+
+def report_trend_task_id(symbol: str) -> str:
+    return f"report-trend:{symbol.upper().strip()}"
+
+
+def report_trend_issue_fingerprint(
+    trend: CompanyReportTrendSummary,
+) -> str:
+    payload = {
+        "symbol": trend.symbol.upper().strip(),
+        "latest_fingerprint": trend.latest_fingerprint,
+        "trend_label": trend.trend_label,
+        "alpha_delta": trend.alpha_delta,
+        "combined_delta": trend.combined_delta,
+        "alerts": [
+            {
+                "code": alert.code,
+                "severity": alert.severity.value,
+                "message": alert.message,
+            }
+            for alert in trend.alerts
+        ],
+    }
+    canonical = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _priority_score(
@@ -59,6 +94,8 @@ def build_company_report_trend_monitor(
         )
         rows.append(
             CompanyReportTrendMonitorRow(
+                task_id=report_trend_task_id(latest.symbol),
+                issue_fingerprint=report_trend_issue_fingerprint(trend),
                 symbol=latest.symbol,
                 company_name=latest.company_name,
                 company_profile=latest.company_profile,

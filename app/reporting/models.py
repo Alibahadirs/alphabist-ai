@@ -157,6 +157,8 @@ class CompanyReportTrendSummary(BaseModel):
 
 
 class CompanyReportTrendMonitorRow(BaseModel):
+    task_id: str
+    issue_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
     symbol: str
     company_name: str
     company_profile: CompanyProfile

@@ -70,3 +70,25 @@ def test_company_report_monitor_counts_weakening_companies():
     assert monitor.weakening_count == 1
     assert monitor.warning_count == 1
     assert monitor.rows[0].symbol == "AAA"
+
+
+def test_company_report_monitor_issue_identity_is_stable_until_change():
+    reports = {
+        "AAA": [_report("AAA", 19, alpha=80), _report("AAA", 20, alpha=72)]
+    }
+
+    first = build_company_report_trend_monitor(reports).rows[0]
+    second = build_company_report_trend_monitor(reports).rows[0]
+    changed = build_company_report_trend_monitor(
+        {
+            "AAA": [
+                _report("AAA", 19, alpha=80),
+                _report("AAA", 21, alpha=68),
+            ]
+        }
+    ).rows[0]
+
+    assert first.task_id == "report-trend:AAA"
+    assert first.task_id == changed.task_id
+    assert first.issue_fingerprint == second.issue_fingerprint
+    assert first.issue_fingerprint != changed.issue_fingerprint

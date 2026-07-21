@@ -24,6 +24,8 @@ def _row(
     decision_ready: bool = True,
 ) -> CompanyReportTrendMonitorRow:
     return CompanyReportTrendMonitorRow(
+        task_id=f"report-trend:{symbol}",
+        issue_fingerprint=(symbol[0].lower() * 64),
         symbol=symbol,
         company_name=f"{symbol} Şirketi",
         company_profile=CompanyProfile.STANDARD,
