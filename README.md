@@ -97,6 +97,11 @@ yerel Streamlit uygulaması.
 - Belirgin puan düşüşleri ve karar kilidi için önem seviyeli erken uyarılar
 - Güncel metodoloji ve sektör profiline göre filtrelenen Alpha Score geçmiş grafiği
 - Trend özeti, karşılaştırılabilirlik notları ve uyarıları içeren UTF-8 CSV raporu
+- Tüm şirketlerin son raporlarını şirket bazlı limitle tek sorguda getiren toplu geçmiş erişimi
+- Karar kilidi, önem seviyesi ve puan düşüşüne göre önceliklendirilen şirket trend izleme motoru
+- Şirket, önem, trend, sektör, minimum öncelik ve karar kilidi filtreleri
+- Filtrelenmiş toplu trend listesini UTF-8 CSV olarak dışa aktarma
+- Sol menüde kritik ve zayıflayan şirketleri gösteren bağımsız Rapor Trendleri ekranı
 - PDF kaynak tutarlarını düzeltme ve oranları anında yeniden hesaplama
 - Her analiz için ham finansal tutar anlık görüntüsü ve hesap izi
 - Dönem bazlı gösterge değeri, birim ve kaynak anlık görüntüsü

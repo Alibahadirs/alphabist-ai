@@ -1,5 +1,16 @@
 # Değişiklik günlüğü
 
+## 1.6.0 - 2026-07-21
+
+### Toplu rapor trend izleme merkezi
+
+- SQLite rapor geçmişi her şirket için ayrı limit uygulayan tek toplu sorguyla erişilebilir hale getirildi.
+- Şirketlerin son trendi, karar kilidi, uyarı seviyesi ve puan düşüşüyle 0-100 öncelik puanına dönüştürüldü.
+- Kritik, uyarılı ve zayıflayan şirket sayaçlarını içeren toplu trend özeti eklendi.
+- Şirket adı/kodu, önem, trend, sektör profili, minimum öncelik ve karar kilidi filtreleri eklendi.
+- Filtrelenmiş trend izleme listesi UTF-8 CSV olarak dışa aktarılabilir hale getirildi.
+- Sol menüye öncelik sıralı ve bozuk eski kayıtları güvenle dışlayan bağımsız Rapor Trendleri ekranı eklendi.
+
 ## 1.5.0 - 2026-07-20
 
 ### Metodoloji duyarlı rapor trendi
