@@ -35,6 +35,7 @@ from app.database.repository import (
     add_company_data_audit,
     add_company_report_snapshot,
     add_market_diagnostic_snapshot,
+    add_market_diagnostic_snapshots,
     add_score_history,
     add_technical_score_history,
     get_company,
@@ -46,6 +47,7 @@ from app.database.repository import (
     list_document_usages,
     list_latest_company_data_audits,
     list_market_diagnostic_snapshots,
+    list_latest_market_diagnostic_snapshots,
     list_portfolio_positions,
     list_remediation_task_events,
     list_remediation_task_states,
@@ -94,12 +96,21 @@ from app.data_quality.remediation import (
     verify_remediation_event_chain,
 )
 from app.market_data.provider import get_history, get_quote
+from app.market_data.batch import (
+    MAX_MARKET_DIAGNOSTIC_BATCH,
+    MarketBatchSummary,
+    diagnose_market_batch,
+)
 from app.market_data.readiness import assess_quote_readiness
 from app.market_data.diagnostics import (
     MarketDiagnostic,
     diagnose_market_data,
 )
-from app.market_data.export import build_market_diagnostic_csv
+from app.market_data.export import (
+    build_market_diagnostic_csv,
+    build_market_health_csv,
+)
+from app.market_data.health import build_market_health_summary
 from app.market_data.history import build_market_diagnostic_trend
 from app.market_data.models import build_market_diagnostic_snapshot
 from app.market_data.freshness import assess_price_freshness
@@ -5366,6 +5377,8 @@ def render_market_data_check() -> None:
     st.title("Piyasa veri kontrolü")
     st.caption("Gecikmeli fiyat kaynaklarının tarih ve değer tutarlılığı")
 
+    _render_market_batch_check()
+
     with st.form("market_data_check_form", border=True):
         symbol = st.text_input(
             "Hisse kodu",
@@ -5524,3 +5537,129 @@ def render_market_data_check() -> None:
         )
     else:
         st.info("Bu hisse için kayıtlı piyasa kontrolü bulunmuyor.")
+
+
+def _render_market_batch_check() -> None:
+    companies = list_companies()
+    symbols = [company.symbol for company in companies]
+    with st.container(border=True):
+        st.subheader("Toplu piyasa sağlığı")
+        st.caption(
+            "Kayıtlı şirketlerden en fazla 20 tanesini tek işlemde kontrol "
+            "edin. Ağ çağrıları yalnızca düğmeye basıldığında çalışır."
+        )
+        with st.form("market_data_batch_form", border=False):
+            selected_symbols = st.multiselect(
+                "Kontrol edilecek hisseler",
+                options=symbols,
+                default=symbols[: min(5, len(symbols))],
+                max_selections=MAX_MARKET_DIAGNOSTIC_BATCH,
+                key="market_data_batch_symbols",
+            )
+            submitted = st.form_submit_button(
+                "Seçilenleri kontrol et",
+                icon=":material/playlist_add_check:",
+                type="primary",
+                disabled=not symbols,
+            )
+
+        if submitted:
+            if not selected_symbols:
+                st.warning("En az bir kayıtlı şirket seçin.")
+            else:
+                with st.spinner("Seçilen piyasa kaynakları kontrol ediliyor..."):
+                    result = diagnose_market_batch(
+                        selected_symbols,
+                        diagnostic_loader=_diagnose_market_data,
+                    )
+                    snapshots = [
+                        build_market_diagnostic_snapshot(item.diagnostic)
+                        for item in result.items
+                        if item.diagnostic is not None
+                    ]
+                    save_summary = add_market_diagnostic_snapshots(snapshots)
+                    st.session_state["market_data_batch_result"] = result
+                    st.session_state["market_data_batch_save_status"] = (
+                        f"{save_summary.inserted} yeni kayıt eklendi; "
+                        f"{save_summary.skipped} tekrar atlandı."
+                    )
+
+        result = st.session_state.get("market_data_batch_result")
+        if isinstance(result, MarketBatchSummary):
+            st.caption(
+                st.session_state.get("market_data_batch_save_status", "")
+            )
+            with st.container(horizontal=True):
+                st.metric("Kontrol", result.total, border=True)
+                st.metric("Doğrulandı", result.cross_verified, border=True)
+                st.metric("Kısmi", result.partial, border=True)
+                st.metric("Veri yok", result.unavailable, border=True)
+                st.metric("Hata", result.failed, border=True)
+
+            st.dataframe(
+                pd.DataFrame(
+                    [
+                        {
+                            "Hisse": item.symbol,
+                            "Sonuç": item.status,
+                            "Açıklama": item.detail,
+                        }
+                        for item in result.items
+                    ]
+                ),
+                hide_index=True,
+                width="stretch",
+            )
+
+        latest_snapshots = list_latest_market_diagnostic_snapshots(symbols)
+        health = build_market_health_summary(symbols, latest_snapshots)
+        if not health.items:
+            st.info("Sağlık özeti için kayıtlı şirket bulunmuyor.")
+            return
+
+        st.markdown("**Son kayıtların sağlık özeti**")
+        with st.container(horizontal=True):
+            st.metric("Sağlıklı", health.verified, border=True)
+            st.metric("Kısmi", health.partial, border=True)
+            st.metric("Eski", health.stale, border=True)
+            st.metric("Veri yok", health.unavailable, border=True)
+            st.metric("Bütünlük hatası", health.invalid, border=True)
+        st.dataframe(
+            pd.DataFrame(
+                [
+                    {
+                        "Hisse": item.symbol,
+                        "Durum": item.status,
+                        "Son fiyat tarihi": item.latest_date,
+                        "Veri yaşı (gün)": item.age_days,
+                        "Çapraz doğrulandı": (
+                            "Evet" if item.cross_verified else "Hayır"
+                        ),
+                        "Bütünlük": (
+                            "Doğrulandı"
+                            if item.integrity_valid
+                            else "Geçersiz"
+                        ),
+                        "Açıklama": item.detail,
+                    }
+                    for item in health.items
+                ]
+            ),
+            hide_index=True,
+            width="stretch",
+            column_config={
+                "Son fiyat tarihi": st.column_config.DateColumn(
+                    format="DD.MM.YYYY"
+                ),
+                "Veri yaşı (gün)": st.column_config.NumberColumn(
+                    format="%d"
+                ),
+            },
+        )
+        st.download_button(
+            "Sağlık özetini indir",
+            data=build_market_health_csv(health),
+            file_name="piyasa-veri-sagligi.csv",
+            mime="text/csv",
+            icon=":material/download:",
+        )

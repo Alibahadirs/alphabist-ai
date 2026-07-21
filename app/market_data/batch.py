@@ -17,6 +17,14 @@ class MarketBatchItem:
     status: str
     error: str | None = None
 
+    @property
+    def detail(self) -> str:
+        if self.error:
+            return self.error
+        if self.diagnostic is not None:
+            return self.diagnostic.status
+        return self.status
+
 
 @dataclass(frozen=True)
 class MarketBatchSummary:

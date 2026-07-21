@@ -42,6 +42,7 @@ def test_market_batch_normalizes_deduplicates_and_counts_results():
     assert summary.partial == 1
     assert summary.unavailable == 1
     assert summary.failed == 1
+    assert summary.items[-1].detail == "bağlantı hatası"
     assert [item.symbol for item in summary.items] == [
         "GOOD",
         "PART",
