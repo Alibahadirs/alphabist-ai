@@ -8,9 +8,12 @@ from app.reporting.models import CompanyInvestmentReport
 from app.sector.profiles import CompanyProfile
 
 
-def _report(alpha_score: float = 80) -> CompanyInvestmentReport:
+def _report(
+    alpha_score: float = 80,
+    symbol: str = "TEST",
+) -> CompanyInvestmentReport:
     report = CompanyInvestmentReport(
-        symbol="TEST",
+        symbol=symbol,
         company_name="Test A.Ş.",
         company_profile=CompanyProfile.STANDARD,
         generated_at=datetime(2026, 7, 20, tzinfo=timezone.utc),
@@ -73,3 +76,23 @@ def test_company_report_snapshot_rejects_tampered_report(
 
     with pytest.raises(ValueError, match="parmak izi"):
         repository.add_company_report_snapshot(report)
+
+
+def test_company_report_snapshot_repository_groups_and_limits_symbols(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setattr(repository, "DB_PATH", tmp_path / "test.db")
+    repository.init_db()
+    repository.add_company_report_snapshot(_report(70, "AAA"))
+    repository.add_company_report_snapshot(_report(71, "AAA"))
+    repository.add_company_report_snapshot(_report(80, "BBB"))
+    repository.add_company_report_snapshot(_report(81, "BBB"))
+
+    grouped = repository.list_company_report_snapshots_by_symbol(1)
+
+    assert set(grouped) == {"AAA", "BBB"}
+    assert len(grouped["AAA"]) == 1
+    assert len(grouped["BBB"]) == 1
+    assert grouped["AAA"][0].report_payload["alpha_score"] == 71
+    assert grouped["BBB"][0].report_payload["alpha_score"] == 81

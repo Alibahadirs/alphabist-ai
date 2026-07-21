@@ -854,6 +854,42 @@ def list_company_report_snapshots(
         for row in rows
     ]
 
+
+def list_company_report_snapshots_by_symbol(
+    limit_per_symbol: int = 20,
+) -> dict[str, list[CompanyReportSnapshot]]:
+    safe_limit = max(1, min(limit_per_symbol, 200))
+    with connect() as conn:
+        rows = conn.execute(
+            """WITH ranked AS (
+                SELECT id, symbol, report_fingerprint, report_payload,
+                created_at,
+                ROW_NUMBER() OVER (
+                    PARTITION BY symbol ORDER BY id DESC
+                ) AS row_number
+                FROM company_report_snapshot
+            )
+            SELECT id, symbol, report_fingerprint, report_payload,
+            created_at
+            FROM ranked
+            WHERE row_number <= ?
+            ORDER BY symbol, id DESC""",
+            (safe_limit,),
+        ).fetchall()
+
+    snapshots_by_symbol: dict[str, list[CompanyReportSnapshot]] = {}
+    for row in rows:
+        snapshots_by_symbol.setdefault(row["symbol"], []).append(
+            CompanyReportSnapshot(
+                id=row["id"],
+                symbol=row["symbol"],
+                report_fingerprint=row["report_fingerprint"],
+                report_payload=json.loads(row["report_payload"]),
+                created_at=row["created_at"],
+            )
+        )
+    return snapshots_by_symbol
+
 def seed_demo_data():
     if list_companies():
         return
