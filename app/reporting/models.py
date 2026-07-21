@@ -154,3 +154,29 @@ class CompanyReportTrendSummary(BaseModel):
     combined_delta: float | None = None
     category_deltas: dict[str, float] = Field(default_factory=dict)
     alerts: list[CompanyReportTrendAlert] = Field(default_factory=list)
+
+
+class CompanyReportTrendMonitorRow(BaseModel):
+    symbol: str
+    company_name: str
+    company_profile: CompanyProfile
+    report_count: int = Field(ge=1)
+    latest_generated_at: datetime
+    latest_report_period_end: date | None = None
+    latest_alpha_score: float = Field(ge=0, le=100)
+    trend_label: str
+    alpha_delta: float | None = None
+    combined_delta: float | None = None
+    decision_ready: bool
+    alert_severity: ReportTrendAlertSeverity
+    alert_count: int = Field(ge=0)
+    primary_alert: str
+    priority_score: float = Field(ge=0, le=100)
+
+
+class CompanyReportTrendMonitor(BaseModel):
+    rows: list[CompanyReportTrendMonitorRow] = Field(default_factory=list)
+    company_count: int = Field(ge=0)
+    critical_count: int = Field(ge=0)
+    warning_count: int = Field(ge=0)
+    weakening_count: int = Field(ge=0)
