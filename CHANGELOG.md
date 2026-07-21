@@ -1,5 +1,17 @@
 # Değişiklik günlüğü
 
+## 1.11.0 - 2026-07-21
+
+### Uygulama genelinde piyasa verisi karar kapısı
+
+- Kaynak uygunluğu, fiyat güncelliği ve fiyat-grafik uyumu tek bir merkezi değerlendirmede birleştirildi.
+- Şirket genel bakışında teknik ve birleşik puanın yalnız karara uygun piyasa verisiyle üretilmesi sağlandı.
+- Toplu teknik güncellemede tanımlanmamış sağlayıcıların taze görünse bile reddedilmesi sağlandı.
+- Teknik geçmiş kaydı yalnız kaynak politikasında günlük karara uygun tanımlanmış sağlayıcılarla sınırlandı.
+- Şirket karşılaştırmasında teknik puanlar merkezi veri kapısından geçirildi.
+- Takip listesinde güncel fiyat sayacı kaynak politikası ve güncellik birlikte doğrulandığında artırıldı.
+- Portföyde karara uygun olmayan fiyatların güncel değer hesabına girmesi engellendi ve maliyet yedeği açıkça bildirildi.
+
 ## 1.10.0 - 2026-07-21
 
 ### Denetlenebilir piyasa kontrolü geçmişi
