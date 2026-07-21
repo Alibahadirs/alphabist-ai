@@ -47,6 +47,7 @@ from app.database.repository import (
     list_portfolio_positions,
     list_remediation_task_events,
     list_remediation_task_states,
+    list_report_trend_review_states,
     list_score_history,
     list_technical_score_history,
     list_watchlist_entries,
@@ -55,6 +56,7 @@ from app.database.repository import (
     upsert_company,
     upsert_portfolio_position,
     upsert_remediation_task_state,
+    upsert_report_trend_review_state,
     upsert_watchlist_entry,
 )
 from app.database.backup import (
@@ -114,9 +116,11 @@ from app.portfolio.service import build_portfolio_summary
 from app.reporting.models import (
     REPORT_FRESHNESS_LABELS,
     CompanyInvestmentReport,
+    CompanyReportTrendReviewState,
     CompanyReportTrendMonitorFilters,
     ReportFreshnessStatus,
     ReportTrendAlertSeverity,
+    ReportTrendReviewStatus,
 )
 from app.reporting.company_report import (
     build_company_investment_report,
@@ -135,6 +139,7 @@ from app.reporting.importer import (
     import_company_report_exchange_package,
 )
 from app.reporting.monitor import (
+    apply_report_trend_review_states,
     build_company_report_trend_monitor,
     filter_company_report_trend_monitor,
 )
@@ -1968,6 +1973,12 @@ def render_report_trends() -> None:
         "Kaydedilmiş şirket raporlarını karşılaştırılabilirlik, trend ve "
         "karar güvenliği açısından toplu izleyin."
     )
+    review_message = st.session_state.pop(
+        "report_trend_review_message",
+        None,
+    )
+    if review_message:
+        st.success(review_message)
 
     snapshots_by_symbol = list_company_report_snapshots_by_symbol(20)
     if not snapshots_by_symbol:
@@ -2002,12 +2013,20 @@ def render_report_trends() -> None:
         st.error("İzlenebilir geçerli şirket raporu bulunmuyor.")
         return
 
-    monitor = build_company_report_trend_monitor(reports_by_symbol)
+    monitor = apply_report_trend_review_states(
+        build_company_report_trend_monitor(reports_by_symbol),
+        list_report_trend_review_states(),
+    )
     with st.container(horizontal=True):
         st.metric("İzlenen şirket", monitor.company_count, border=True)
         st.metric("Kritik", monitor.critical_count, border=True)
         st.metric("Uyarı", monitor.warning_count, border=True)
         st.metric("Zayıflıyor", monitor.weakening_count, border=True)
+        st.metric(
+            "Yeniden açılmalı",
+            monitor.reopen_required_count,
+            border=True,
+        )
 
     available_severities = sorted(
         {row.alert_severity for row in monitor.rows},
@@ -2018,6 +2037,7 @@ def render_report_trends() -> None:
         {row.company_profile for row in monitor.rows},
         key=lambda profile: PROFILE_LABELS[profile],
     )
+    available_review_statuses = list(ReportTrendReviewStatus)
     with st.expander("Filtreler", expanded=True):
         search = st.text_input(
             "Şirket ara",
@@ -2057,6 +2077,12 @@ def render_report_trends() -> None:
                 format_func=lambda profile: PROFILE_LABELS[profile],
                 key="report_trend_monitor_profile",
             )
+            review_statuses = st.multiselect(
+                "İnceleme durumu",
+                available_review_statuses,
+                format_func=lambda status: status.value,
+                key="report_trend_monitor_review_status",
+            )
 
     filtered = filter_company_report_trend_monitor(
         monitor,
@@ -2065,6 +2091,7 @@ def render_report_trends() -> None:
             severities=severities,
             trend_labels=trend_labels,
             company_profiles=company_profiles,
+            review_statuses=review_statuses,
             minimum_priority=minimum_priority,
             decision_blocked_only=decision_blocked_only,
         ),
@@ -2092,6 +2119,10 @@ def render_report_trends() -> None:
             "Önem": row.alert_severity.value,
             "Öncelik": row.priority_score,
             "Öncelikli uyarı": row.primary_alert,
+            "İnceleme durumu": row.review_status.value,
+            "İnceleme notu": row.review_note,
+            "Yeniden açılmalı": row.review_needs_reopen,
+            "Sorun kimliği": row.issue_fingerprint[:12],
         }
         for row in filtered.rows
     ]
@@ -2112,6 +2143,7 @@ def render_report_trends() -> None:
             "Alpha değişimi": st.column_config.NumberColumn(format="%+.1f"),
             "Birleşik değişim": st.column_config.NumberColumn(format="%+.1f"),
             "Karara hazır": st.column_config.CheckboxColumn(),
+            "Yeniden açılmalı": st.column_config.CheckboxColumn(),
             "Öncelik": st.column_config.ProgressColumn(
                 min_value=0,
                 max_value=100,
@@ -2129,6 +2161,78 @@ def render_report_trends() -> None:
         width="content",
         key="report_trend_monitor_download",
     )
+
+    st.subheader("Trend inceleme kaydı")
+    rows_by_task = {row.task_id: row for row in filtered.rows}
+    selected_task_id = st.selectbox(
+        "İncelenecek şirket",
+        list(rows_by_task),
+        format_func=lambda task_id: (
+            f"{rows_by_task[task_id].symbol} · "
+            f"{rows_by_task[task_id].review_status.value} · "
+            f"öncelik {rows_by_task[task_id].priority_score:.1f}"
+        ),
+        key="report_trend_review_task",
+    )
+    selected_row = rows_by_task[selected_task_id]
+    editable_statuses = [
+        status
+        for status in ReportTrendReviewStatus
+        if status != ReportTrendReviewStatus.REOPEN_REQUIRED
+    ]
+    default_status = (
+        ReportTrendReviewStatus.OPEN
+        if selected_row.review_needs_reopen
+        else selected_row.review_status
+    )
+    with st.form(
+        f"report_trend_review_form_{selected_row.symbol}",
+        border=True,
+    ):
+        review_status = st.selectbox(
+            "İnceleme durumu",
+            editable_statuses,
+            index=editable_statuses.index(default_status),
+            format_func=lambda status: status.value,
+            key=f"report_trend_review_status_{selected_row.symbol}",
+        )
+        review_note = st.text_area(
+            "İnceleme notu",
+            value=selected_row.review_note,
+            max_chars=2000,
+            key=f"report_trend_review_note_{selected_row.symbol}",
+        )
+        review_submitted = st.form_submit_button(
+            "İnceleme kaydını güncelle",
+            type="primary",
+            icon=":material/save:",
+        )
+    if review_submitted:
+        if (
+            review_status
+            in {
+                ReportTrendReviewStatus.RESOLVED,
+                ReportTrendReviewStatus.DISMISSED,
+            }
+            and not review_note.strip()
+        ):
+            st.error(
+                "Çözüldü veya geçersiz durumunda açıklayıcı not zorunludur."
+            )
+        else:
+            upsert_report_trend_review_state(
+                CompanyReportTrendReviewState(
+                    task_id=selected_row.task_id,
+                    symbol=selected_row.symbol,
+                    status=review_status,
+                    note=review_note,
+                    issue_fingerprint=selected_row.issue_fingerprint,
+                )
+            )
+            st.session_state["report_trend_review_message"] = (
+                f"{selected_row.symbol} trend inceleme kaydı güncellendi."
+            )
+            st.rerun()
 
 
 def render_data_quality() -> None:
