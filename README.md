@@ -14,6 +14,8 @@ yerel Streamlit uygulaması.
 - Sağlayıcı yüzdesi yerine kapanış fiyatlarından doğrulanan günlük değişim
 - Yahoo Finance ve `borsa-api` için kaynak uygunluk politikası
 - Fiyat, tarih ve günlük değişimi karşılaştıran piyasa veri kontrolü ekranı
+- Piyasa kontrolleri için SHA-256 korumalı ve yinelenmeyen SQLite geçmişi
+- Çapraz doğrulama oranı, ardışık sorunlar ve CSV kontrol geçmişi
 - Temel ve teknik puanı birleştiren AI puanı
 - Şirket karşılaştırma ve takip listesi
 - Finansal ölçütlerle çalışan şirket tarayıcı ve otomatik sıralama

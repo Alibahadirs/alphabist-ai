@@ -1,5 +1,17 @@
 # Değişiklik günlüğü
 
+## 1.10.0 - 2026-07-21
+
+### Denetlenebilir piyasa kontrolü geçmişi
+
+- Her piyasa kontrolü standart ve alan türleri doğrulanmış bir anlık görüntüye dönüştürüldü.
+- Kontrol içeriği oluşturulma zamanı ve veritabanı kimliğinden bağımsız SHA-256 parmak iziyle korundu.
+- Aynı fiyat, tarih ve sağlayıcı sonucunun SQLite geçmişinde yinelenmesi engellendi.
+- Parmak izi kaydetmeden önce yeniden hesaplanarak değiştirilmiş kayıtların kabul edilmesi önlendi.
+- Geçmişten çapraz doğrulama oranı, ardışık doğrulanamayan kontrol sayısı, durum değişimi ve fiyat sapması eğilimi üretildi.
+- Bütünlüğü bozulmuş geçmiş kayıtları eğilim hesaplarından çıkarıldı.
+- Piyasa veri kontrolü ekranına geçmiş KPI'ları, doğrulama tablosu ve UTF-8 CSV dışa aktarımı eklendi.
+
 ## 1.9.0 - 2026-07-21
 
 ### Piyasa verisi çapraz kontrol merkezi
