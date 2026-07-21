@@ -1,5 +1,17 @@
 # Değişiklik günlüğü
 
+## 1.9.0 - 2026-07-21
+
+### Piyasa verisi çapraz kontrol merkezi
+
+- Yahoo Finance ve `borsa-api` kaynaklarının gecikme, resmi kaynak ve günlük karar uygunluğu politikaları tanımlandı.
+- Tanımlanmayan piyasa kaynakları güvenli varsayımla karar hesaplarından dışlandı.
+- İki sağlayıcının fiyat, günlük değişim ve veri tarihini toleranslarla karşılaştıran tutarlılık motoru eklendi.
+- Sağlayıcılar bağımsız çalıştırılarak birindeki hatanın diğer kaynağın sonucunu gizlemesi engellendi.
+- Çapraz doğrulama yalnız iki kaynağın güncel, uygun ve birbiriyle tutarlı olduğu durumda üretildi.
+- Sol menüye kullanıcı isteğiyle çalışan, ağ çağrılarını önbelleğe alan Piyasa veri kontrolü ekranı eklendi.
+- Sağlayıcı durumu, karar uygunluğu, fiyat, değişim, tarih, kaynak ve hata ayrıntıları tek tabloda gösterildi.
+
 ## 1.8.0 - 2026-07-21
 
 ### Doğrulanmış gecikmeli piyasa verisi yedeği

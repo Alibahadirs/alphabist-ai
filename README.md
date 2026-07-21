@@ -12,6 +12,8 @@ yerel Streamlit uygulaması.
 - Gecikmeli piyasa verileri ve teknik analiz göstergeleri
 - Yahoo Finance kesintilerinde isteğe bağlı `borsa-api` gecikmeli fiyat yedeği
 - Sağlayıcı yüzdesi yerine kapanış fiyatlarından doğrulanan günlük değişim
+- Yahoo Finance ve `borsa-api` için kaynak uygunluk politikası
+- Fiyat, tarih ve günlük değişimi karşılaştıran piyasa veri kontrolü ekranı
 - Temel ve teknik puanı birleştiren AI puanı
 - Şirket karşılaştırma ve takip listesi
 - Finansal ölçütlerle çalışan şirket tarayıcı ve otomatik sıralama
