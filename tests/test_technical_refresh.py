@@ -39,6 +39,8 @@ def test_refresh_saves_only_current_aligned_technical_scores():
                 "last": float(frame["Close"].iloc[-1]),
                 "as_of_date": frame.index[-1].date().isoformat(),
                 "source": "" if symbol == "NOSOURCE" else "Yahoo Finance",
+                "data_mode": "delayed",
+                "official": False,
             },
             frame,
         )
@@ -84,6 +86,8 @@ def test_refresh_normalizes_duplicates_and_limits_batch_size():
                 "last": float(frame["Close"].iloc[-1]),
                 "as_of_date": "2026-07-17",
                 "source": "Yahoo Finance",
+                "data_mode": "delayed",
+                "official": False,
             },
             frame,
         )

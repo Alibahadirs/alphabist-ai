@@ -15,6 +15,7 @@ from app.market_data.models import (
     MarketDiagnosticSnapshot,
     market_snapshot_fingerprint,
 )
+from app.market_data.policy import get_source_policy
 from app.portfolio.models import PortfolioPosition
 from app.reporting.company_report import company_report_fingerprint
 from app.reporting.models import (
@@ -390,8 +391,8 @@ def add_technical_score_history(
     normalized_symbol = symbol.upper().strip()
     normalized_source = source.strip()
     normalized_methodology = methodology_version.strip()
-    if normalized_source.casefold() in {"", "bilinmiyor", "unknown"}:
-        raise ValueError("Teknik veri kaynağı doğrulanmadı.")
+    if not get_source_policy(normalized_source).supports_daily_decisions:
+        raise ValueError("Teknik veri kaynağı karar politikasında tanımlı değil.")
     if not normalized_methodology:
         raise ValueError("Teknik metodoloji sürümü eksik.")
     price_date_value = price_date.isoformat()

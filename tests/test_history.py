@@ -227,9 +227,11 @@ def test_technical_history_repairs_changed_same_market_snapshot(
     assert history[0].alignment_status == "Fiyat ve grafik verisi uyumlu"
 
 
+@pytest.mark.parametrize("source", ["Bilinmiyor", "Başka Sağlayıcı"])
 def test_technical_history_rejects_unknown_source(
     tmp_path,
     monkeypatch,
+    source,
 ):
     monkeypatch.setattr(repository, "DB_PATH", tmp_path / "test.db")
     repository.init_db()
@@ -247,11 +249,11 @@ def test_technical_history_rejects_unknown_source(
         atr_percent=3.2,
     )
 
-    with pytest.raises(ValueError, match="kaynağı doğrulanmadı"):
+    with pytest.raises(ValueError, match="karar politikasında tanımlı değil"):
         repository.add_technical_score_history(
             symbol="TEST",
             price_date=date(2026, 7, 17),
-            source="Bilinmiyor",
+            source=source,
             score=score,
             alignment_status="Fiyat ve grafik verisi uyumlu",
             methodology_version="technical-2026.1",

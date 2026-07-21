@@ -3,8 +3,7 @@ from datetime import date
 
 import pandas as pd
 
-from app.market_data.freshness import assess_price_freshness
-from app.market_data.validation import validate_quote_history_alignment
+from app.market_data.readiness import assess_quote_readiness
 from app.technical.engine import calculate_technical_score
 from app.technical.models import (
     TechnicalRefreshItem,
@@ -52,37 +51,24 @@ def refresh_technical_scores(
                 if quote_date_value
                 else None
             )
-            freshness = assess_price_freshness(
-                quote_date,
-                reference_date,
-            )
-            alignment = validate_quote_history_alignment(
+            readiness = assess_quote_readiness(
                 quote,
                 history,
+                reference_date,
             )
-            if not freshness.current or not alignment.valid:
+            alignment = readiness.alignment
+            if not readiness.ready or alignment is None:
                 items.append(
                     TechnicalRefreshItem(
                         symbol=symbol,
                         status="Reddedildi",
-                        detail=f"{freshness.status}; {alignment.status}",
+                        detail=readiness.status,
                         price_date=quote_date,
                     )
                 )
                 continue
 
             source = str(quote.get("source") or "").strip()
-            if source.casefold() in {"", "bilinmiyor", "unknown"}:
-                items.append(
-                    TechnicalRefreshItem(
-                        symbol=symbol,
-                        status="Reddedildi",
-                        detail="Teknik veri kaynağı doğrulanmadı.",
-                        price_date=quote_date,
-                    )
-                )
-                continue
-
             score = calculate_technical_score(history)
             changed = snapshot_saver(
                 symbol,
