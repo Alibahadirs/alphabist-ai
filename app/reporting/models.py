@@ -180,3 +180,12 @@ class CompanyReportTrendMonitor(BaseModel):
     critical_count: int = Field(ge=0)
     warning_count: int = Field(ge=0)
     weakening_count: int = Field(ge=0)
+
+
+class CompanyReportTrendMonitorFilters(BaseModel):
+    search: str = ""
+    severities: list[ReportTrendAlertSeverity] = Field(default_factory=list)
+    trend_labels: list[str] = Field(default_factory=list)
+    company_profiles: list[CompanyProfile] = Field(default_factory=list)
+    minimum_priority: float = Field(default=0, ge=0, le=100)
+    decision_blocked_only: bool = False

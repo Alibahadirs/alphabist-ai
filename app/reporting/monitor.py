@@ -1,6 +1,7 @@
 from app.reporting.models import (
     CompanyInvestmentReport,
     CompanyReportTrendMonitor,
+    CompanyReportTrendMonitorFilters,
     CompanyReportTrendMonitorRow,
     ReportTrendAlertSeverity,
 )
@@ -85,6 +86,51 @@ def build_company_report_trend_monitor(
         )
 
     rows.sort(key=lambda row: (-row.priority_score, row.symbol))
+    return CompanyReportTrendMonitor(
+        rows=rows,
+        company_count=len(rows),
+        critical_count=sum(
+            row.alert_severity == ReportTrendAlertSeverity.CRITICAL
+            for row in rows
+        ),
+        warning_count=sum(
+            row.alert_severity == ReportTrendAlertSeverity.WARNING
+            for row in rows
+        ),
+        weakening_count=sum(
+            row.trend_label == "Zayıflıyor" for row in rows
+        ),
+    )
+
+
+def filter_company_report_trend_monitor(
+    monitor: CompanyReportTrendMonitor,
+    filters: CompanyReportTrendMonitorFilters,
+) -> CompanyReportTrendMonitor:
+    search = filters.search.casefold().strip()
+    rows = [
+        row
+        for row in monitor.rows
+        if (
+            not search
+            or search in row.symbol.casefold()
+            or search in row.company_name.casefold()
+        )
+        and (
+            not filters.severities
+            or row.alert_severity in filters.severities
+        )
+        and (
+            not filters.trend_labels
+            or row.trend_label in filters.trend_labels
+        )
+        and (
+            not filters.company_profiles
+            or row.company_profile in filters.company_profiles
+        )
+        and row.priority_score >= filters.minimum_priority
+        and (not filters.decision_blocked_only or not row.decision_ready)
+    ]
     return CompanyReportTrendMonitor(
         rows=rows,
         company_count=len(rows),

@@ -1,0 +1,97 @@
+import csv
+import io
+from datetime import datetime, timezone
+
+from app.reporting.models import (
+    CompanyReportTrendMonitor,
+    CompanyReportTrendMonitorFilters,
+    CompanyReportTrendMonitorRow,
+    ReportTrendAlertSeverity,
+)
+from app.reporting.monitor import filter_company_report_trend_monitor
+from app.reporting.monitor_export import (
+    serialize_company_report_trend_monitor_csv,
+)
+from app.sector.profiles import CompanyProfile
+
+
+def _row(
+    symbol: str,
+    *,
+    severity: ReportTrendAlertSeverity,
+    trend: str,
+    priority: float,
+    decision_ready: bool = True,
+) -> CompanyReportTrendMonitorRow:
+    return CompanyReportTrendMonitorRow(
+        symbol=symbol,
+        company_name=f"{symbol} Şirketi",
+        company_profile=CompanyProfile.STANDARD,
+        report_count=2,
+        latest_generated_at=datetime(2026, 7, 20, tzinfo=timezone.utc),
+        latest_alpha_score=75,
+        trend_label=trend,
+        decision_ready=decision_ready,
+        alert_severity=severity,
+        alert_count=1,
+        primary_alert="Kontrol gerekli.",
+        priority_score=priority,
+    )
+
+
+def _monitor() -> CompanyReportTrendMonitor:
+    rows = [
+        _row(
+            "AAA",
+            severity=ReportTrendAlertSeverity.WARNING,
+            trend="Zayıflıyor",
+            priority=60,
+        ),
+        _row(
+            "BBB",
+            severity=ReportTrendAlertSeverity.CRITICAL,
+            trend="Karşılaştırma gerekli",
+            priority=85,
+            decision_ready=False,
+        ),
+    ]
+    return CompanyReportTrendMonitor(
+        rows=rows,
+        company_count=2,
+        critical_count=1,
+        warning_count=1,
+        weakening_count=1,
+    )
+
+
+def test_company_report_monitor_filters_combined_conditions():
+    filtered = filter_company_report_trend_monitor(
+        _monitor(),
+        CompanyReportTrendMonitorFilters(
+            severities=[ReportTrendAlertSeverity.CRITICAL],
+            minimum_priority=80,
+            decision_blocked_only=True,
+        ),
+    )
+
+    assert filtered.company_count == 1
+    assert filtered.rows[0].symbol == "BBB"
+    assert filtered.critical_count == 1
+    assert filtered.warning_count == 0
+
+
+def test_company_report_monitor_csv_exports_filtered_rows():
+    filtered = filter_company_report_trend_monitor(
+        _monitor(),
+        CompanyReportTrendMonitorFilters(search="aaa"),
+    )
+
+    payload = serialize_company_report_trend_monitor_csv(filtered)
+    rows = list(
+        csv.DictReader(io.StringIO(payload.decode("utf-8-sig")))
+    )
+
+    assert payload.startswith(b"\xef\xbb\xbf")
+    assert len(rows) == 1
+    assert rows[0]["Hisse"] == "AAA"
+    assert rows[0]["Önem"] == "Uyarı"
