@@ -92,6 +92,10 @@ from app.data_quality.remediation import (
     verify_remediation_event_chain,
 )
 from app.market_data.provider import get_history, get_quote
+from app.market_data.diagnostics import (
+    MarketDiagnostic,
+    diagnose_market_data,
+)
 from app.market_data.freshness import assess_price_freshness
 from app.market_data.validation import validate_quote_history_alignment
 from app.history.service import (
@@ -326,6 +330,11 @@ def _render_technical_refresh_summary(
 @st.cache_data(ttl="15m", max_entries=100, show_spinner=False)
 def _load_quote(symbol: str):
     return get_quote(symbol)
+
+
+@st.cache_data(ttl="5m", max_entries=25, show_spinner=False)
+def _diagnose_market_data(symbol: str) -> MarketDiagnostic:
+    return diagnose_market_data(symbol)
 
 
 def _quote_date(quote: dict) -> date | None:
@@ -5341,3 +5350,93 @@ def render_data_backup() -> None:
                 st.error(
                     "Seçilen güvenlik kopyası bütünlük kontrolünü geçemedi."
                 )
+
+
+def render_market_data_check() -> None:
+    st.title("Piyasa veri kontrolü")
+    st.caption("Gecikmeli fiyat kaynaklarının tarih ve değer tutarlılığı")
+
+    with st.form("market_data_check_form", border=True):
+        symbol = st.text_input(
+            "Hisse kodu",
+            value="THYAO",
+            max_chars=12,
+        ).strip().upper()
+        submitted = st.form_submit_button(
+            "Kaynakları kontrol et",
+            icon=":material/monitor_heart:",
+            type="primary",
+        )
+
+    if submitted:
+        if not symbol or not symbol.isalnum():
+            st.error("Geçerli bir BIST hisse kodu girin.")
+        else:
+            with st.spinner("Gecikmeli piyasa kaynakları kontrol ediliyor..."):
+                st.session_state["market_data_diagnostic"] = (
+                    _diagnose_market_data(symbol)
+                )
+
+    diagnostic = st.session_state.get("market_data_diagnostic")
+    if not isinstance(diagnostic, MarketDiagnostic):
+        st.info("Kontrol sonucu henüz oluşturulmadı.")
+        return
+
+    if diagnostic.cross_verified:
+        st.success(diagnostic.status)
+    elif diagnostic.primary.available or diagnostic.secondary.available:
+        st.warning(diagnostic.status)
+    else:
+        st.error(diagnostic.status)
+
+    provider_rows = []
+    for item in (diagnostic.primary, diagnostic.secondary):
+        quote = item.quote or {}
+        provider_rows.append(
+            {
+                "Sağlayıcı": item.provider,
+                "Durum": "Alındı" if item.available else "Hata",
+                "Karara uygun": "Evet" if item.eligible else "Hayır",
+                "Fiyat": quote.get("last"),
+                "Değişim (%)": quote.get("change_percent"),
+                "Fiyat tarihi": quote.get("as_of_date"),
+                "Güncellik": item.freshness_status,
+                "Kaynak": quote.get("source") or "-",
+                "Hata": item.error or "-",
+            }
+        )
+    st.dataframe(
+        pd.DataFrame(provider_rows),
+        hide_index=True,
+        width="stretch",
+        column_config={
+            "Fiyat": st.column_config.NumberColumn(format="%.2f TL"),
+            "Değişim (%)": st.column_config.NumberColumn(format="%.2f%%"),
+            "Fiyat tarihi": st.column_config.DateColumn(format="DD.MM.YYYY"),
+        },
+    )
+
+    comparison = diagnostic.comparison
+    if comparison is not None:
+        with st.container(horizontal=True):
+            st.metric(
+                "Fiyat farkı",
+                f"%{comparison.price_difference_percent or 0:.2f}",
+                border=True,
+            )
+            st.metric(
+                "Değişim farkı",
+                f"{comparison.change_difference_points or 0:.2f} puan",
+                border=True,
+            )
+            st.metric(
+                "Tarih farkı",
+                f"{comparison.date_gap_days or 0} gün",
+                border=True,
+            )
+        st.caption(comparison.status)
+
+    st.caption(
+        "Bu kaynaklar gerçek zamanlı veya resmi BIST verisi değildir; "
+        "sonuçlar gecikmeli günlük veri kontrolüdür."
+    )
