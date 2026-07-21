@@ -11,6 +11,10 @@ from app.data_quality.models import (
 )
 from app.data_quality.remediation import remediation_event_hash
 from app.history.models import ScoreHistoryEntry
+from app.market_data.models import (
+    MarketDiagnosticSnapshot,
+    market_snapshot_fingerprint,
+)
 from app.portfolio.models import PortfolioPosition
 from app.reporting.company_report import company_report_fingerprint
 from app.reporting.models import (
@@ -130,6 +134,30 @@ def init_db():
         conn.execute(
             """CREATE INDEX IF NOT EXISTS idx_technical_history_symbol_id
             ON technical_score_history(symbol, id)"""
+        )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS market_diagnostic_history(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            symbol TEXT NOT NULL,
+            primary_available INTEGER NOT NULL,
+            secondary_available INTEGER NOT NULL,
+            primary_eligible INTEGER NOT NULL,
+            secondary_eligible INTEGER NOT NULL,
+            primary_price REAL,
+            secondary_price REAL,
+            primary_date TEXT,
+            secondary_date TEXT,
+            price_difference_percent REAL,
+            change_difference_points REAL,
+            date_gap_days INTEGER,
+            cross_verified INTEGER NOT NULL,
+            status TEXT NOT NULL,
+            fingerprint TEXT NOT NULL UNIQUE,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"""
+        )
+        conn.execute(
+            """CREATE INDEX IF NOT EXISTS idx_market_diagnostic_symbol_id
+            ON market_diagnostic_history(symbol, id)"""
         )
         conn.execute(
             """CREATE TABLE IF NOT EXISTS portfolio_positions(
@@ -457,6 +485,86 @@ def list_technical_score_history(
         )
         entries.append(TechnicalHistoryEntry(**values))
     return entries
+
+
+def add_market_diagnostic_snapshot(
+    snapshot: MarketDiagnosticSnapshot,
+) -> bool:
+    expected_fingerprint = market_snapshot_fingerprint(snapshot)
+    if snapshot.fingerprint != expected_fingerprint:
+        raise ValueError("Piyasa kontrolü parmak izi geçersiz.")
+    with connect() as conn:
+        existing = conn.execute(
+            """SELECT id FROM market_diagnostic_history
+            WHERE fingerprint=?""",
+            (snapshot.fingerprint,),
+        ).fetchone()
+        if existing is not None:
+            return False
+        conn.execute(
+            """INSERT INTO market_diagnostic_history(
+            symbol, primary_available, secondary_available,
+            primary_eligible, secondary_eligible, primary_price,
+            secondary_price, primary_date, secondary_date,
+            price_difference_percent, change_difference_points,
+            date_gap_days, cross_verified, status, fingerprint)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                snapshot.symbol.strip().upper(),
+                int(snapshot.primary_available),
+                int(snapshot.secondary_available),
+                int(snapshot.primary_eligible),
+                int(snapshot.secondary_eligible),
+                snapshot.primary_price,
+                snapshot.secondary_price,
+                snapshot.primary_date.isoformat()
+                if snapshot.primary_date
+                else None,
+                snapshot.secondary_date.isoformat()
+                if snapshot.secondary_date
+                else None,
+                snapshot.price_difference_percent,
+                snapshot.change_difference_points,
+                snapshot.date_gap_days,
+                int(snapshot.cross_verified),
+                snapshot.status,
+                snapshot.fingerprint,
+            ),
+        )
+    return True
+
+
+def list_market_diagnostic_snapshots(
+    symbol: str,
+    limit: int = 30,
+) -> list[MarketDiagnosticSnapshot]:
+    safe_limit = max(1, min(limit, 100))
+    with connect() as conn:
+        rows = conn.execute(
+            """SELECT id, symbol, primary_available, secondary_available,
+            primary_eligible, secondary_eligible, primary_price,
+            secondary_price, primary_date, secondary_date,
+            price_difference_percent, change_difference_points,
+            date_gap_days, cross_verified, status, fingerprint, created_at
+            FROM market_diagnostic_history
+            WHERE symbol=?
+            ORDER BY id DESC
+            LIMIT ?""",
+            (symbol.strip().upper(), safe_limit),
+        ).fetchall()
+    snapshots = []
+    for row in reversed(rows):
+        values = dict(row)
+        for field in (
+            "primary_available",
+            "secondary_available",
+            "primary_eligible",
+            "secondary_eligible",
+            "cross_verified",
+        ):
+            values[field] = bool(values[field])
+        snapshots.append(MarketDiagnosticSnapshot(**values))
+    return snapshots
 
 
 def add_company_data_audit(audit: CompanyDataAudit) -> None:
