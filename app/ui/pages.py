@@ -34,6 +34,7 @@ from app.core.settings import settings
 from app.database.repository import (
     add_company_data_audit,
     add_company_report_snapshot,
+    add_market_diagnostic_snapshot,
     add_score_history,
     add_technical_score_history,
     get_company,
@@ -44,6 +45,7 @@ from app.database.repository import (
     list_company_report_snapshots_by_symbol,
     list_document_usages,
     list_latest_company_data_audits,
+    list_market_diagnostic_snapshots,
     list_portfolio_positions,
     list_remediation_task_events,
     list_remediation_task_states,
@@ -96,6 +98,9 @@ from app.market_data.diagnostics import (
     MarketDiagnostic,
     diagnose_market_data,
 )
+from app.market_data.export import build_market_diagnostic_csv
+from app.market_data.history import build_market_diagnostic_trend
+from app.market_data.models import build_market_diagnostic_snapshot
 from app.market_data.freshness import assess_price_freshness
 from app.market_data.validation import validate_quote_history_alignment
 from app.history.service import (
@@ -5373,14 +5378,24 @@ def render_market_data_check() -> None:
             st.error("Geçerli bir BIST hisse kodu girin.")
         else:
             with st.spinner("Gecikmeli piyasa kaynakları kontrol ediliyor..."):
-                st.session_state["market_data_diagnostic"] = (
-                    _diagnose_market_data(symbol)
+                diagnostic_result = _diagnose_market_data(symbol)
+                snapshot = build_market_diagnostic_snapshot(
+                    diagnostic_result
+                )
+                saved = add_market_diagnostic_snapshot(snapshot)
+                st.session_state["market_data_diagnostic"] = diagnostic_result
+                st.session_state["market_data_save_status"] = (
+                    "Kontrol geçmişe kaydedildi."
+                    if saved
+                    else "Aynı kontrol sonucu geçmişte zaten bulunuyor."
                 )
 
     diagnostic = st.session_state.get("market_data_diagnostic")
     if not isinstance(diagnostic, MarketDiagnostic):
         st.info("Kontrol sonucu henüz oluşturulmadı.")
         return
+
+    st.caption(st.session_state.get("market_data_save_status", ""))
 
     if diagnostic.cross_verified:
         st.success(diagnostic.status)
@@ -5440,3 +5455,67 @@ def render_market_data_check() -> None:
         "Bu kaynaklar gerçek zamanlı veya resmi BIST verisi değildir; "
         "sonuçlar gecikmeli günlük veri kontrolüdür."
     )
+
+    history = list_market_diagnostic_snapshots(diagnostic.symbol, limit=50)
+    trend = build_market_diagnostic_trend(history)
+    st.subheader("Kontrol geçmişi")
+    with st.container(horizontal=True):
+        st.metric("Kayıt", trend.valid_records, border=True)
+        st.metric(
+            "Çapraz doğrulama",
+            f"%{trend.verified_rate:.1f}",
+            border=True,
+        )
+        st.metric(
+            "Ardışık doğrulanamayan",
+            trend.consecutive_unverified,
+            border=True,
+        )
+        st.metric("Geçersiz kayıt", trend.invalid_records, border=True)
+
+    if trend.invalid_records:
+        st.error(
+            "Bütünlük kontrolünü geçemeyen geçmiş kayıtlar eğilim "
+            "hesabından çıkarıldı."
+        )
+    if history:
+        history_frame = pd.DataFrame(
+            [
+                {
+                    "Kontrol zamanı": item.created_at,
+                    "Birincil fiyat": item.primary_price,
+                    "Yedek fiyat": item.secondary_price,
+                    "Fiyat farkı (%)": item.price_difference_percent,
+                    "Çapraz doğrulandı": (
+                        "Evet" if item.cross_verified else "Hayır"
+                    ),
+                    "Durum": item.status,
+                }
+                for item in reversed(history)
+            ]
+        )
+        st.dataframe(
+            history_frame,
+            hide_index=True,
+            width="stretch",
+            column_config={
+                "Birincil fiyat": st.column_config.NumberColumn(
+                    format="%.2f TL"
+                ),
+                "Yedek fiyat": st.column_config.NumberColumn(
+                    format="%.2f TL"
+                ),
+                "Fiyat farkı (%)": st.column_config.NumberColumn(
+                    format="%.2f%%"
+                ),
+            },
+        )
+        st.download_button(
+            "Kontrol geçmişini indir",
+            data=build_market_diagnostic_csv(history),
+            file_name=f"{diagnostic.symbol}-piyasa-kontrol-gecmisi.csv",
+            mime="text/csv",
+            icon=":material/download:",
+        )
+    else:
+        st.info("Bu hisse için kayıtlı piyasa kontrolü bulunmuyor.")
