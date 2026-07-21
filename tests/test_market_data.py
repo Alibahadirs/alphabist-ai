@@ -1,8 +1,10 @@
 import pandas as pd
+import pytest
 from datetime import date
 
 from app.market_data import provider
 from app.market_data.freshness import assess_price_freshness
+from app.market_data.quote import normalize_quote_values
 from app.market_data.validation import validate_quote_history_alignment
 
 
@@ -25,6 +27,37 @@ def test_get_quote_includes_source_and_price_date(monkeypatch):
     assert quote["change_percent"] == 10
     assert quote["as_of_date"] == "2026-07-17"
     assert quote["source"] == "Yahoo Finance"
+
+
+def test_quote_percent_is_recalculated_from_prices():
+    quote = normalize_quote_values(
+        last=317.50,
+        previous=328.00,
+        change=-10.50,
+        change_percent=-0.03,
+    )
+
+    assert quote.change == -10.50
+    assert quote.change_percent == pytest.approx(-3.2012195)
+    assert quote.percent_corrected is True
+
+
+def test_quote_without_previous_close_preserves_valid_provider_values():
+    quote = normalize_quote_values(
+        last=100,
+        previous=None,
+        change=2,
+        change_percent=2.04,
+    )
+
+    assert quote.change == 2
+    assert quote.change_percent == 2.04
+    assert quote.percent_corrected is False
+
+
+def test_quote_rejects_non_positive_last_price():
+    with pytest.raises(ValueError, match="sıfırdan büyük"):
+        normalize_quote_values(last=0, previous=10)
 
 
 def test_price_freshness_uses_shared_five_day_rule():
