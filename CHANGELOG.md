@@ -1,5 +1,16 @@
 # Değişiklik günlüğü
 
+## 1.8.0 - 2026-07-21
+
+### Doğrulanmış gecikmeli piyasa verisi yedeği
+
+- Son fiyat, önceki kapanış, tutar değişimi ve yüzde değişimi tek bir matematiksel doğrulama katmanında tutarlı hale getirildi.
+- `borsa-api` geçmiş çıktısını güvenli sembol kontrolü, zaman aşımı ve kapanış satırı doğrulamasıyla okuyan isteğe bağlı adaptör eklendi.
+- Yahoo Finance doğrudan fiyat isteği başarısız olduğunda `borsa-api` gecikmeli veri yedeği devreye alındı.
+- İki sağlayıcının da başarısız olması halinde kaynakları ayrı ayrı açıklayan birleşik hata mesajı eklendi.
+- Piyasa görünümünde verinin gecikmeli, resmi olmayan ve birincil/yedek kaynaktan geldiği açıkça gösterildi.
+- Sağlayıcı değişim yüzdesi tutarsızsa oran son fiyat ve önceki kapanıştan yeniden hesaplanarak kullanıcıya bildirildi.
+
 ## 1.7.0 - 2026-07-21
 
 ### Rapor trendi inceleme iş akışı

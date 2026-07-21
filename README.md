@@ -10,6 +10,8 @@ yerel Streamlit uygulaması.
 - Kullanıcı doğrulamasından sonra Alpha Score hesaplama
 - Alan türüne uygun TL, yüzde, oran ve puan biçimleri
 - Gecikmeli piyasa verileri ve teknik analiz göstergeleri
+- Yahoo Finance kesintilerinde isteğe bağlı `borsa-api` gecikmeli fiyat yedeği
+- Sağlayıcı yüzdesi yerine kapanış fiyatlarından doğrulanan günlük değişim
 - Temel ve teknik puanı birleştiren AI puanı
 - Şirket karşılaştırma ve takip listesi
 - Finansal ölçütlerle çalışan şirket tarayıcı ve otomatik sıralama
@@ -164,6 +166,17 @@ Python komutu sistemde tanımlı değilse:
 ```powershell
 py -m streamlit run main.py
 ```
+
+Yahoo Finance doğrudan bağlantısına ek olarak gecikmeli fiyat yedeğini
+etkinleştirmek için Node.js kurulu bir sistemde:
+
+```powershell
+npm install -g borsa-api
+```
+
+Bu paket de Yahoo Finance tabanlıdır; gerçek zamanlı veya resmi BIST verisi
+sağlamaz. Uygulama paketi yalnızca birincil fiyat isteği başarısız olduğunda
+kullanır ve günlük değişim yüzdesini son iki kapanıştan yeniden hesaplar.
 
 Uygulama varsayılan olarak `http://localhost:8501` adresinde açılır.
 
