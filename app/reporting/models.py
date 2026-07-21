@@ -191,3 +191,20 @@ class CompanyReportTrendMonitorFilters(BaseModel):
     company_profiles: list[CompanyProfile] = Field(default_factory=list)
     minimum_priority: float = Field(default=0, ge=0, le=100)
     decision_blocked_only: bool = False
+
+
+class ReportTrendReviewStatus(str, Enum):
+    OPEN = "Açık"
+    IN_REVIEW = "İnceleniyor"
+    RESOLVED = "Çözüldü"
+    DISMISSED = "Geçersiz"
+    REOPEN_REQUIRED = "Yeniden açılmalı"
+
+
+class CompanyReportTrendReviewState(BaseModel):
+    task_id: str
+    symbol: str
+    status: ReportTrendReviewStatus = ReportTrendReviewStatus.OPEN
+    note: str = Field(default="", max_length=2000)
+    issue_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+    updated_at: datetime | None = None

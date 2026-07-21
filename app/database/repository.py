@@ -16,6 +16,7 @@ from app.reporting.company_report import company_report_fingerprint
 from app.reporting.models import (
     CompanyInvestmentReport,
     CompanyReportSnapshot,
+    CompanyReportTrendReviewState,
 )
 from app.scoring.models import FinancialMetrics, ScoreBreakdown
 from app.technical.models import (
@@ -271,6 +272,19 @@ def init_db():
         conn.execute(
             """CREATE INDEX IF NOT EXISTS idx_company_report_snapshot_symbol_id
             ON company_report_snapshot(symbol, id)"""
+        )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS report_trend_review_state(
+            task_id TEXT PRIMARY KEY,
+            symbol TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'Açık',
+            note TEXT NOT NULL DEFAULT '',
+            issue_fingerprint TEXT NOT NULL,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"""
+        )
+        conn.execute(
+            """CREATE INDEX IF NOT EXISTS idx_report_trend_review_symbol
+            ON report_trend_review_state(symbol)"""
         )
 
 def upsert_company(m):
@@ -889,6 +903,44 @@ def list_company_report_snapshots_by_symbol(
             )
         )
     return snapshots_by_symbol
+
+
+def upsert_report_trend_review_state(
+    state: CompanyReportTrendReviewState,
+) -> None:
+    with connect() as conn:
+        conn.execute(
+            """INSERT INTO report_trend_review_state(
+            task_id, symbol, status, note, issue_fingerprint)
+            VALUES(?, ?, ?, ?, ?)
+            ON CONFLICT(task_id) DO UPDATE SET
+            symbol=excluded.symbol,
+            status=excluded.status,
+            note=excluded.note,
+            issue_fingerprint=excluded.issue_fingerprint,
+            updated_at=CURRENT_TIMESTAMP""",
+            (
+                state.task_id,
+                state.symbol.upper().strip(),
+                state.status.value,
+                state.note.strip(),
+                state.issue_fingerprint,
+            ),
+        )
+
+
+def list_report_trend_review_states(
+) -> list[CompanyReportTrendReviewState]:
+    with connect() as conn:
+        rows = conn.execute(
+            """SELECT task_id, symbol, status, note, issue_fingerprint,
+            updated_at
+            FROM report_trend_review_state
+            ORDER BY updated_at DESC, task_id"""
+        ).fetchall()
+    return [
+        CompanyReportTrendReviewState(**dict(row)) for row in rows
+    ]
 
 def seed_demo_data():
     if list_companies():
