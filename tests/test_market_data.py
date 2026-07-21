@@ -3,6 +3,7 @@ import pytest
 from datetime import date
 
 from app.market_data import provider
+from app.core.exceptions import DataProviderError
 from app.market_data.freshness import assess_price_freshness
 from app.market_data.quote import normalize_quote_values
 from app.market_data.validation import validate_quote_history_alignment
@@ -27,6 +28,51 @@ def test_get_quote_includes_source_and_price_date(monkeypatch):
     assert quote["change_percent"] == 10
     assert quote["as_of_date"] == "2026-07-17"
     assert quote["source"] == "Yahoo Finance"
+    assert quote["data_mode"] == "delayed"
+    assert quote["official"] is False
+    assert quote["fallback_used"] is False
+
+
+def test_get_quote_uses_borsa_api_only_after_yahoo_failure(monkeypatch):
+    fallback_quote = {
+        "last": 317.5,
+        "previous": 328.0,
+        "change": -10.5,
+        "change_percent": -3.2012,
+        "as_of_date": "2026-07-21",
+        "source": "borsa-api / Yahoo Finance",
+        "data_mode": "delayed",
+        "official": False,
+    }
+
+    def fail_yahoo(symbol):
+        raise DataProviderError("bağlantı kesildi")
+
+    monkeypatch.setattr(provider, "get_yahoo_quote", fail_yahoo)
+    monkeypatch.setattr(
+        provider,
+        "get_borsa_api_quote",
+        lambda symbol: fallback_quote,
+    )
+
+    quote = provider.get_quote("THYAO")
+
+    assert quote["source"] == "borsa-api / Yahoo Finance"
+    assert quote["fallback_used"] is True
+
+
+def test_get_quote_reports_both_provider_failures(monkeypatch):
+    def fail_yahoo(symbol):
+        raise DataProviderError("Yahoo kapalı")
+
+    def fail_borsa(symbol):
+        raise DataProviderError("CLI kapalı")
+
+    monkeypatch.setattr(provider, "get_yahoo_quote", fail_yahoo)
+    monkeypatch.setattr(provider, "get_borsa_api_quote", fail_borsa)
+
+    with pytest.raises(DataProviderError, match="Yahoo kapalı.*CLI kapalı"):
+        provider.get_quote("THYAO")
 
 
 def test_quote_percent_is_recalculated_from_prices():

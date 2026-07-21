@@ -2,6 +2,8 @@ import pandas as pd
 import yfinance as yf
 
 from app.core.exceptions import DataProviderError
+from app.market_data.borsa_api import get_borsa_api_quote
+from app.market_data.quote import normalize_quote_values
 from app.technical.engine import enrich_history
 
 
@@ -10,7 +12,21 @@ def yahoo_symbol(symbol: str) -> str:
     return normalized if normalized.endswith(".IS") else f"{normalized}.IS"
 
 
-def get_quote(symbol: str) -> dict[str, float | str | None]:
+def get_quote(symbol: str) -> dict[str, float | str | bool | None]:
+    try:
+        return get_yahoo_quote(symbol)
+    except DataProviderError as yahoo_error:
+        try:
+            quote = get_borsa_api_quote(symbol)
+        except DataProviderError as borsa_error:
+            raise DataProviderError(
+                "Fiyat verisi alınamadı. "
+                f"Yahoo Finance: {yahoo_error} | borsa-api: {borsa_error}"
+            ) from borsa_error
+        return {**quote, "fallback_used": True}
+
+
+def get_yahoo_quote(symbol: str) -> dict[str, float | str | bool | None]:
     try:
         history = yf.Ticker(yahoo_symbol(symbol)).history(
             period="5d",
@@ -26,16 +42,19 @@ def get_quote(symbol: str) -> dict[str, float | str | None]:
     closes = history["Close"].dropna()
     last = float(closes.iloc[-1])
     previous = float(closes.iloc[-2]) if len(closes) > 1 else None
-    change = None if previous is None else last - previous
-    change_percent = None if not previous else change / previous * 100
+    normalized = normalize_quote_values(last=last, previous=previous)
     as_of_date = pd.Timestamp(closes.index[-1]).date().isoformat()
     return {
-        "last": last,
-        "previous": previous,
-        "change": change,
-        "change_percent": change_percent,
+        "last": normalized.last,
+        "previous": normalized.previous,
+        "change": normalized.change,
+        "change_percent": normalized.change_percent,
         "as_of_date": as_of_date,
         "source": "Yahoo Finance",
+        "data_mode": "delayed",
+        "official": False,
+        "percent_corrected": normalized.percent_corrected,
+        "fallback_used": False,
     }
 
 
