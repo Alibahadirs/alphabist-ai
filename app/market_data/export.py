@@ -6,6 +6,7 @@ import io
 from app.market_data.health import MarketHealthSummary
 from app.market_data.batch_history import (
     MarketBatchRun,
+    MarketBatchRunAudit,
     market_batch_run_fingerprint,
 )
 from app.market_data.models import (
@@ -132,6 +133,56 @@ def build_market_batch_run_csv(runs: list[MarketBatchRun]) -> bytes:
                     item.snapshot_fingerprint,
                     integrity,
                     run.fingerprint,
+                ]
+            )
+    return ("\ufeff" + output.getvalue()).encode("utf-8")
+
+
+def build_market_batch_audit_csv(
+    audits: list[MarketBatchRunAudit],
+) -> bytes:
+    output = io.StringIO(newline="")
+    writer = csv.writer(output, lineterminator="\n")
+    writer.writerow(
+        [
+            "Kayıt ID",
+            "Çalışma zamanı",
+            "Hisse",
+            "Sonuç",
+            "Açıklama",
+            "Toplam",
+            "Doğrulandı",
+            "Kısmi",
+            "Veri yok",
+            "Hata",
+            "Denetim durumu",
+            "Denetim hatası",
+            "Kayıt parmak izi",
+        ]
+    )
+    for audit in audits:
+        run = audit.run
+        items = run.items if run is not None else (None,)
+        for item in items:
+            writer.writerow(
+                [
+                    audit.id,
+                    (
+                        run.observed_at.isoformat()
+                        if run is not None
+                        else audit.created_at
+                    ),
+                    item.symbol if item is not None else "",
+                    item.status if item is not None else "",
+                    item.detail if item is not None else "",
+                    run.total if run is not None else "",
+                    run.cross_verified if run is not None else "",
+                    run.partial if run is not None else "",
+                    run.unavailable if run is not None else "",
+                    run.failed if run is not None else "",
+                    audit.status,
+                    audit.error or "",
+                    audit.stored_fingerprint,
                 ]
             )
     return ("\ufeff" + output.getvalue()).encode("utf-8")

@@ -46,7 +46,7 @@ from app.database.repository import (
     list_document_usages,
     list_latest_company_data_audits,
     list_market_diagnostic_snapshots,
-    list_market_batch_runs,
+    list_market_batch_run_audits,
     list_latest_market_diagnostic_snapshots,
     list_portfolio_positions,
     list_remediation_task_events,
@@ -104,7 +104,9 @@ from app.market_data.batch import (
 )
 from app.market_data.batch_history import (
     build_market_batch_run,
-    market_batch_run_fingerprint,
+)
+from app.market_data.batch_monitoring import (
+    build_market_batch_history_summary,
 )
 from app.market_data.readiness import assess_quote_readiness
 from app.market_data.diagnostics import (
@@ -112,7 +114,7 @@ from app.market_data.diagnostics import (
     diagnose_market_data,
 )
 from app.market_data.export import (
-    build_market_batch_run_csv,
+    build_market_batch_audit_csv,
     build_market_diagnostic_csv,
     build_market_health_csv,
 )
@@ -5673,34 +5675,72 @@ def _render_market_batch_check() -> None:
             icon=":material/download:",
         )
 
-        try:
-            batch_runs = list_market_batch_runs(limit=20)
-        except (ValueError, TypeError) as exc:
-            st.error(f"Toplu kontrol geçmişi doğrulanamadı: {exc}")
-            return
-        if not batch_runs:
+        audits = list_market_batch_run_audits(limit=50)
+        if not audits:
             st.info("Henüz kayıtlı toplu piyasa kontrolü bulunmuyor.")
             return
 
         st.markdown("**Toplu kontrol geçmişi**")
+        monitoring = build_market_batch_history_summary(audits)
+        with st.container(horizontal=True):
+            st.metric("Geçerli kayıt", monitoring.valid_records, border=True)
+            st.metric("Geçersiz kayıt", monitoring.invalid_records, border=True)
+            st.metric(
+                "Son doğrulama",
+                f"%{monitoring.last_verified_rate:.1f}",
+                border=True,
+            )
+            st.metric(
+                "Ortalama doğrulama",
+                f"%{monitoring.average_verified_rate:.1f}",
+                border=True,
+            )
+            st.metric(
+                "Ardışık sorunlu",
+                monitoring.consecutive_problem_runs,
+                border=True,
+            )
+        if monitoring.status == "Bütünlük sorunu":
+            st.error("Toplu çalışma geçmişinde bütünlük sorunu bulundu.")
+        elif monitoring.status == "İnceleme gerekli":
+            st.warning("Son toplu çalışma tam doğrulanamadı.")
+        else:
+            st.success(f"Geçmiş durumu: {monitoring.status}")
+
+        status_options = sorted({audit.status for audit in audits})
+        selected_statuses = st.pills(
+            "Denetim durumu",
+            status_options,
+            default=status_options,
+            selection_mode="multi",
+            key="market_batch_audit_status_filter",
+        )
+        filtered_audits = [
+            audit for audit in audits if audit.status in selected_statuses
+        ]
         st.dataframe(
             pd.DataFrame(
                 [
                     {
-                        "Çalışma zamanı": run.observed_at,
-                        "Hisse": run.total,
-                        "Doğrulandı": run.cross_verified,
-                        "Kısmi": run.partial,
-                        "Veri yok": run.unavailable,
-                        "Hata": run.failed,
-                        "Bütünlük": (
-                            "Doğrulandı"
-                            if run.fingerprint
-                            == market_batch_run_fingerprint(run)
-                            else "Geçersiz"
+                        "Kayıt": audit.id,
+                        "Çalışma zamanı": (
+                            audit.run.observed_at
+                            if audit.run is not None
+                            else pd.to_datetime(audit.created_at)
                         ),
+                        "Hisse": audit.run.total if audit.run else None,
+                        "Doğrulandı": (
+                            audit.run.cross_verified if audit.run else None
+                        ),
+                        "Kısmi": audit.run.partial if audit.run else None,
+                        "Veri yok": (
+                            audit.run.unavailable if audit.run else None
+                        ),
+                        "Hata": audit.run.failed if audit.run else None,
+                        "Bütünlük": audit.status,
+                        "Açıklama": audit.error or "-",
                     }
-                    for run in batch_runs
+                    for audit in filtered_audits
                 ]
             ),
             hide_index=True,
@@ -5711,28 +5751,36 @@ def _render_market_batch_check() -> None:
                 ),
             },
         )
-        latest_run = batch_runs[0]
-        st.caption("Son toplu çalışmanın hisse sonuçları")
-        st.dataframe(
-            pd.DataFrame(
-                [
-                    {
-                        "Hisse": item.symbol,
-                        "Sonuç": item.status,
-                        "Açıklama": item.detail,
-                        "Anlık görüntü": (
-                            "Var" if item.snapshot_fingerprint else "Yok"
-                        ),
-                    }
-                    for item in latest_run.items
-                ]
+        latest_valid = next(
+            (
+                audit.run
+                for audit in audits
+                if audit.integrity_valid and audit.run is not None
             ),
-            hide_index=True,
-            width="stretch",
+            None,
         )
+        if latest_valid is not None:
+            st.caption("Son doğrulanmış toplu çalışmanın hisse sonuçları")
+            st.dataframe(
+                pd.DataFrame(
+                    [
+                        {
+                            "Hisse": item.symbol,
+                            "Sonuç": item.status,
+                            "Açıklama": item.detail,
+                            "Anlık görüntü": (
+                                "Var" if item.snapshot_fingerprint else "Yok"
+                            ),
+                        }
+                        for item in latest_valid.items
+                    ]
+                ),
+                hide_index=True,
+                width="stretch",
+            )
         st.download_button(
             "Toplu kontrol geçmişini indir",
-            data=build_market_batch_run_csv(batch_runs),
+            data=build_market_batch_audit_csv(filtered_audits),
             file_name="toplu-piyasa-kontrol-gecmisi.csv",
             mime="text/csv",
             icon=":material/download:",
