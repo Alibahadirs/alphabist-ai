@@ -4,6 +4,10 @@ import csv
 import io
 
 from app.market_data.health import MarketHealthSummary
+from app.market_data.batch_history import (
+    MarketBatchRun,
+    market_batch_run_fingerprint,
+)
 from app.market_data.models import (
     MarketDiagnosticSnapshot,
     market_snapshot_fingerprint,
@@ -85,4 +89,49 @@ def build_market_health_csv(summary: MarketHealthSummary) -> bytes:
                 item.detail,
             ]
         )
+    return ("\ufeff" + output.getvalue()).encode("utf-8")
+
+
+def build_market_batch_run_csv(runs: list[MarketBatchRun]) -> bytes:
+    output = io.StringIO(newline="")
+    writer = csv.writer(output, lineterminator="\n")
+    writer.writerow(
+        [
+            "Çalışma zamanı",
+            "Hisse",
+            "Sonuç",
+            "Açıklama",
+            "Toplam",
+            "Doğrulandı",
+            "Kısmi",
+            "Veri yok",
+            "Hata",
+            "Anlık görüntü parmak izi",
+            "Çalışma bütünlüğü",
+            "Çalışma parmak izi",
+        ]
+    )
+    for run in runs:
+        integrity = (
+            "Doğrulandı"
+            if run.fingerprint == market_batch_run_fingerprint(run)
+            else "Geçersiz"
+        )
+        for item in run.items:
+            writer.writerow(
+                [
+                    run.observed_at.isoformat(),
+                    item.symbol,
+                    item.status,
+                    item.detail,
+                    run.total,
+                    run.cross_verified,
+                    run.partial,
+                    run.unavailable,
+                    run.failed,
+                    item.snapshot_fingerprint,
+                    integrity,
+                    run.fingerprint,
+                ]
+            )
     return ("\ufeff" + output.getvalue()).encode("utf-8")

@@ -35,7 +35,6 @@ from app.database.repository import (
     add_company_data_audit,
     add_company_report_snapshot,
     add_market_diagnostic_snapshot,
-    add_market_diagnostic_snapshots,
     add_score_history,
     add_technical_score_history,
     get_company,
@@ -47,6 +46,7 @@ from app.database.repository import (
     list_document_usages,
     list_latest_company_data_audits,
     list_market_diagnostic_snapshots,
+    list_market_batch_runs,
     list_latest_market_diagnostic_snapshots,
     list_portfolio_positions,
     list_remediation_task_events,
@@ -55,6 +55,7 @@ from app.database.repository import (
     list_score_history,
     list_technical_score_history,
     list_watchlist_entries,
+    persist_market_batch_result,
     remove_watchlist_entry,
     remove_portfolio_position,
     upsert_company,
@@ -101,12 +102,17 @@ from app.market_data.batch import (
     MarketBatchSummary,
     diagnose_market_batch,
 )
+from app.market_data.batch_history import (
+    build_market_batch_run,
+    market_batch_run_fingerprint,
+)
 from app.market_data.readiness import assess_quote_readiness
 from app.market_data.diagnostics import (
     MarketDiagnostic,
     diagnose_market_data,
 )
 from app.market_data.export import (
+    build_market_batch_run_csv,
     build_market_diagnostic_csv,
     build_market_health_csv,
 )
@@ -5577,11 +5583,14 @@ def _render_market_batch_check() -> None:
                         for item in result.items
                         if item.diagnostic is not None
                     ]
-                    save_summary = add_market_diagnostic_snapshots(snapshots)
+                    run = build_market_batch_run(result)
+                    save_summary = persist_market_batch_result(run, snapshots)
                     st.session_state["market_data_batch_result"] = result
                     st.session_state["market_data_batch_save_status"] = (
-                        f"{save_summary.inserted} yeni kayıt eklendi; "
-                        f"{save_summary.skipped} tekrar atlandı."
+                        f"{save_summary.snapshots_inserted} yeni anlık görüntü "
+                        f"eklendi; {save_summary.snapshots_skipped} tekrar "
+                        f"atlandı. Çalışma kaydı "
+                        f"{'eklendi' if save_summary.run_inserted else 'zaten vardı'}."
                     )
 
         result = st.session_state.get("market_data_batch_result")
@@ -5660,6 +5669,71 @@ def _render_market_batch_check() -> None:
             "Sağlık özetini indir",
             data=build_market_health_csv(health),
             file_name="piyasa-veri-sagligi.csv",
+            mime="text/csv",
+            icon=":material/download:",
+        )
+
+        try:
+            batch_runs = list_market_batch_runs(limit=20)
+        except (ValueError, TypeError) as exc:
+            st.error(f"Toplu kontrol geçmişi doğrulanamadı: {exc}")
+            return
+        if not batch_runs:
+            st.info("Henüz kayıtlı toplu piyasa kontrolü bulunmuyor.")
+            return
+
+        st.markdown("**Toplu kontrol geçmişi**")
+        st.dataframe(
+            pd.DataFrame(
+                [
+                    {
+                        "Çalışma zamanı": run.observed_at,
+                        "Hisse": run.total,
+                        "Doğrulandı": run.cross_verified,
+                        "Kısmi": run.partial,
+                        "Veri yok": run.unavailable,
+                        "Hata": run.failed,
+                        "Bütünlük": (
+                            "Doğrulandı"
+                            if run.fingerprint
+                            == market_batch_run_fingerprint(run)
+                            else "Geçersiz"
+                        ),
+                    }
+                    for run in batch_runs
+                ]
+            ),
+            hide_index=True,
+            width="stretch",
+            column_config={
+                "Çalışma zamanı": st.column_config.DatetimeColumn(
+                    format="DD.MM.YYYY HH:mm:ss"
+                ),
+            },
+        )
+        latest_run = batch_runs[0]
+        st.caption("Son toplu çalışmanın hisse sonuçları")
+        st.dataframe(
+            pd.DataFrame(
+                [
+                    {
+                        "Hisse": item.symbol,
+                        "Sonuç": item.status,
+                        "Açıklama": item.detail,
+                        "Anlık görüntü": (
+                            "Var" if item.snapshot_fingerprint else "Yok"
+                        ),
+                    }
+                    for item in latest_run.items
+                ]
+            ),
+            hide_index=True,
+            width="stretch",
+        )
+        st.download_button(
+            "Toplu kontrol geçmişini indir",
+            data=build_market_batch_run_csv(batch_runs),
+            file_name="toplu-piyasa-kontrol-gecmisi.csv",
             mime="text/csv",
             icon=":material/download:",
         )
