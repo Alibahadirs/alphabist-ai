@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from app.market_data.batch import MarketBatchSummary
 from app.market_data.models import build_market_diagnostic_snapshot
@@ -44,6 +45,17 @@ class MarketBatchRun(BaseModel):
         if actual != expected:
             raise ValueError("Toplu piyasa kontrolü sayaçları sonuçlarla uyuşmuyor.")
         return self
+
+
+@dataclass(frozen=True)
+class MarketBatchRunAudit:
+    id: int
+    run: MarketBatchRun | None
+    integrity_valid: bool
+    status: str
+    error: str | None
+    stored_fingerprint: str
+    created_at: str
 
 
 def build_market_batch_run(
@@ -89,3 +101,64 @@ def market_batch_run_fingerprint(run: MarketBatchRun) -> str:
         separators=(",", ":"),
     )
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def audit_market_batch_run_payload(
+    *,
+    record_id: int,
+    run_payload: str,
+    stored_fingerprint: str,
+    created_at: str,
+) -> MarketBatchRunAudit:
+    try:
+        payload = json.loads(run_payload)
+    except (json.JSONDecodeError, TypeError) as exc:
+        return MarketBatchRunAudit(
+            id=record_id,
+            run=None,
+            integrity_valid=False,
+            status="Yük bozuk",
+            error=str(exc),
+            stored_fingerprint=stored_fingerprint,
+            created_at=created_at,
+        )
+    if not isinstance(payload, dict):
+        return MarketBatchRunAudit(
+            id=record_id,
+            run=None,
+            integrity_valid=False,
+            status="Yük bozuk",
+            error="Toplu çalışma yükü JSON nesnesi değil.",
+            stored_fingerprint=stored_fingerprint,
+            created_at=created_at,
+        )
+
+    payload.update(id=record_id, created_at=created_at)
+    try:
+        run = MarketBatchRun(**payload)
+    except ValidationError as exc:
+        return MarketBatchRunAudit(
+            id=record_id,
+            run=None,
+            integrity_valid=False,
+            status="Şema hatası",
+            error=str(exc),
+            stored_fingerprint=stored_fingerprint,
+            created_at=created_at,
+        )
+
+    calculated_fingerprint = market_batch_run_fingerprint(run)
+    integrity_valid = bool(
+        run.fingerprint
+        and run.fingerprint == stored_fingerprint
+        and run.fingerprint == calculated_fingerprint
+    )
+    return MarketBatchRunAudit(
+        id=record_id,
+        run=run,
+        integrity_valid=integrity_valid,
+        status="Doğrulandı" if integrity_valid else "Parmak izi hatası",
+        error=None if integrity_valid else "Kayıt içeriği parmak iziyle eşleşmiyor.",
+        stored_fingerprint=stored_fingerprint,
+        created_at=created_at,
+    )
