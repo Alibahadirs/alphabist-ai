@@ -16,6 +16,10 @@ from app.market_data.models import (
     MarketDiagnosticSnapshot,
     market_snapshot_fingerprint,
 )
+from app.market_data.batch_history import (
+    MarketBatchRun,
+    market_batch_run_fingerprint,
+)
 from app.market_data.policy import get_source_policy
 from app.portfolio.models import PortfolioPosition
 from app.reporting.company_report import company_report_fingerprint
@@ -166,6 +170,23 @@ def init_db():
         conn.execute(
             """CREATE INDEX IF NOT EXISTS idx_market_diagnostic_symbol_id
             ON market_diagnostic_history(symbol, id)"""
+        )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS market_batch_run(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            observed_at TEXT NOT NULL,
+            total INTEGER NOT NULL,
+            cross_verified INTEGER NOT NULL,
+            partial INTEGER NOT NULL,
+            unavailable INTEGER NOT NULL,
+            failed INTEGER NOT NULL,
+            run_payload TEXT NOT NULL,
+            fingerprint TEXT NOT NULL UNIQUE,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"""
+        )
+        conn.execute(
+            """CREATE INDEX IF NOT EXISTS idx_market_batch_run_id
+            ON market_batch_run(id)"""
         )
         conn.execute(
             """CREATE TABLE IF NOT EXISTS portfolio_positions(
@@ -623,6 +644,53 @@ def _market_snapshot_from_row(
     ):
         values[field] = bool(values[field])
     return MarketDiagnosticSnapshot(**values)
+
+
+def add_market_batch_run(run: MarketBatchRun) -> bool:
+    expected_fingerprint = market_batch_run_fingerprint(run)
+    if run.fingerprint != expected_fingerprint:
+        raise ValueError("Toplu piyasa kontrolü parmak izi geçersiz.")
+    payload = json.dumps(
+        run.model_dump(mode="json", exclude={"id", "created_at"}),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    with connect() as conn:
+        cursor = conn.execute(
+            """INSERT OR IGNORE INTO market_batch_run(
+            observed_at, total, cross_verified, partial, unavailable,
+            failed, run_payload, fingerprint)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                run.observed_at.isoformat(),
+                run.total,
+                run.cross_verified,
+                run.partial,
+                run.unavailable,
+                run.failed,
+                payload,
+                run.fingerprint,
+            ),
+        )
+    return cursor.rowcount > 0
+
+
+def list_market_batch_runs(limit: int = 30) -> list[MarketBatchRun]:
+    safe_limit = max(1, min(limit, 200))
+    with connect() as conn:
+        rows = conn.execute(
+            """SELECT id, run_payload, created_at
+            FROM market_batch_run
+            ORDER BY id DESC LIMIT ?""",
+            (safe_limit,),
+        ).fetchall()
+    runs = []
+    for row in rows:
+        payload = json.loads(row["run_payload"])
+        payload.update(id=row["id"], created_at=row["created_at"])
+        runs.append(MarketBatchRun(**payload))
+    return runs
 
 
 def add_company_data_audit(audit: CompanyDataAudit) -> None:
