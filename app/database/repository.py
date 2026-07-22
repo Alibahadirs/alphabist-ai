@@ -18,6 +18,8 @@ from app.market_data.models import (
 )
 from app.market_data.batch_history import (
     MarketBatchRun,
+    MarketBatchRunAudit,
+    audit_market_batch_run_payload,
     market_batch_run_fingerprint,
 )
 from app.market_data.policy import get_source_policy
@@ -673,20 +675,33 @@ def persist_market_batch_result(
 
 
 def list_market_batch_runs(limit: int = 30) -> list[MarketBatchRun]:
+    return [
+        audit.run
+        for audit in list_market_batch_run_audits(limit)
+        if audit.integrity_valid and audit.run is not None
+    ]
+
+
+def list_market_batch_run_audits(
+    limit: int = 30,
+) -> list[MarketBatchRunAudit]:
     safe_limit = max(1, min(limit, 200))
     with connect() as conn:
         rows = conn.execute(
-            """SELECT id, run_payload, created_at
+            """SELECT id, run_payload, fingerprint, created_at
             FROM market_batch_run
             ORDER BY id DESC LIMIT ?""",
             (safe_limit,),
         ).fetchall()
-    runs = []
-    for row in rows:
-        payload = json.loads(row["run_payload"])
-        payload.update(id=row["id"], created_at=row["created_at"])
-        runs.append(MarketBatchRun(**payload))
-    return runs
+    return [
+        audit_market_batch_run_payload(
+            record_id=row["id"],
+            run_payload=row["run_payload"],
+            stored_fingerprint=row["fingerprint"],
+            created_at=row["created_at"],
+        )
+        for row in rows
+    ]
 
 
 def _validate_market_snapshots(
