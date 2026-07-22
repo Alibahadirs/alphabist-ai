@@ -1,5 +1,18 @@
 # Değişiklik günlüğü
 
+## 1.14.0 - 2026-07-22
+
+### Bozulmaya dayanıklı toplu piyasa geçmişi
+
+- Toplu çalışma JSON yükü, şema, sayaç-sonuç uyumu ve SHA-256 parmak izi birlikte denetlenir hale getirildi.
+- Bozuk JSON, şema hatası ve parmak izi uyuşmazlığı ayrı denetim durumlarıyla sınıflandırıldı.
+- Geçersiz bir SQLite satırının tüm toplu çalışma geçmişini kullanılamaz hale getirmesi engellendi.
+- Doğrulanmış çalışmalar normal geçmiş akışında tutulurken geçersiz kayıtlar nedenleriyle görünür bırakıldı.
+- Son ve ortalama çapraz doğrulama oranı ile ardışık sorunlu çalışma sayısı hesaplandı.
+- Geçmiş sağlık durumu sağlıklı, inceleme gerekli, bütünlük sorunu veya veri yok olarak özetlendi.
+- Piyasa veri kontrolü ekranına geçmiş sağlık KPI'ları ve denetim durumu filtresi eklendi.
+- Geçerli ve bozuk kayıtları birlikte taşıyan kanıt bilgili UTF-8 CSV dışa aktarımı eklendi.
+
 ## 1.13.0 - 2026-07-22
 
 ### Denetlenebilir toplu piyasa çalıştırmaları
