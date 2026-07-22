@@ -19,6 +19,9 @@ yerel Streamlit uygulaması.
 - En fazla 20 kayıtlı şirket için kullanıcı kontrollü toplu piyasa denetimi
 - Son kaydı eski, kısmi, eksik veya bütünlüğü bozuk şirketleri önceleyen sağlık özeti
 - Tek transaction ile yinelenmeyen toplu piyasa geçmişi ve UTF-8 sağlık CSV'si
+- Her toplu kontrol için sayaç ve hisse sonucu tutarlılığı doğrulanan çalışma kaydı
+- Çalışma özeti ile piyasa anlık görüntülerini atomik ve parmak izi korumalı saklama
+- Toplu çalışma geçmişi, son çalışma ayrıntısı ve kanıt bilgili UTF-8 CSV çıktısı
 - Kaynak politikası, güncellik ve fiyat-grafik uyumunu birleştiren merkezi karar kapısı
 - Teknik puan, karşılaştırma, takip listesi ve portföyde ortak piyasa veri denetimi
 - Temel ve teknik puanı birleştiren AI puanı

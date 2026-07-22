@@ -1,5 +1,18 @@
 # Değişiklik günlüğü
 
+## 1.13.0 - 2026-07-22
+
+### Denetlenebilir toplu piyasa çalıştırmaları
+
+- Her toplu piyasa kontrolü zaman, sayaçlar, hisse sonuçları ve hata ayrıntılarıyla standart çalışma kaydına dönüştürüldü.
+- Çalışma içeriği ile bağlı piyasa anlık görüntülerinin SHA-256 parmak izleri birlikte saklandı.
+- Toplu çalışma sayaçlarının hisse sonuçlarıyla birebir uyuşması model seviyesinde zorunlu hale getirildi.
+- Çalışma kaydı ile referans verilen anlık görüntülerin eksiksiz eşleşmesi kayıt öncesinde doğrulandı.
+- Çalışma özeti ve şirket anlık görüntüleri tek SQLite transaction'ında atomik olarak kaydedildi.
+- Aynı çalıştırmanın ve aynı piyasa anlık görüntülerinin yinelenmesi engellendi.
+- Piyasa veri kontrolü ekranına son toplu çalışmalar, bütünlük durumu ve son çalışmanın hisse ayrıntıları eklendi.
+- Toplu çalışma geçmişi, parmak izi kanıtlarıyla birlikte UTF-8 CSV olarak dışa aktarılabilir hale getirildi.
+
 ## 1.12.0 - 2026-07-21
 
 ### Toplu piyasa veri sağlığı
