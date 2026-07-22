@@ -44,6 +44,14 @@ class MarketSnapshotSaveSummary:
     inserted: int
     skipped: int
 
+
+@dataclass(frozen=True)
+class MarketBatchPersistenceSummary:
+    snapshots_inserted: int
+    snapshots_skipped: int
+    run_inserted: bool
+
+
 def connect():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
@@ -526,25 +534,10 @@ def add_market_diagnostic_snapshot(
 def add_market_diagnostic_snapshots(
     snapshots: list[MarketDiagnosticSnapshot],
 ) -> MarketSnapshotSaveSummary:
-    for snapshot in snapshots:
-        expected_fingerprint = market_snapshot_fingerprint(snapshot)
-        if snapshot.fingerprint != expected_fingerprint:
-            raise ValueError("Piyasa kontrolü parmak izi geçersiz.")
+    _validate_market_snapshots(snapshots)
 
-    inserted = 0
     with connect() as conn:
-        for snapshot in snapshots:
-            cursor = conn.execute(
-                """INSERT OR IGNORE INTO market_diagnostic_history(
-                symbol, primary_available, secondary_available,
-                primary_eligible, secondary_eligible, primary_price,
-                secondary_price, primary_date, secondary_date,
-                price_difference_percent, change_difference_points,
-                date_gap_days, cross_verified, status, fingerprint)
-                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                _market_snapshot_values(snapshot),
-            )
-            inserted += max(cursor.rowcount, 0)
+        inserted = _insert_market_snapshots(conn, snapshots)
     return MarketSnapshotSaveSummary(
         inserted=inserted,
         skipped=len(snapshots) - inserted,
@@ -647,33 +640,36 @@ def _market_snapshot_from_row(
 
 
 def add_market_batch_run(run: MarketBatchRun) -> bool:
-    expected_fingerprint = market_batch_run_fingerprint(run)
-    if run.fingerprint != expected_fingerprint:
-        raise ValueError("Toplu piyasa kontrolü parmak izi geçersiz.")
-    payload = json.dumps(
-        run.model_dump(mode="json", exclude={"id", "created_at"}),
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    )
+    _validate_market_batch_run(run)
     with connect() as conn:
-        cursor = conn.execute(
-            """INSERT OR IGNORE INTO market_batch_run(
-            observed_at, total, cross_verified, partial, unavailable,
-            failed, run_payload, fingerprint)
-            VALUES(?, ?, ?, ?, ?, ?, ?, ?)""",
-            (
-                run.observed_at.isoformat(),
-                run.total,
-                run.cross_verified,
-                run.partial,
-                run.unavailable,
-                run.failed,
-                payload,
-                run.fingerprint,
-            ),
+        return _insert_market_batch_run(conn, run)
+
+
+def persist_market_batch_result(
+    run: MarketBatchRun,
+    snapshots: list[MarketDiagnosticSnapshot],
+) -> MarketBatchPersistenceSummary:
+    _validate_market_batch_run(run)
+    _validate_market_snapshots(snapshots)
+    referenced_fingerprints = {
+        item.snapshot_fingerprint
+        for item in run.items
+        if item.snapshot_fingerprint
+    }
+    provided_fingerprints = {snapshot.fingerprint for snapshot in snapshots}
+    if referenced_fingerprints != provided_fingerprints:
+        raise ValueError(
+            "Toplu çalışma ile piyasa anlık görüntüleri eşleşmiyor."
         )
-    return cursor.rowcount > 0
+
+    with connect() as conn:
+        inserted = _insert_market_snapshots(conn, snapshots)
+        run_inserted = _insert_market_batch_run(conn, run)
+    return MarketBatchPersistenceSummary(
+        snapshots_inserted=inserted,
+        snapshots_skipped=len(snapshots) - inserted,
+        run_inserted=run_inserted,
+    )
 
 
 def list_market_batch_runs(limit: int = 30) -> list[MarketBatchRun]:
@@ -691,6 +687,69 @@ def list_market_batch_runs(limit: int = 30) -> list[MarketBatchRun]:
         payload.update(id=row["id"], created_at=row["created_at"])
         runs.append(MarketBatchRun(**payload))
     return runs
+
+
+def _validate_market_snapshots(
+    snapshots: list[MarketDiagnosticSnapshot],
+) -> None:
+    for snapshot in snapshots:
+        expected_fingerprint = market_snapshot_fingerprint(snapshot)
+        if snapshot.fingerprint != expected_fingerprint:
+            raise ValueError("Piyasa kontrolü parmak izi geçersiz.")
+
+
+def _validate_market_batch_run(run: MarketBatchRun) -> None:
+    if run.fingerprint != market_batch_run_fingerprint(run):
+        raise ValueError("Toplu piyasa kontrolü parmak izi geçersiz.")
+
+
+def _insert_market_snapshots(
+    conn: sqlite3.Connection,
+    snapshots: list[MarketDiagnosticSnapshot],
+) -> int:
+    inserted = 0
+    for snapshot in snapshots:
+        cursor = conn.execute(
+            """INSERT OR IGNORE INTO market_diagnostic_history(
+            symbol, primary_available, secondary_available,
+            primary_eligible, secondary_eligible, primary_price,
+            secondary_price, primary_date, secondary_date,
+            price_difference_percent, change_difference_points,
+            date_gap_days, cross_verified, status, fingerprint)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            _market_snapshot_values(snapshot),
+        )
+        inserted += max(cursor.rowcount, 0)
+    return inserted
+
+
+def _insert_market_batch_run(
+    conn: sqlite3.Connection,
+    run: MarketBatchRun,
+) -> bool:
+    payload = json.dumps(
+        run.model_dump(mode="json", exclude={"id", "created_at"}),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    cursor = conn.execute(
+        """INSERT OR IGNORE INTO market_batch_run(
+        observed_at, total, cross_verified, partial, unavailable,
+        failed, run_payload, fingerprint)
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?)""",
+        (
+            run.observed_at.isoformat(),
+            run.total,
+            run.cross_verified,
+            run.partial,
+            run.unavailable,
+            run.failed,
+            payload,
+            run.fingerprint,
+        ),
+    )
+    return cursor.rowcount > 0
 
 
 def add_company_data_audit(audit: CompanyDataAudit) -> None:
