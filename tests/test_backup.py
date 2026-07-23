@@ -3,6 +3,7 @@ from app.database.backup import (
     create_database_backup,
     list_safety_backups,
     restore_database_backup,
+    summarize_database_backup,
     validate_database_backup,
 )
 from app.scoring.models import FinancialMetrics
@@ -49,6 +50,31 @@ def test_invalid_backup_is_rejected():
 
     assert validation.valid is False
     assert "SQLite" in validation.message
+
+
+def test_backup_summary_counts_business_records(tmp_path, monkeypatch):
+    database_path = tmp_path / "source.db"
+    _create_database(database_path, monkeypatch, "SUMMARY")
+
+    summary = summarize_database_backup(
+        create_database_backup(database_path)
+    )
+
+    assert summary.company_count == 1
+    assert summary.watchlist_count == 0
+    assert summary.portfolio_position_count == 0
+    assert summary.score_history_count == 0
+    assert summary.audit_count == 0
+    assert summary.total_business_records == 1
+
+
+def test_invalid_backup_cannot_be_summarized():
+    try:
+        summarize_database_backup(b"not a database")
+    except ValueError as exc:
+        assert "SQLite" in str(exc)
+    else:
+        raise AssertionError("Geçersiz yedek özetlenmemeliydi.")
 
 
 def test_restore_replaces_data_and_keeps_safety_backup(

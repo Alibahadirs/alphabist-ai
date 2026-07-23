@@ -34,6 +34,27 @@ class SafetyBackupInfo:
     valid: bool
 
 
+@dataclass(frozen=True)
+class BackupSummary:
+    company_count: int
+    watchlist_count: int
+    portfolio_position_count: int
+    score_history_count: int
+    audit_count: int
+
+    @property
+    def total_business_records(self) -> int:
+        return sum(
+            (
+                self.company_count,
+                self.watchlist_count,
+                self.portfolio_position_count,
+                self.score_history_count,
+                self.audit_count,
+            )
+        )
+
+
 def _temporary_database_path() -> Path:
     file_descriptor, name = tempfile.mkstemp(suffix=".db")
     os.close(file_descriptor)
@@ -111,6 +132,37 @@ def validate_database_backup(data: bytes) -> BackupValidation:
             valid=True,
             message="Yedek geçerli ve geri yüklemeye hazır.",
             tables=tuple(sorted(tables)),
+        )
+    finally:
+        temporary_path.unlink(missing_ok=True)
+
+
+def summarize_database_backup(data: bytes) -> BackupSummary:
+    validation = validate_database_backup(data)
+    if not validation.valid:
+        raise ValueError(validation.message)
+
+    temporary_path = _temporary_database_path()
+    try:
+        temporary_path.write_bytes(data)
+        with closing(
+            sqlite3.connect(
+                f"file:{temporary_path.as_posix()}?mode=ro",
+                uri=True,
+            )
+        ) as connection:
+            counts = {
+                table: connection.execute(
+                    f"SELECT COUNT(*) FROM {table}"
+                ).fetchone()[0]
+                for table in REQUIRED_TABLES
+            }
+        return BackupSummary(
+            company_count=counts["companies"],
+            watchlist_count=counts["watchlist"],
+            portfolio_position_count=counts["portfolio_positions"],
+            score_history_count=counts["score_history"],
+            audit_count=counts["company_data_audit"],
         )
     finally:
         temporary_path.unlink(missing_ok=True)
