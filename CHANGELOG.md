@@ -1,5 +1,18 @@
 # Değişiklik günlüğü
 
+## 1.17.0 - 2026-07-23
+
+### Sektöre duyarlı PDF güvenlik kapısı
+
+- PDF kaynak alanları parasal tutar, yüzde ve puan türleriyle merkezi sözleşmeye bağlandı.
+- Banka, sigorta, GYO ve finansal hizmet oranlarının yalnız ilgili şirket profilinde alınması sağlandı.
+- Para birimi ölçeğinin prim tutarları dahil yalnız parasal alanlara uygulanması güvence altına alındı.
+- Yüzde alanına parasal tutar büyüklüğünde bir değer gelmesi halinde otomatik çıkarım reddedilir hale getirildi.
+- Ondalık oran gösterimleri yüzde değerine güvenli biçimde dönüştürülürken parasal tutarlar değişmeden bırakıldı.
+- Finansal rapor, faaliyet raporu ve kullanıcı tarafından seçilen dönemler birlikte doğrulanır hale getirildi.
+- Rapor dönemleri uyuşmadığında şirket kayıt formunun ve kaydetme işleminin devam etmesi engellendi.
+- Sanayi, banka, sigorta ve GYO rapor yapıları için uçtan uca sektör testleri eklendi.
+
 ## 1.16.0 - 2026-07-23
 
 ### Kalıcı piyasa veri görev yönetimi

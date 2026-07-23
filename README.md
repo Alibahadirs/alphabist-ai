@@ -7,6 +7,9 @@ yerel Streamlit uygulaması.
 ## Özellikler
 
 - Finansal rapor ve faaliyet raporu PDF'lerinden otomatik veri çıkarma
+- Parasal tutar, yüzde ve puan alanlarını ayıran PDF veri sözleşmesi
+- Banka, sigorta, GYO ve sanayi raporlarına göre sektör alanı filtreleme
+- Şirket kodu, unvan ve rapor dönemini birlikte doğrulayan kayıt güvenlik kapısı
 - Kullanıcı doğrulamasından sonra Alpha Score hesaplama
 - Alan türüne uygun TL, yüzde, oran ve puan biçimleri
 - Gecikmeli piyasa verileri ve teknik analiz göstergeleri
