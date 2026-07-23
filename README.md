@@ -20,6 +20,9 @@ yerel Streamlit uygulaması.
 - Sorunlu piyasa kayıtları için öncelikli düzeltme iş listesi
 - Sağlık durumu, önem, öncelik ve metin tabanlı görev filtreleri
 - Görev kimliği ve sorun parmak izi içeren Excel uyumlu CSV kanıt raporu
+- Piyasa görevleri için kalıcı durum, çalışma notu ve yeniden açma uyarısı
+- SHA-256 bağlantılı piyasa görevi olay geçmişi ve zaman çizelgesi
+- İş akışı durumunu taşıyan genişletilmiş düzeltme kuyruğu raporu
 - Son kaydı eski, kısmi, eksik veya bütünlüğü bozuk şirketleri önceleyen sağlık özeti
 - Tek transaction ile yinelenmeyen toplu piyasa geçmişi ve UTF-8 sağlık CSV'si
 - Her toplu kontrol için sayaç ve hisse sonucu tutarlılığı doğrulanan çalışma kaydı

@@ -1,5 +1,18 @@
 # Değişiklik günlüğü
 
+## 1.16.0 - 2026-07-23
+
+### Kalıcı piyasa veri görev yönetimi
+
+- Piyasa veri düzeltme görevleri genel iş akışı durumları ve çalışma notlarıyla ilişkilendirildi.
+- Açık, devam eden, tamamlanmış, geçersiz ve yeniden açılması gereken görevler ayrı izlenebilir hale getirildi.
+- Kapanmış bir görevin sorun kanıtı değiştiğinde otomatik yeniden açma uyarısı üretildi.
+- İş listesine kalıcı durum filtresi ve iş akışı KPI'ları eklendi.
+- Kullanıcının sistem tarafından yönetilen yeniden açma durumunu doğrudan ataması engellendi.
+- Durum ve not değişiklikleri SHA-256 bağlantılı olay zincirine kaydedildi.
+- Görev zaman çizelgesi uygulamada gösterilip UTF-8 CSV kanıtı olarak indirilebilir hale getirildi.
+- Düzeltme kuyruğu CSV'si iş durumu, not, güncelleme zamanı ve sorun kanıtı alanlarıyla genişletildi.
+
 ## 1.15.0 - 2026-07-23
 
 ### Piyasa veri düzeltme iş listesi
