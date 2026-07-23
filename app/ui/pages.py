@@ -66,8 +66,11 @@ from app.database.repository import (
     upsert_watchlist_entry,
 )
 from app.database.backup import (
+    BackupComparison,
+    compare_backup_to_database,
     create_database_backup,
-    list_safety_backups,
+    create_local_backup,
+    list_local_backups,
     restore_database_backup,
     validate_database_backup,
 )
@@ -5303,6 +5306,45 @@ def _build_system_status_rows(
     return rows
 
 
+def _backup_comparison_rows(
+    comparison: BackupComparison,
+) -> list[dict[str, int | str]]:
+    return [
+        {
+            "Kayıt türü": "Şirket",
+            "Mevcut": comparison.current.company_count,
+            "Yüklenecek": comparison.incoming.company_count,
+            "Fark": comparison.company_delta,
+        },
+        {
+            "Kayıt türü": "Takip listesi",
+            "Mevcut": comparison.current.watchlist_count,
+            "Yüklenecek": comparison.incoming.watchlist_count,
+            "Fark": comparison.watchlist_delta,
+        },
+        {
+            "Kayıt türü": "Portföy pozisyonu",
+            "Mevcut": comparison.current.portfolio_position_count,
+            "Yüklenecek": (
+                comparison.incoming.portfolio_position_count
+            ),
+            "Fark": comparison.portfolio_position_delta,
+        },
+        {
+            "Kayıt türü": "Puan geçmişi",
+            "Mevcut": comparison.current.score_history_count,
+            "Yüklenecek": comparison.incoming.score_history_count,
+            "Fark": comparison.score_history_delta,
+        },
+        {
+            "Kayıt türü": "Denetim kaydı",
+            "Mevcut": comparison.current.audit_count,
+            "Yüklenecek": comparison.incoming.audit_count,
+            "Fark": comparison.audit_delta,
+        },
+    ]
+
+
 def render_data_backup() -> None:
     st.title("Veri yedekleme")
     st.caption(
@@ -5332,7 +5374,7 @@ def render_data_backup() -> None:
                 border=True,
             )
             st.metric(
-                "Güvenlik kopyası",
+                "Yerel yedek",
                 database_health.safety_backup_count,
                 border=True,
             )
@@ -5371,6 +5413,39 @@ def render_data_backup() -> None:
         )
 
     with st.container(border=True):
+        st.subheader("Yerel yedek oluştur")
+        st.caption(
+            "Doğrulanmış yedeği bilgisayardaki data/backups "
+            "klasöründe saklar."
+        )
+        with st.container(horizontal=True, vertical_alignment="bottom"):
+            keep_count = st.selectbox(
+                "Saklanacak manuel yedek",
+                [5, 10, 20],
+                index=1,
+                format_func=lambda value: f"Son {value} yedek",
+                key="local_backup_retention",
+            )
+            create_local_submitted = st.button(
+                "Yerel yedek al",
+                icon=":material/save:",
+                type="primary",
+                key="create_local_backup",
+            )
+        if create_local_submitted:
+            try:
+                local_backup = create_local_backup(
+                    keep_count=keep_count
+                )
+            except (FileNotFoundError, RuntimeError, OSError) as exc:
+                st.error(str(exc))
+            else:
+                st.success(
+                    "Yerel yedek doğrulandı ve kaydedildi: "
+                    f"{local_backup.file_name}"
+                )
+
+    with st.container(border=True):
         st.subheader("Yedeği indir")
         try:
             backup_data = create_database_backup()
@@ -5403,6 +5478,7 @@ def render_data_backup() -> None:
             key="database_restore_upload",
         )
         validation = None
+        comparison = None
         if uploaded is not None:
             validation = validate_database_backup(uploaded.getvalue())
             if validation.valid:
@@ -5410,12 +5486,50 @@ def render_data_backup() -> None:
                 st.caption(
                     f"Doğrulanan tablo sayısı: {len(validation.tables)}"
                 )
+                try:
+                    comparison = compare_backup_to_database(
+                        uploaded.getvalue()
+                    )
+                except (ValueError, FileNotFoundError) as exc:
+                    st.error(str(exc))
+                else:
+                    st.markdown("**Geri yükleme önizlemesi**")
+                    st.dataframe(
+                        pd.DataFrame(
+                            _backup_comparison_rows(comparison)
+                        ),
+                        hide_index=True,
+                        width="stretch",
+                        column_config={
+                            "Kayıt türü": st.column_config.TextColumn(
+                                "Kayıt türü",
+                                pinned=True,
+                            ),
+                            "Mevcut": st.column_config.NumberColumn(
+                                "Mevcut",
+                                format="localized",
+                            ),
+                            "Yüklenecek": st.column_config.NumberColumn(
+                                "Yüklenecek",
+                                format="localized",
+                            ),
+                            "Fark": st.column_config.NumberColumn(
+                                "Fark",
+                                format="%+d",
+                            ),
+                        },
+                    )
             else:
                 st.error(validation.message)
 
-        confirmed = st.checkbox(
-            "Mevcut kayıtların yedekteki verilerle değiştirileceğini onaylıyorum.",
-            disabled=validation is None or not validation.valid,
+        confirmation_text = st.text_input(
+            "Geri yüklemeyi onaylamak için GERI YUKLE yazın",
+            disabled=(
+                validation is None
+                or not validation.valid
+                or comparison is None
+            ),
+            key="restore_confirmation_text",
         )
         restore_submitted = st.button(
             "Yedeği geri yükle",
@@ -5424,7 +5538,8 @@ def render_data_backup() -> None:
             disabled=(
                 validation is None
                 or not validation.valid
-                or not confirmed
+                or comparison is None
+                or confirmation_text.strip().upper() != "GERI YUKLE"
             ),
         )
         if restore_submitted and uploaded is not None:
@@ -5443,16 +5558,17 @@ def render_data_backup() -> None:
                     )
 
     with st.container(border=True):
-        st.subheader("Güvenlik kopyaları")
-        safety_backups = list_safety_backups()
-        if not safety_backups:
-            st.info("Henüz geri yükleme güvenlik kopyası bulunmuyor.")
+        st.subheader("Yerel yedekler")
+        local_backups = list_local_backups()
+        if not local_backups:
+            st.info("Henüz yerel yedek bulunmuyor.")
         else:
             st.dataframe(
                 pd.DataFrame(
                     [
                         {
                             "Dosya": item.file_name,
+                            "Tür": item.backup_type,
                             "Tarih": item.modified_at,
                             "Boyut (KB)": item.size_bytes / 1024,
                             "Bütünlük": (
@@ -5461,7 +5577,7 @@ def render_data_backup() -> None:
                                 else "Geçersiz"
                             ),
                         }
-                        for item in safety_backups
+                        for item in local_backups
                     ]
                 ),
                 hide_index=True,
@@ -5478,13 +5594,13 @@ def render_data_backup() -> None:
                 },
             )
             selected_backup = st.selectbox(
-                "İndirilecek güvenlik kopyası",
-                safety_backups,
+                "İndirilecek yerel yedek",
+                local_backups,
                 format_func=lambda item: item.file_name,
             )
             if selected_backup.valid:
                 st.download_button(
-                    "Güvenlik kopyasını indir",
+                    "Yerel yedeği indir",
                     data=selected_backup.path.read_bytes(),
                     file_name=selected_backup.file_name,
                     mime="application/x-sqlite3",
@@ -5493,7 +5609,7 @@ def render_data_backup() -> None:
                 )
             else:
                 st.error(
-                    "Seçilen güvenlik kopyası bütünlük kontrolünü geçemedi."
+                    "Seçilen yerel yedek bütünlük kontrolünü geçemedi."
                 )
 
 

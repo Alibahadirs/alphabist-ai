@@ -10,7 +10,7 @@ from app.database import repository
 from app.database.backup import (
     REQUIRED_TABLES,
     create_database_backup,
-    list_safety_backups,
+    list_local_backups,
     validate_database_backup,
 )
 
@@ -106,9 +106,9 @@ def inspect_database_health(
         except (OSError, sqlite3.DatabaseError) as exc:
             backup_message = f"Yedek üretilemedi: {exc}"
 
-    safety_backups = list_safety_backups(path, backup_directory)
+    local_backups = list_local_backups(path, backup_directory)
     latest_backup_at = (
-        safety_backups[0].modified_at if safety_backups else None
+        local_backups[0].modified_at if local_backups else None
     )
     return DatabaseHealth(
         status="Hazır" if healthy else "Hata",
@@ -117,7 +117,7 @@ def inspect_database_health(
         size_bytes=path.stat().st_size,
         table_count=len(tables),
         company_count=company_count,
-        safety_backup_count=len(safety_backups),
+        safety_backup_count=len(local_backups),
         latest_safety_backup_at=latest_backup_at,
         backup_ready=backup_ready,
         backup_message=backup_message,

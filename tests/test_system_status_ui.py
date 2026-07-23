@@ -4,8 +4,12 @@ from app.core.preflight import (
     PreflightCheck,
     PreflightReport,
 )
+from app.database.backup import BackupComparison, BackupSummary
 from app.database.health import DatabaseHealth
-from app.ui.pages import _build_system_status_rows
+from app.ui.pages import (
+    _backup_comparison_rows,
+    _build_system_status_rows,
+)
 
 
 def _database_health(*, backup_ready: bool = True) -> DatabaseHealth:
@@ -68,3 +72,21 @@ def test_system_status_rows_expose_backup_failure():
         "Durum": "Hata",
         "Ayrıntı": "Yedek üretilemedi.",
     }
+
+
+def test_backup_comparison_rows_preserve_record_semantics():
+    comparison = BackupComparison(
+        current=BackupSummary(2, 1, 1, 4, 3),
+        incoming=BackupSummary(3, 0, 2, 7, 5),
+    )
+
+    rows = _backup_comparison_rows(comparison)
+
+    assert rows[0] == {
+        "Kayıt türü": "Şirket",
+        "Mevcut": 2,
+        "Yüklenecek": 3,
+        "Fark": 1,
+    }
+    assert rows[1]["Fark"] == -1
+    assert rows[2]["Fark"] == 1
