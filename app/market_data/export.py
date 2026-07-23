@@ -13,6 +13,7 @@ from app.market_data.models import (
     MarketDiagnosticSnapshot,
     market_snapshot_fingerprint,
 )
+from app.market_data.remediation import MarketHealthTask
 
 
 def build_market_diagnostic_csv(
@@ -88,6 +89,43 @@ def build_market_health_csv(summary: MarketHealthSummary) -> bytes:
                 "Evet" if item.cross_verified else "Hayır",
                 "Doğrulandı" if item.integrity_valid else "Geçersiz",
                 item.detail,
+            ]
+        )
+    return ("\ufeff" + output.getvalue()).encode("utf-8")
+
+
+def build_market_health_queue_csv(
+    tasks: tuple[MarketHealthTask, ...],
+) -> bytes:
+    output = io.StringIO(newline="")
+    writer = csv.writer(output, lineterminator="\n")
+    writer.writerow(
+        [
+            "Görev ID",
+            "Hisse",
+            "Sağlık durumu",
+            "Öncelik",
+            "Önem",
+            "Son fiyat tarihi",
+            "Veri yaşı (gün)",
+            "Sorun",
+            "Önerilen işlem",
+            "Sorun parmak izi",
+        ]
+    )
+    for task in tasks:
+        writer.writerow(
+            [
+                task.task_id,
+                task.symbol,
+                task.health_status,
+                task.priority,
+                task.severity,
+                task.latest_date.isoformat() if task.latest_date else "",
+                task.age_days if task.age_days is not None else "",
+                task.reason,
+                task.suggested_action,
+                task.issue_fingerprint,
             ]
         )
     return ("\ufeff" + output.getvalue()).encode("utf-8")
