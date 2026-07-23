@@ -122,6 +122,7 @@ from app.market_data.export import (
 from app.market_data.health import build_market_health_summary
 from app.market_data.remediation import (
     build_market_health_queue,
+    build_market_health_task_state,
     filter_market_health_queue,
     summarize_market_health_queue,
 )
@@ -5681,7 +5682,14 @@ def _render_market_batch_check() -> None:
             icon=":material/download:",
         )
 
-        remediation_queue = build_market_health_queue(health)
+        market_task_states = {
+            state.task_id: state
+            for state in list_remediation_task_states()
+        }
+        remediation_queue = build_market_health_queue(
+            health,
+            market_task_states,
+        )
         st.markdown("**Piyasa veri düzeltme kuyruğu**")
         if not remediation_queue:
             st.success("Açık piyasa veri düzeltme görevi bulunmuyor.")
@@ -5689,7 +5697,7 @@ def _render_market_batch_check() -> None:
             queue_summary = summarize_market_health_queue(remediation_queue)
             with st.container(horizontal=True):
                 st.metric(
-                    "Açık görev",
+                    "Toplam görev",
                     queue_summary.total,
                     border=True,
                 )
@@ -5706,6 +5714,28 @@ def _render_market_batch_check() -> None:
                 st.metric(
                     "Etkilenen hisse",
                     queue_summary.affected_symbols,
+                    border=True,
+                )
+            with st.container(horizontal=True):
+                st.metric("Açık", queue_summary.open, border=True)
+                st.metric(
+                    "Devam ediyor",
+                    queue_summary.in_progress,
+                    border=True,
+                )
+                st.metric(
+                    "Tamamlandı",
+                    queue_summary.completed,
+                    border=True,
+                )
+                st.metric(
+                    "Geçersiz",
+                    queue_summary.dismissed,
+                    border=True,
+                )
+                st.metric(
+                    "Yeniden açılmalı",
+                    queue_summary.reopen_required,
                     border=True,
                 )
 
@@ -5727,6 +5757,15 @@ def _render_market_batch_check() -> None:
                 selection_mode="multi",
                 key="market_health_queue_severity_filter",
             )
+            workflow_status_options = list(RemediationTaskStatus)
+            selected_queue_workflow_statuses = st.pills(
+                "İş akışı durumu",
+                workflow_status_options,
+                default=workflow_status_options,
+                selection_mode="multi",
+                format_func=lambda status: status.value,
+                key="market_health_queue_workflow_filter",
+            )
             queue_query = st.text_input(
                 "Görevlerde ara",
                 placeholder="Hisse, sorun veya önerilen işlem",
@@ -5745,6 +5784,9 @@ def _render_market_batch_check() -> None:
                 query=queue_query,
                 statuses=set(selected_queue_statuses or []),
                 severities=set(selected_queue_severities or []),
+                workflow_statuses=set(
+                    selected_queue_workflow_statuses or []
+                ),
                 minimum_priority=minimum_priority,
             )
             st.caption(
@@ -5762,6 +5804,14 @@ def _render_market_batch_check() -> None:
                                 "Önem": task.severity,
                                 "Son fiyat tarihi": task.latest_date,
                                 "Veri yaşı (gün)": task.age_days,
+                                "İş durumu": task.workflow_status.value,
+                                "Sorun kanıtı": (
+                                    "Güncel"
+                                    if task.issue_fingerprint_matches
+                                    else "Değişti - yeniden aç"
+                                ),
+                                "Çalışma notu": task.workflow_note or "-",
+                                "Son güncelleme": task.workflow_updated_at,
                                 "Sorun": task.reason,
                                 "Önerilen işlem": task.suggested_action,
                             }
@@ -5782,6 +5832,9 @@ def _render_market_batch_check() -> None:
                         "Veri yaşı (gün)": st.column_config.NumberColumn(
                             format="%d"
                         ),
+                        "Son güncelleme": st.column_config.DatetimeColumn(
+                            format="DD.MM.YYYY HH:mm"
+                        ),
                     },
                 )
             else:
@@ -5794,6 +5847,152 @@ def _render_market_batch_check() -> None:
                 icon=":material/download:",
                 disabled=not filtered_queue,
             )
+            if filtered_queue:
+                remediation_by_id = {
+                    task.task_id: task for task in filtered_queue
+                }
+                selected_task_id = st.selectbox(
+                    "Güncellenecek piyasa görevi",
+                    list(remediation_by_id),
+                    format_func=lambda task_id: (
+                        f"{remediation_by_id[task_id].symbol} · "
+                        f"{remediation_by_id[task_id].health_status} · "
+                        f"{remediation_by_id[task_id].severity}"
+                    ),
+                    key="market_health_queue_selected_task",
+                )
+                selected_task = remediation_by_id[selected_task_id]
+                selected_task_events = list_remediation_task_events(
+                    selected_task_id
+                )
+                event_chain = verify_remediation_event_chain(
+                    selected_task_events
+                )
+                if event_chain.valid:
+                    st.success(
+                        event_chain.status,
+                        icon=":material/link:",
+                    )
+                else:
+                    st.error(
+                        f"{event_chain.status} Yeni kayıt engellendi.",
+                        icon=":material/broken_image:",
+                    )
+                if (
+                    selected_task.workflow_status
+                    == RemediationTaskStatus.REOPEN_REQUIRED
+                ):
+                    st.warning(
+                        "Bu piyasa görevinin sorun kanıtı değişti. "
+                        "Güncel durumu inceleyip görevi yeniden açın.",
+                        icon=":material/restart_alt:",
+                    )
+
+                editable_status_options = [
+                    status
+                    for status in RemediationTaskStatus
+                    if status != RemediationTaskStatus.REOPEN_REQUIRED
+                ]
+                current_editable_status = (
+                    selected_task.workflow_status
+                    if selected_task.workflow_status
+                    in editable_status_options
+                    else RemediationTaskStatus.OPEN
+                )
+                with st.form(
+                    f"market_health_workflow_form_{selected_task_id}",
+                    border=False,
+                ):
+                    workflow_status = st.selectbox(
+                        "Görev durumu",
+                        editable_status_options,
+                        index=editable_status_options.index(
+                            current_editable_status
+                        ),
+                        format_func=lambda status: status.value,
+                        key=(
+                            "market_health_workflow_status_"
+                            f"{selected_task_id}"
+                        ),
+                    )
+                    workflow_note = st.text_area(
+                        "Çalışma notu",
+                        value=selected_task.workflow_note,
+                        max_chars=1000,
+                        placeholder=(
+                            "Kontrol edilen sağlayıcıyı veya yapılan "
+                            "düzeltmeyi yazın."
+                        ),
+                        key=(
+                            "market_health_workflow_note_"
+                            f"{selected_task_id}"
+                        ),
+                    )
+                    workflow_saved = st.form_submit_button(
+                        "Görev durumunu kaydet",
+                        icon=":material/save:",
+                        disabled=not event_chain.valid,
+                    )
+                if workflow_saved:
+                    transition = validate_remediation_transition(
+                        selected_task.workflow_status,
+                        workflow_status,
+                    )
+                    if not transition.allowed:
+                        st.error(transition.message)
+                    else:
+                        upsert_remediation_task_state(
+                            build_market_health_task_state(
+                                selected_task,
+                                workflow_status,
+                                workflow_note,
+                            )
+                        )
+                        st.success("Piyasa görevi ve notu kaydedildi.")
+                        st.rerun()
+
+                if selected_task_events:
+                    st.markdown("**Piyasa görevi zaman çizelgesi**")
+                    st.dataframe(
+                        pd.DataFrame(
+                            [
+                                {
+                                    "Zaman": event.created_at,
+                                    "Önceki": (
+                                        event.previous_status.value
+                                        if event.previous_status
+                                        else "İlk kayıt"
+                                    ),
+                                    "Yeni": event.new_status.value,
+                                    "Not": event.note or "-",
+                                    "Olay özeti": (
+                                        f"{event.event_hash[:12]}…"
+                                    ),
+                                }
+                                for event in reversed(selected_task_events)
+                            ]
+                        ),
+                        hide_index=True,
+                        width="stretch",
+                        column_config={
+                            "Zaman": st.column_config.DatetimeColumn(
+                                format="DD.MM.YYYY HH:mm"
+                            ),
+                        },
+                    )
+                    st.download_button(
+                        "Piyasa görevi olay geçmişini indir",
+                        data=build_remediation_event_csv(
+                            selected_task_events
+                        ),
+                        file_name=(
+                            "piyasa-gorevi-olay-gecmisi-"
+                            f"{selected_task.symbol}.csv"
+                        ),
+                        mime="text/csv",
+                        icon=":material/download:",
+                        key="market_health_event_history_download",
+                    )
 
         audits = list_market_batch_run_audits(limit=50)
         if not audits:
