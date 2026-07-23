@@ -1,5 +1,18 @@
 # Değişiklik günlüğü
 
+## 1.15.0 - 2026-07-23
+
+### Piyasa veri düzeltme iş listesi
+
+- Son piyasa sağlık özetindeki sorunlu şirketler otomatik düzeltme görevlerine dönüştürüldü.
+- Doğrulanmış şirketler iş listesinden çıkarılarak yalnızca işlem gerektiren kayıtlar gösterildi.
+- Bütünlük hatası, eski veri, veri yokluğu ve kısmi doğrulama için ayrı önerilen işlemler tanımlandı.
+- Görev kimlikleri şirket bazında kararlı, sorun parmak izleri ise içerik değişimine duyarlı hale getirildi.
+- Görevler önem, sağlık durumu, asgari öncelik ve serbest metinle filtrelenebilir hale getirildi.
+- Açık görev, kritik görev, yüksek önem ve etkilenen şirket KPI'ları eklendi.
+- Filtrelenmiş iş listesi kanıt alanlarıyla birlikte Excel uyumlu UTF-8 CSV olarak dışa aktarılabilir hale getirildi.
+- Piyasa veri kontrolü ekranına ağ çağrısı yapmadan çalışan düzeltme iş listesi eklendi.
+
 ## 1.14.0 - 2026-07-22
 
 ### Bozulmaya dayanıklı toplu piyasa geçmişi

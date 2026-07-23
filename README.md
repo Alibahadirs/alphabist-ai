@@ -17,6 +17,9 @@ yerel Streamlit uygulaması.
 - Piyasa kontrolleri için SHA-256 korumalı ve yinelenmeyen SQLite geçmişi
 - Çapraz doğrulama oranı, ardışık sorunlar ve CSV kontrol geçmişi
 - En fazla 20 kayıtlı şirket için kullanıcı kontrollü toplu piyasa denetimi
+- Sorunlu piyasa kayıtları için öncelikli düzeltme iş listesi
+- Sağlık durumu, önem, öncelik ve metin tabanlı görev filtreleri
+- Görev kimliği ve sorun parmak izi içeren Excel uyumlu CSV kanıt raporu
 - Son kaydı eski, kısmi, eksik veya bütünlüğü bozuk şirketleri önceleyen sağlık özeti
 - Tek transaction ile yinelenmeyen toplu piyasa geçmişi ve UTF-8 sağlık CSV'si
 - Her toplu kontrol için sayaç ve hisse sonucu tutarlılığı doğrulanan çalışma kaydı
