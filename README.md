@@ -144,6 +144,10 @@ yerel Streamlit uygulaması.
 - Kullanıcıya özel SQLite verisini kaynak kodu commitlerinden ayırma
 - SQLite yedeğini bütünlük kontrolüyle indirme ve güvenli geri yükleme
 - Geri yükleme öncesi güvenlik kopyalarını listeleme ve yeniden indirme
+- Doğrulanmış yerel yedek oluşturma ve manuel yedek saklama sınırı
+- Geri yükleme öncesinde mevcut ve yüklenecek kayıt sayılarını karşılaştırma
+- Windows açık dosya davranışıyla uyumlu işlemsel SQLite geri yükleme
+- Başarısız geri yüklemede güvenlik kopyasından otomatik geri alma
 - Python, bağımlılık, veri klasörü ve SQLite için merkezi başlangıç ön kontrolü
 - Gereksinimler değişmedikçe paketleri yeniden kurmayan tek komutluk Windows başlatıcı
 - Çalışan uygulamayı algılayarak ikinci Streamlit sürecini engelleme
@@ -211,7 +215,10 @@ Uygulama varsayılan olarak `http://localhost:8501` adresinde açılır.
 
 Uygulama içindeki **Veri yedekleme** ekranı; Python ve paket hazırlığını,
 SQLite bütünlüğünü, kayıt sayısını, güvenlik kopyalarını ve geçerli yedek
-üretilebildiğini birlikte gösterir.
+üretilebildiğini birlikte gösterir. Aynı ekrandan son 5, 10 veya 20 manuel
+yedeği saklayacak şekilde yerel kopya oluşturulabilir. Geri yükleme öncesinde
+şirket, takip listesi, portföy, puan geçmişi ve denetim kaydı sayıları mevcut
+verilerle karşılaştırılır.
 
 ## Yerel veri güvenliği
 

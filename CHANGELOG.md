@@ -1,5 +1,18 @@
 # Değişiklik günlüğü
 
+## 1.19.0 - 2026-07-23
+
+### Yerel yedekleme ve güvenli geri yükleme
+
+- Doğrulanmış yedeklerin şirket, takip listesi, portföy, puan geçmişi ve denetim kaydı sayıları çıkarılır hale getirildi.
+- Yedek içeriği ile mevcut veritabanı arasındaki kayıt farklarını hesaplayan karşılaştırma modeli eklendi.
+- Uygulama içinden doğrulanmış manuel yerel yedek oluşturma işlevi eklendi.
+- Manuel yedekler için son 5, 10 veya 20 kopyayı koruyan saklama sınırı getirildi.
+- Manuel ve geri yükleme öncesi güvenlik kopyaları tek yerel yedek listesinde tür bilgisiyle birleştirildi.
+- Geri yükleme işlemi Windows açık dosya davranışıyla uyumlu SQLite yedekleme işlemini kullanacak şekilde güçlendirildi.
+- Başarısız geri yüklemede önceki güvenlik kopyasını otomatik geri alma davranışı eklendi.
+- Veri yedekleme ekranına kayıt farkı önizlemesi ve metin tabanlı açık geri yükleme onayı eklendi.
+
 ## 1.18.0 - 2026-07-23
 
 ### Güvenilir yerel çalıştırma ve sistem sağlığı
