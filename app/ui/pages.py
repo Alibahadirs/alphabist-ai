@@ -117,8 +117,14 @@ from app.market_data.export import (
     build_market_batch_audit_csv,
     build_market_diagnostic_csv,
     build_market_health_csv,
+    build_market_health_queue_csv,
 )
 from app.market_data.health import build_market_health_summary
+from app.market_data.remediation import (
+    build_market_health_queue,
+    filter_market_health_queue,
+    summarize_market_health_queue,
+)
 from app.market_data.history import build_market_diagnostic_trend
 from app.market_data.models import build_market_diagnostic_snapshot
 from app.market_data.freshness import assess_price_freshness
@@ -5674,6 +5680,120 @@ def _render_market_batch_check() -> None:
             mime="text/csv",
             icon=":material/download:",
         )
+
+        remediation_queue = build_market_health_queue(health)
+        st.markdown("**Piyasa veri düzeltme kuyruğu**")
+        if not remediation_queue:
+            st.success("Açık piyasa veri düzeltme görevi bulunmuyor.")
+        else:
+            queue_summary = summarize_market_health_queue(remediation_queue)
+            with st.container(horizontal=True):
+                st.metric(
+                    "Açık görev",
+                    queue_summary.total,
+                    border=True,
+                )
+                st.metric(
+                    "Kritik",
+                    queue_summary.critical,
+                    border=True,
+                )
+                st.metric(
+                    "Yüksek",
+                    queue_summary.high,
+                    border=True,
+                )
+                st.metric(
+                    "Etkilenen hisse",
+                    queue_summary.affected_symbols,
+                    border=True,
+                )
+
+            queue_statuses = sorted(
+                {task.health_status for task in remediation_queue}
+            )
+            selected_queue_statuses = st.pills(
+                "Sağlık durumu",
+                queue_statuses,
+                default=queue_statuses,
+                selection_mode="multi",
+                key="market_health_queue_status_filter",
+            )
+            queue_severities = ["Kritik", "Yüksek", "Orta"]
+            selected_queue_severities = st.pills(
+                "Önem seviyesi",
+                queue_severities,
+                default=queue_severities,
+                selection_mode="multi",
+                key="market_health_queue_severity_filter",
+            )
+            queue_query = st.text_input(
+                "Görevlerde ara",
+                placeholder="Hisse, sorun veya önerilen işlem",
+                key="market_health_queue_query",
+            )
+            minimum_priority = st.slider(
+                "Asgari öncelik",
+                min_value=0,
+                max_value=100,
+                value=0,
+                step=10,
+                key="market_health_queue_minimum_priority",
+            )
+            filtered_queue = filter_market_health_queue(
+                remediation_queue,
+                query=queue_query,
+                statuses=set(selected_queue_statuses or []),
+                severities=set(selected_queue_severities or []),
+                minimum_priority=minimum_priority,
+            )
+            st.caption(
+                f"{len(filtered_queue)} / {len(remediation_queue)} görev "
+                "gösteriliyor."
+            )
+            if filtered_queue:
+                st.dataframe(
+                    pd.DataFrame(
+                        [
+                            {
+                                "Hisse": task.symbol,
+                                "Durum": task.health_status,
+                                "Öncelik": task.priority,
+                                "Önem": task.severity,
+                                "Son fiyat tarihi": task.latest_date,
+                                "Veri yaşı (gün)": task.age_days,
+                                "Sorun": task.reason,
+                                "Önerilen işlem": task.suggested_action,
+                            }
+                            for task in filtered_queue
+                        ]
+                    ),
+                    hide_index=True,
+                    width="stretch",
+                    column_config={
+                        "Öncelik": st.column_config.ProgressColumn(
+                            min_value=0,
+                            max_value=100,
+                            format="%d",
+                        ),
+                        "Son fiyat tarihi": st.column_config.DateColumn(
+                            format="DD.MM.YYYY"
+                        ),
+                        "Veri yaşı (gün)": st.column_config.NumberColumn(
+                            format="%d"
+                        ),
+                    },
+                )
+            else:
+                st.info("Seçilen filtrelerle eşleşen görev bulunmuyor.")
+            st.download_button(
+                "Düzeltme kuyruğunu indir",
+                data=build_market_health_queue_csv(filtered_queue),
+                file_name="piyasa-veri-duzeltme-kuyrugu.csv",
+                mime="text/csv",
+                icon=":material/download:",
+                disabled=not filtered_queue,
+            )
 
         audits = list_market_batch_run_audits(limit=50)
         if not audits:
