@@ -6,6 +6,11 @@ from io import BytesIO
 from pypdf import PdfReader
 
 from app.core.exceptions import PdfParsingError
+from app.parser.contracts import (
+    MONETARY_FIELDS,
+    normalize_report_field_value,
+    sector_fields_for_profile,
+)
 from app.parser.models import (
     ActivityReportExtractionResult,
     CompanyMetadata,
@@ -138,26 +143,6 @@ SECTOR_METRIC_LABELS = {
     "nav_discount": ("net aktif değer iskontosu", "nad iskontosu"),
     "occupancy_rate": ("doluluk oranı",),
 }
-
-MONETARY_FIELDS = {
-    "revenue",
-    "previous_revenue",
-    "net_profit",
-    "previous_net_profit",
-    "equity",
-    "previous_equity",
-    "total_debt",
-    "cash",
-    "current_assets",
-    "current_liabilities",
-    "operating_cash_flow",
-    "capital_expenditures",
-    "total_assets",
-    "previous_total_assets",
-    "premium_revenue",
-    "previous_premium_revenue",
-}
-
 
 def parse_turkish_number(raw_value: str) -> float:
     value = raw_value.strip()
@@ -432,23 +417,35 @@ def extract_company_metadata(text: str, file_name: str = "") -> CompanyMetadata:
     )
 
 
-def extract_sector_metrics(text: str) -> dict[str, float]:
+def extract_sector_metrics(
+    text: str,
+    company_profile: CompanyProfile | None = None,
+) -> dict[str, float]:
     metrics: dict[str, float] = {}
+    allowed_fields = (
+        sector_fields_for_profile(company_profile)
+        if company_profile is not None
+        else frozenset(SECTOR_METRIC_LABELS)
+    )
     for raw_line in text.splitlines():
         line = " ".join(raw_line.split())
         folded = _fold(line)
         for field, labels in SECTOR_METRIC_LABELS.items():
-            if field in metrics:
+            if field in metrics or field not in allowed_fields:
                 continue
             for label in labels:
                 if _fold(label) not in folded:
                     continue
                 values = _line_values(line, label, allow_small_values=True)
                 if values and values[0] is not None:
-                    value = values[0]
-                    if 0 <= abs(value) <= 1 and ("%" in line or "oran" in folded):
-                        value *= 100
-                    metrics[field] = value
+                    try:
+                        metrics[field] = normalize_report_field_value(
+                            field,
+                            values[0],
+                            line,
+                        )
+                    except ValueError:
+                        continue
                     break
     return metrics
 
@@ -525,7 +522,7 @@ def extract_financial_report(
         "report_period_end": metadata.report_period_end,
         "company_profile": effective_profile,
     }
-    sector_metrics = extract_sector_metrics(text)
+    sector_metrics = extract_sector_metrics(text, effective_profile)
     metadata_updates.update(sector_metrics)
     extracted_fields = sorted(set(extracted_fields) | set(sector_metrics))
     if metadata.period_months is not None:
@@ -624,7 +621,10 @@ def extract_activity_report(
 ) -> ActivityReportExtractionResult:
     text, page_count = _read_pdf(file_bytes)
     metadata = extract_company_metadata(text, file_name)
-    sector_metrics = extract_sector_metrics(text)
+    sector_metrics = extract_sector_metrics(
+        text,
+        metadata.company_profile,
+    )
     warnings = []
     if not metadata.symbol:
         warnings.append("Faaliyet raporunda hisse kodu bulunamadı.")

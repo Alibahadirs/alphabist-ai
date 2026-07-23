@@ -36,6 +36,8 @@ MONETARY_FIELDS = frozenset(
         "capital_expenditures",
         "total_assets",
         "previous_total_assets",
+        "premium_revenue",
+        "previous_premium_revenue",
     }
 )
 
@@ -152,3 +154,26 @@ def sector_fields_for_profile(
     profile: CompanyProfile,
 ) -> frozenset[str]:
     return PROFILE_SECTOR_FIELDS[CompanyProfile(profile)]
+
+
+def normalize_report_field_value(
+    field: str,
+    value: float,
+    source_text: str = "",
+) -> float:
+    contract = get_field_contract(field)
+    normalized = float(value)
+    if contract.kind == ReportFieldKind.PERCENTAGE:
+        context = source_text.casefold()
+        if 0 < abs(normalized) <= 1 and (
+            "%" in source_text or "oran" in context
+        ):
+            normalized *= 100
+        if abs(normalized) > 1_000:
+            raise ValueError(
+                f"{field} yüzde alanına parasal tutar benzeri değer geldi."
+            )
+    elif contract.kind == ReportFieldKind.SCORE:
+        if not 0 <= normalized <= 100:
+            raise ValueError(f"{field} 0-100 aralığında olmalıdır.")
+    return normalized

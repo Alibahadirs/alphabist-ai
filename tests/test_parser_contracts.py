@@ -6,6 +6,7 @@ from app.parser.contracts import (
     ReportFieldKind,
     get_field_contract,
     is_field_allowed_for_profile,
+    normalize_report_field_value,
     sector_fields_for_profile,
 )
 from app.sector.profiles import CompanyProfile
@@ -75,3 +76,31 @@ def test_insurance_premium_amount_is_not_scaled_for_other_profiles():
 def test_unknown_field_contract_fails_closed():
     with pytest.raises(KeyError, match="Tanımsız"):
         get_field_contract("mystery_metric")
+
+
+def test_percentage_fraction_is_normalized_without_scaling_money():
+    assert (
+        normalize_report_field_value(
+            "capital_adequacy_ratio",
+            0.185,
+            "Sermaye yeterliliği oranı %0,185",
+        )
+        == 18.5
+    )
+    assert (
+        normalize_report_field_value(
+            "revenue",
+            1_000_000,
+            "Hasılat",
+        )
+        == 1_000_000
+    )
+
+
+def test_percentage_field_rejects_monetary_sized_value():
+    with pytest.raises(ValueError, match="parasal tutar"):
+        normalize_report_field_value(
+            "occupancy_rate",
+            1_188_704_125,
+            "Doluluk oranı",
+        )

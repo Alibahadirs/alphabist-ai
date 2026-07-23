@@ -10,6 +10,7 @@ from app.parser.extractor import (
     detect_comparison_period,
     extract_financial_report,
     extract_financial_values,
+    extract_sector_metrics,
     parse_turkish_number,
     rescale_monetary_values,
 )
@@ -509,3 +510,50 @@ def test_financial_report_tracks_sector_metric_fields(monkeypatch):
 
     assert "capital_adequacy_ratio" in result.extracted_fields
     assert "npl_ratio" in result.extracted_fields
+
+
+@pytest.mark.parametrize(
+    ("profile", "accepted_label", "accepted_field", "blocked_label"),
+    [
+        (
+            CompanyProfile.BANK,
+            "Sermaye yeterliliği oranı 18,50",
+            "capital_adequacy_ratio",
+            "Doluluk oranı 92,00",
+        ),
+        (
+            CompanyProfile.INSURANCE,
+            "Bileşik oran 104,20",
+            "combined_ratio",
+            "Takipteki krediler oranı 2,10",
+        ),
+        (
+            CompanyProfile.REIT,
+            "Doluluk oranı 91,00",
+            "occupancy_rate",
+            "Ödeme gücü oranı 180,00",
+        ),
+    ],
+)
+def test_sector_metric_extraction_respects_profile_contract(
+    profile,
+    accepted_label,
+    accepted_field,
+    blocked_label,
+):
+    metrics = extract_sector_metrics(
+        f"{accepted_label}\n{blocked_label}",
+        profile,
+    )
+
+    assert accepted_field in metrics
+    assert len(metrics) == 1
+
+
+def test_sector_metric_extraction_rejects_monetary_sized_percentage():
+    metrics = extract_sector_metrics(
+        "Doluluk oranı 1.188.704.125",
+        CompanyProfile.REIT,
+    )
+
+    assert "occupancy_rate" not in metrics
