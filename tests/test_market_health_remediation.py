@@ -110,6 +110,32 @@ def test_queue_filters_by_query_status_severity_and_priority():
         )
     ] == ["ASELS"]
 
+    completed_state = RemediationTaskState(
+        task_id=next(task.task_id for task in queue if task.symbol == "BIMAS"),
+        symbol="BIMAS",
+        task_category="Piyasa verisi",
+        status=RemediationTaskStatus.COMPLETED,
+        issue_fingerprint=next(
+            task.issue_fingerprint
+            for task in queue
+            if task.symbol == "BIMAS"
+        ),
+    )
+    stateful_queue = build_market_health_queue(
+        _summary(
+            _item("ASELS", "Bütünlük hatası", 100, "Bozuk kayıt"),
+            _item("BIMAS", "Veri yok", 80, "Sağlayıcı yanıt vermedi"),
+        ),
+        {completed_state.task_id: completed_state},
+    )
+    assert [
+        task.symbol
+        for task in filter_market_health_queue(
+            stateful_queue,
+            workflow_statuses={RemediationTaskStatus.COMPLETED},
+        )
+    ] == ["BIMAS"]
+
 
 def test_empty_filter_selection_returns_no_tasks():
     queue = build_market_health_queue(
@@ -118,6 +144,7 @@ def test_empty_filter_selection_returns_no_tasks():
 
     assert filter_market_health_queue(queue, statuses=set()) == ()
     assert filter_market_health_queue(queue, severities=set()) == ()
+    assert filter_market_health_queue(queue, workflow_statuses=set()) == ()
 
 
 def test_queue_summary_counts_severity_and_unique_symbols():
@@ -137,6 +164,49 @@ def test_queue_summary_counts_severity_and_unique_symbols():
     assert summary.high == 1
     assert summary.medium == 1
     assert summary.affected_symbols == 4
+    assert summary.open == 4
+    assert summary.in_progress == 0
+    assert summary.completed == 0
+    assert summary.dismissed == 0
+    assert summary.reopen_required == 0
+
+
+def test_queue_summary_counts_workflow_states():
+    base_queue = build_market_health_queue(
+        _summary(
+            _item("ASELS", "Eski", 90, "Gecikmeli fiyat"),
+            _item("BIMAS", "Veri yok", 80, "Fiyat yok"),
+        )
+    )
+    states = {
+        base_queue[0].task_id: RemediationTaskState(
+            task_id=base_queue[0].task_id,
+            symbol=base_queue[0].symbol,
+            task_category="Piyasa verisi",
+            status=RemediationTaskStatus.IN_PROGRESS,
+            issue_fingerprint=base_queue[0].issue_fingerprint,
+        ),
+        base_queue[1].task_id: RemediationTaskState(
+            task_id=base_queue[1].task_id,
+            symbol=base_queue[1].symbol,
+            task_category="Piyasa verisi",
+            status=RemediationTaskStatus.COMPLETED,
+            issue_fingerprint=base_queue[1].issue_fingerprint,
+        ),
+    }
+    queue = build_market_health_queue(
+        _summary(
+            _item("ASELS", "Eski", 90, "Gecikmeli fiyat"),
+            _item("BIMAS", "Veri yok", 80, "Fiyat yok"),
+        ),
+        states,
+    )
+
+    summary = summarize_market_health_queue(queue)
+
+    assert summary.open == 0
+    assert summary.in_progress == 1
+    assert summary.completed == 1
 
 
 def test_queue_applies_persisted_workflow_state():

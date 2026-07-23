@@ -41,6 +41,11 @@ class MarketHealthQueueSummary:
     high: int
     medium: int
     affected_symbols: int
+    open: int
+    in_progress: int
+    completed: int
+    dismissed: int
+    reopen_required: int
 
 
 _ACTIONS = {
@@ -73,6 +78,7 @@ def filter_market_health_queue(
     query: str = "",
     statuses: set[str] | None = None,
     severities: set[str] | None = None,
+    workflow_statuses: set[RemediationTaskStatus] | None = None,
     minimum_priority: int = 0,
 ) -> tuple[MarketHealthTask, ...]:
     normalized_query = query.strip().casefold()
@@ -82,6 +88,10 @@ def filter_market_health_queue(
         if task.priority >= minimum_priority
         and (statuses is None or task.health_status in statuses)
         and (severities is None or task.severity in severities)
+        and (
+            workflow_statuses is None
+            or task.workflow_status in workflow_statuses
+        )
         and (
             not normalized_query
             or normalized_query
@@ -106,6 +116,26 @@ def summarize_market_health_queue(
         high=sum(task.severity == "Yüksek" for task in tasks),
         medium=sum(task.severity == "Orta" for task in tasks),
         affected_symbols=len({task.symbol for task in tasks}),
+        open=sum(
+            task.workflow_status == RemediationTaskStatus.OPEN
+            for task in tasks
+        ),
+        in_progress=sum(
+            task.workflow_status == RemediationTaskStatus.IN_PROGRESS
+            for task in tasks
+        ),
+        completed=sum(
+            task.workflow_status == RemediationTaskStatus.COMPLETED
+            for task in tasks
+        ),
+        dismissed=sum(
+            task.workflow_status == RemediationTaskStatus.DISMISSED
+            for task in tasks
+        ),
+        reopen_required=sum(
+            task.workflow_status == RemediationTaskStatus.REOPEN_REQUIRED
+            for task in tasks
+        ),
     )
 
 
