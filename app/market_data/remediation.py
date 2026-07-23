@@ -22,6 +22,15 @@ class MarketHealthTask:
     age_days: int | None
 
 
+@dataclass(frozen=True)
+class MarketHealthQueueSummary:
+    total: int
+    critical: int
+    high: int
+    medium: int
+    affected_symbols: int
+
+
 _ACTIONS = {
     "Bütünlük hatası": (
         "Kayıt bütünlüğünü incele ve kaynağı yeniden doğrula."
@@ -42,6 +51,48 @@ def build_market_health_queue(
     ]
     tasks.sort(key=lambda task: (-task.priority, task.symbol))
     return tuple(tasks)
+
+
+def filter_market_health_queue(
+    tasks: tuple[MarketHealthTask, ...],
+    *,
+    query: str = "",
+    statuses: set[str] | None = None,
+    severities: set[str] | None = None,
+    minimum_priority: int = 0,
+) -> tuple[MarketHealthTask, ...]:
+    normalized_query = query.strip().casefold()
+    filtered = [
+        task
+        for task in tasks
+        if task.priority >= minimum_priority
+        and (statuses is None or task.health_status in statuses)
+        and (severities is None or task.severity in severities)
+        and (
+            not normalized_query
+            or normalized_query
+            in " ".join(
+                (
+                    task.symbol,
+                    task.reason,
+                    task.suggested_action,
+                )
+            ).casefold()
+        )
+    ]
+    return tuple(filtered)
+
+
+def summarize_market_health_queue(
+    tasks: tuple[MarketHealthTask, ...],
+) -> MarketHealthQueueSummary:
+    return MarketHealthQueueSummary(
+        total=len(tasks),
+        critical=sum(task.severity == "Kritik" for task in tasks),
+        high=sum(task.severity == "Yüksek" for task in tasks),
+        medium=sum(task.severity == "Orta" for task in tasks),
+        affected_symbols=len({task.symbol for task in tasks}),
+    )
 
 
 def _build_task(item: MarketHealthItem) -> MarketHealthTask:

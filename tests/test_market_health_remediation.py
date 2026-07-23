@@ -1,7 +1,11 @@
 from datetime import date
 
 from app.market_data.health import MarketHealthItem, MarketHealthSummary
-from app.market_data.remediation import build_market_health_queue
+from app.market_data.remediation import (
+    build_market_health_queue,
+    filter_market_health_queue,
+    summarize_market_health_queue,
+)
 
 
 def _summary(*items: MarketHealthItem) -> MarketHealthSummary:
@@ -70,3 +74,62 @@ def test_task_id_is_stable_while_issue_fingerprint_tracks_changes():
 
     assert first.task_id == second.task_id
     assert first.issue_fingerprint != second.issue_fingerprint
+
+
+def test_queue_filters_by_query_status_severity_and_priority():
+    queue = build_market_health_queue(
+        _summary(
+            _item("ASELS", "Bütünlük hatası", 100, "Bozuk kayıt"),
+            _item("GARAN", "Eski", 90, "Gecikmeli fiyat"),
+            _item("BIMAS", "Veri yok", 80, "Sağlayıcı yanıt vermedi"),
+            _item("THYAO", "Kısmi", 50, "Tek kaynak"),
+        )
+    )
+
+    assert [
+        task.symbol
+        for task in filter_market_health_queue(queue, query="sağlayıcı")
+    ] == ["BIMAS", "THYAO"]
+    assert [
+        task.symbol
+        for task in filter_market_health_queue(
+            queue,
+            statuses={"Eski", "Veri yok"},
+        )
+    ] == ["GARAN", "BIMAS"]
+    assert [
+        task.symbol
+        for task in filter_market_health_queue(
+            queue,
+            severities={"Kritik"},
+            minimum_priority=95,
+        )
+    ] == ["ASELS"]
+
+
+def test_empty_filter_selection_returns_no_tasks():
+    queue = build_market_health_queue(
+        _summary(_item("ASELS", "Bütünlük hatası", 100, "Bozuk kayıt"))
+    )
+
+    assert filter_market_health_queue(queue, statuses=set()) == ()
+    assert filter_market_health_queue(queue, severities=set()) == ()
+
+
+def test_queue_summary_counts_severity_and_unique_symbols():
+    queue = build_market_health_queue(
+        _summary(
+            _item("ASELS", "Bütünlük hatası", 100, "Bozuk kayıt"),
+            _item("GARAN", "Eski", 90, "Gecikmeli fiyat"),
+            _item("BIMAS", "Veri yok", 80, "Fiyat yok"),
+            _item("THYAO", "Kısmi", 50, "Tek kaynak"),
+        )
+    )
+
+    summary = summarize_market_health_queue(queue)
+
+    assert summary.total == 4
+    assert summary.critical == 2
+    assert summary.high == 1
+    assert summary.medium == 1
+    assert summary.affected_symbols == 4
