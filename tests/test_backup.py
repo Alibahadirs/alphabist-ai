@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 
 from app.database import repository
 from app.database.backup import (
+    compare_backup_to_database,
     create_database_backup,
     create_local_backup,
     list_local_backups,
@@ -139,6 +140,28 @@ def test_manual_backup_retention_requires_at_least_one_copy(tmp_path):
         raise AssertionError("Sıfır yedek saklama kabul edilmemeliydi.")
 
 
+def test_backup_comparison_reports_incoming_record_deltas(
+    tmp_path, monkeypatch
+):
+    current_path = tmp_path / "current.db"
+    incoming_path = tmp_path / "incoming.db"
+    _create_database(current_path, monkeypatch, "CURRENT")
+    _create_database(incoming_path, monkeypatch, "INCOMING")
+    monkeypatch.setattr(repository, "DB_PATH", incoming_path)
+    repository.upsert_company(_company("SECOND"))
+
+    comparison = compare_backup_to_database(
+        create_database_backup(incoming_path),
+        current_path,
+    )
+
+    assert comparison.current.company_count == 1
+    assert comparison.incoming.company_count == 2
+    assert comparison.company_delta == 1
+    assert comparison.watchlist_delta == 0
+    assert comparison.portfolio_position_delta == 0
+
+
 def test_restore_replaces_data_and_keeps_safety_backup(
     tmp_path, monkeypatch
 ):
@@ -175,6 +198,42 @@ def test_restore_replaces_data_and_keeps_safety_backup(
     assert backups[0].path == safety_path
     assert backups[0].valid is True
     assert backups[0].size_bytes > 0
+
+
+def test_restore_failure_keeps_original_database(
+    tmp_path, monkeypatch
+):
+    source_path = tmp_path / "source.db"
+    target_path = tmp_path / "target.db"
+    safety_directory = tmp_path / "safety"
+    _create_database(source_path, monkeypatch, "NEW")
+    incoming = create_database_backup(source_path)
+    _create_database(target_path, monkeypatch, "OLD")
+
+    def fail_before_replace(_data, _target):
+        raise OSError("simulated replace failure")
+
+    monkeypatch.setattr(
+        "app.database.backup._restore_database_from_bytes",
+        fail_before_replace,
+    )
+
+    try:
+        restore_database_backup(
+            incoming,
+            target_path,
+            safety_directory,
+        )
+    except OSError as exc:
+        assert "simulated" in str(exc)
+    else:
+        raise AssertionError("Geri yükleme hatası bekleniyordu.")
+
+    monkeypatch.setattr(repository, "DB_PATH", target_path)
+    assert [company.symbol for company in repository.list_companies()] == [
+        "OLD"
+    ]
+    assert len(list_safety_backups(target_path, safety_directory)) == 1
 
 
 def test_safety_backups_are_listed_newest_first(

@@ -56,6 +56,38 @@ class BackupSummary:
         )
 
 
+@dataclass(frozen=True)
+class BackupComparison:
+    current: BackupSummary
+    incoming: BackupSummary
+
+    @property
+    def company_delta(self) -> int:
+        return self.incoming.company_count - self.current.company_count
+
+    @property
+    def watchlist_delta(self) -> int:
+        return self.incoming.watchlist_count - self.current.watchlist_count
+
+    @property
+    def portfolio_position_delta(self) -> int:
+        return (
+            self.incoming.portfolio_position_count
+            - self.current.portfolio_position_count
+        )
+
+    @property
+    def score_history_delta(self) -> int:
+        return (
+            self.incoming.score_history_count
+            - self.current.score_history_count
+        )
+
+    @property
+    def audit_delta(self) -> int:
+        return self.incoming.audit_count - self.current.audit_count
+
+
 def _temporary_database_path() -> Path:
     file_descriptor, name = tempfile.mkstemp(suffix=".db")
     os.close(file_descriptor)
@@ -193,6 +225,43 @@ def summarize_database_backup(data: bytes) -> BackupSummary:
         temporary_path.unlink(missing_ok=True)
 
 
+def compare_backup_to_database(
+    data: bytes,
+    database_path: Path | None = None,
+) -> BackupComparison:
+    target_path = _database_path(database_path)
+    incoming = summarize_database_backup(data)
+    if target_path.exists():
+        current = summarize_database_backup(
+            create_database_backup(target_path)
+        )
+    else:
+        current = BackupSummary(
+            company_count=0,
+            watchlist_count=0,
+            portfolio_position_count=0,
+            score_history_count=0,
+            audit_count=0,
+        )
+    return BackupComparison(current=current, incoming=incoming)
+
+
+def _restore_database_from_bytes(data: bytes, target_path: Path) -> None:
+    temporary_path = _temporary_database_path()
+    try:
+        temporary_path.write_bytes(data)
+        validation = validate_database_backup(
+            temporary_path.read_bytes()
+        )
+        if not validation.valid:
+            raise RuntimeError(validation.message)
+        with closing(sqlite3.connect(temporary_path)) as source:
+            with closing(sqlite3.connect(target_path)) as destination:
+                source.backup(destination)
+    finally:
+        temporary_path.unlink(missing_ok=True)
+
+
 def list_local_backups(
     database_path: Path | None = None,
     backup_directory: Path | None = None,
@@ -288,8 +357,9 @@ def restore_database_backup(
 
     target_path = _database_path(database_path)
     target_path.parent.mkdir(parents=True, exist_ok=True)
+    target_existed = target_path.exists()
     safety_backup_path: Path | None = None
-    if target_path.exists():
+    if target_existed:
         safety_directory = (
             backup_directory or target_path.parent / "backups"
         )
@@ -303,23 +373,31 @@ def restore_database_backup(
             create_database_backup(target_path)
         )
 
-    temporary_path = _temporary_database_path()
     try:
-        temporary_path.write_bytes(data)
-        with closing(sqlite3.connect(temporary_path)) as source:
-            with closing(sqlite3.connect(target_path)) as destination:
-                source.backup(destination)
-    finally:
-        temporary_path.unlink(missing_ok=True)
-
-    restored_validation = validate_database_backup(
-        target_path.read_bytes()
-    )
-    if not restored_validation.valid:
-        raise RuntimeError(
-            "Geri yüklenen veritabanı doğrulanamadı: "
-            + restored_validation.message
+        _restore_database_from_bytes(data, target_path)
+        restored_validation = validate_database_backup(
+            target_path.read_bytes()
         )
+        if not restored_validation.valid:
+            raise RuntimeError(
+                "Geri yüklenen veritabanı doğrulanamadı: "
+                + restored_validation.message
+            )
+    except Exception:
+        if safety_backup_path is not None:
+            try:
+                _restore_database_from_bytes(
+                    safety_backup_path.read_bytes(),
+                    target_path,
+                )
+            except Exception:
+                pass
+        elif not target_existed:
+            try:
+                target_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+        raise
     return safety_backup_path
 
 
