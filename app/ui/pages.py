@@ -3620,6 +3620,8 @@ def _render_pdf_company_form() -> None:
             financial_company_name=draft.company_name,
             activity_symbol=metadata.symbol,
             activity_company_name=metadata.company_name,
+            financial_report_period_end=draft.report_period_end,
+            activity_report_period_end=metadata.report_period_end,
         )
         if report_identity_errors:
             st.error(
@@ -3919,6 +3921,15 @@ def _render_pdf_company_form() -> None:
         ),
         activity_company_name=(
             activity_result.metadata.company_name if activity_result else ""
+        ),
+        submitted_report_period_end=report_period_end,
+        financial_report_period_end=(
+            financial_result.draft.report_period_end
+        ),
+        activity_report_period_end=(
+            activity_result.metadata.report_period_end
+            if activity_result
+            else None
         ),
     )
     if identity_errors:
