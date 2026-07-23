@@ -1,5 +1,18 @@
 # Değişiklik günlüğü
 
+## 1.18.0 - 2026-07-23
+
+### Güvenilir yerel çalıştırma ve sistem sağlığı
+
+- Python sürümü, zorunlu paketler, veri klasörü ve SQLite bütünlüğü için merkezi başlangıç ön kontrolü eklendi.
+- İlk kurulumda henüz bulunmayan veritabanı engelleyici hata yerine güvenli ilk açılış uyarısı olarak sınıflandırıldı.
+- Windows başlatıcısı PATH veya etkin terminal durumundan bağımsız olarak yalnız sanal ortam Python'unu kullanır hale getirildi.
+- Gereksinim dosyası değişmedikçe paket kurulumunun tekrarlanması SHA-256 özetiyle engellendi.
+- Çalışan Streamlit sağlık uç noktası algılanarak aynı portta ikinci uygulama süreci açılması önlendi.
+- SQLite bütünlüğü, zorunlu tablolar, şirket sayısı, dosya boyutu ve güvenlik kopyaları merkezi sağlık raporunda birleştirildi.
+- Gerçek veritabanından yedek üretme ve üretilen yedeği doğrulama sağlık kontrolünün parçası haline getirildi.
+- Veri yedekleme ekranına uygulama sürümü, başlangıç hazırlığı, kayıt ve yedek KPI'ları ile ayrıntılı kontrol tablosu eklendi.
+
 ## 1.17.0 - 2026-07-23
 
 ### Sektöre duyarlı PDF güvenlik kapısı

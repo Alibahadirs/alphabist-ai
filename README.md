@@ -144,6 +144,10 @@ yerel Streamlit uygulaması.
 - Kullanıcıya özel SQLite verisini kaynak kodu commitlerinden ayırma
 - SQLite yedeğini bütünlük kontrolüyle indirme ve güvenli geri yükleme
 - Geri yükleme öncesi güvenlik kopyalarını listeleme ve yeniden indirme
+- Python, bağımlılık, veri klasörü ve SQLite için merkezi başlangıç ön kontrolü
+- Gereksinimler değişmedikçe paketleri yeniden kurmayan tek komutluk Windows başlatıcı
+- Çalışan uygulamayı algılayarak ikinci Streamlit sürecini engelleme
+- Veritabanı bütünlüğü, zorunlu tablolar ve gerçek yedek üretimini sınayan sistem durumu
 - Portföy pozisyon ve şirket profili yoğunlaşma analizi
 - Ağırlık bazlı yoğunlaşma endeksi ve etkin pozisyon sayısı
 - Portföy için mekanik fiyat şoku stres senaryoları
@@ -176,20 +180,21 @@ yerel Streamlit uygulaması.
 - Alpha Score değişiminde aynı sektör profiline ait geçmiş karşılaştırması
 - SQLite ile yerel veri saklama
 
-## Çalıştırma
+## İlk kurulum ve çalıştırma
 
 PowerShell'de proje klasöründeyken:
 
 ```powershell
-.\.venv\Scripts\Activate.ps1
-python -m streamlit run main.py
+Set-ExecutionPolicy -Scope Process Bypass
+.\start.ps1
 ```
 
-Python komutu sistemde tanımlı değilse:
+Başlatıcı sanal ortamı yoksa oluşturur, gerekli paketleri kurar, sistem ön
+kontrolünü çalıştırır ve uygulamayı tarayıcı açmadan başlatır. Sonraki
+çalıştırmalarda `requirements.txt` değişmediyse paketler yeniden kurulmaz.
 
-```powershell
-py -m streamlit run main.py
-```
+Uygulama zaten `8501` portunda çalışıyorsa ikinci bir süreç başlatmak yerine
+mevcut adresi bildirir.
 
 Yahoo Finance doğrudan bağlantısına ek olarak gecikmeli fiyat yedeğini
 etkinleştirmek için Node.js kurulu bir sistemde:
@@ -203,6 +208,10 @@ sağlamaz. Uygulama paketi yalnızca birincil fiyat isteği başarısız olduğu
 kullanır ve günlük değişim yüzdesini son iki kapanıştan yeniden hesaplar.
 
 Uygulama varsayılan olarak `http://localhost:8501` adresinde açılır.
+
+Uygulama içindeki **Veri yedekleme** ekranı; Python ve paket hazırlığını,
+SQLite bütünlüğünü, kayıt sayısını, güvenlik kopyalarını ve geçerli yedek
+üretilebildiğini birlikte gösterir.
 
 ## Yerel veri güvenliği
 
