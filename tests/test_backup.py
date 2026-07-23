@@ -1,7 +1,12 @@
+from datetime import datetime, timedelta
+
 from app.database import repository
 from app.database.backup import (
     create_database_backup,
+    create_local_backup,
+    list_local_backups,
     list_safety_backups,
+    prune_manual_backups,
     restore_database_backup,
     summarize_database_backup,
     validate_database_backup,
@@ -75,6 +80,63 @@ def test_invalid_backup_cannot_be_summarized():
         assert "SQLite" in str(exc)
     else:
         raise AssertionError("Geçersiz yedek özetlenmemeliydi.")
+
+
+def test_local_backup_is_written_and_validated(tmp_path, monkeypatch):
+    database_path = tmp_path / "source.db"
+    backup_directory = tmp_path / "backups"
+    _create_database(database_path, monkeypatch, "LOCAL")
+
+    backup = create_local_backup(
+        database_path,
+        backup_directory,
+        created_at=datetime(2026, 7, 23, 10, 30),
+    )
+
+    assert backup.path.exists()
+    assert backup.valid is True
+    assert backup.backup_type == "Manuel"
+    assert backup.file_name.startswith("alphabist-manual-20260723")
+    assert summarize_database_backup(
+        backup.path.read_bytes()
+    ).company_count == 1
+
+
+def test_manual_backup_retention_keeps_newest_files(
+    tmp_path, monkeypatch
+):
+    database_path = tmp_path / "source.db"
+    backup_directory = tmp_path / "backups"
+    _create_database(database_path, monkeypatch, "RETENTION")
+    start = datetime(2026, 7, 23, 10, 0)
+
+    for offset in range(4):
+        create_local_backup(
+            database_path,
+            backup_directory,
+            keep_count=2,
+            created_at=start + timedelta(minutes=offset),
+        )
+
+    backups = list_local_backups(database_path, backup_directory)
+
+    assert len(backups) == 2
+    assert all(item.backup_type == "Manuel" for item in backups)
+    assert "100300" in backups[0].file_name
+    assert "100200" in backups[1].file_name
+
+
+def test_manual_backup_retention_requires_at_least_one_copy(tmp_path):
+    try:
+        prune_manual_backups(
+            tmp_path / "source.db",
+            tmp_path / "backups",
+            keep_count=0,
+        )
+    except ValueError as exc:
+        assert "en az bir" in str(exc).lower()
+    else:
+        raise AssertionError("Sıfır yedek saklama kabul edilmemeliydi.")
 
 
 def test_restore_replaces_data_and_keeps_safety_backup(

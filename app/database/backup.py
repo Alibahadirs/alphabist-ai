@@ -32,6 +32,7 @@ class SafetyBackupInfo:
     size_bytes: int
     modified_at: datetime
     valid: bool
+    backup_type: str = "Geri yükleme öncesi"
 
 
 @dataclass(frozen=True)
@@ -63,6 +64,30 @@ def _temporary_database_path() -> Path:
 
 def _database_path(database_path: Path | None) -> Path:
     return database_path or repository.DB_PATH
+
+
+def _backup_directory(
+    database_path: Path,
+    backup_directory: Path | None,
+) -> Path:
+    return backup_directory or database_path.parent / "backups"
+
+
+def _backup_info(
+    path: Path,
+    *,
+    backup_type: str,
+) -> SafetyBackupInfo:
+    stat = path.stat()
+    validation = validate_database_backup(path.read_bytes())
+    return SafetyBackupInfo(
+        path=path,
+        file_name=path.name,
+        size_bytes=stat.st_size,
+        modified_at=datetime.fromtimestamp(stat.st_mtime),
+        valid=validation.valid,
+        backup_type=backup_type,
+    )
 
 
 def create_database_backup(database_path: Path | None = None) -> bytes:
@@ -168,6 +193,90 @@ def summarize_database_backup(data: bytes) -> BackupSummary:
         temporary_path.unlink(missing_ok=True)
 
 
+def list_local_backups(
+    database_path: Path | None = None,
+    backup_directory: Path | None = None,
+) -> list[SafetyBackupInfo]:
+    target_path = _database_path(database_path)
+    directory = _backup_directory(target_path, backup_directory)
+    if not directory.exists():
+        return []
+
+    backups = [
+        *(
+            _backup_info(path, backup_type="Manuel")
+            for path in directory.glob("alphabist-manual-*.db")
+        ),
+        *(
+            _backup_info(path, backup_type="Geri yükleme öncesi")
+            for path in directory.glob("alphabist-before-restore-*.db")
+        ),
+    ]
+    backups.sort(key=lambda item: item.modified_at, reverse=True)
+    return backups
+
+
+def prune_manual_backups(
+    database_path: Path | None = None,
+    backup_directory: Path | None = None,
+    *,
+    keep_count: int = 10,
+) -> tuple[Path, ...]:
+    if keep_count < 1:
+        raise ValueError("En az bir manuel yedek saklanmalıdır.")
+
+    target_path = _database_path(database_path)
+    directory = _backup_directory(target_path, backup_directory)
+    if not directory.exists():
+        return ()
+
+    manual_paths = sorted(
+        directory.glob("alphabist-manual-*.db"),
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    )
+    deleted = []
+    for path in manual_paths[keep_count:]:
+        path.unlink()
+        deleted.append(path)
+    return tuple(deleted)
+
+
+def create_local_backup(
+    database_path: Path | None = None,
+    backup_directory: Path | None = None,
+    *,
+    keep_count: int = 10,
+    created_at: datetime | None = None,
+) -> SafetyBackupInfo:
+    target_path = _database_path(database_path)
+    directory = _backup_directory(target_path, backup_directory)
+    directory.mkdir(parents=True, exist_ok=True)
+
+    data = create_database_backup(target_path)
+    validation = validate_database_backup(data)
+    if not validation.valid:
+        raise RuntimeError(validation.message)
+
+    timestamp = (created_at or datetime.now()).strftime(
+        "%Y%m%d-%H%M%S-%f"
+    )
+    final_path = directory / f"alphabist-manual-{timestamp}.db"
+    temporary_path = directory / f".{final_path.name}.tmp"
+    try:
+        temporary_path.write_bytes(data)
+        temporary_path.replace(final_path)
+    finally:
+        temporary_path.unlink(missing_ok=True)
+
+    prune_manual_backups(
+        target_path,
+        directory,
+        keep_count=keep_count,
+    )
+    return _backup_info(final_path, backup_type="Manuel")
+
+
 def restore_database_backup(
     data: bytes,
     database_path: Path | None = None,
@@ -219,7 +328,7 @@ def list_safety_backups(
     backup_directory: Path | None = None,
 ) -> list[SafetyBackupInfo]:
     target_path = _database_path(database_path)
-    safety_directory = backup_directory or target_path.parent / "backups"
+    safety_directory = _backup_directory(target_path, backup_directory)
     if not safety_directory.exists():
         return []
 
@@ -227,15 +336,10 @@ def list_safety_backups(
     for path in safety_directory.glob(
         "alphabist-before-restore-*.db"
     ):
-        stat = path.stat()
-        validation = validate_database_backup(path.read_bytes())
         backups.append(
-            SafetyBackupInfo(
-                path=path,
-                file_name=path.name,
-                size_bytes=stat.st_size,
-                modified_at=datetime.fromtimestamp(stat.st_mtime),
-                valid=validation.valid,
+            _backup_info(
+                path,
+                backup_type="Geri yükleme öncesi",
             )
         )
     backups.sort(key=lambda item: item.modified_at, reverse=True)
