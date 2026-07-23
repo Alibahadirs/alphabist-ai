@@ -110,6 +110,10 @@ def build_market_health_queue_csv(
             "Veri yaşı (gün)",
             "Sorun",
             "Önerilen işlem",
+            "İş akışı durumu",
+            "Çalışma notu",
+            "Son güncelleme",
+            "Sorun kanıtı",
             "Sorun parmak izi",
         ]
     )
@@ -125,6 +129,18 @@ def build_market_health_queue_csv(
                 task.age_days if task.age_days is not None else "",
                 task.reason,
                 task.suggested_action,
+                task.workflow_status.value,
+                task.workflow_note,
+                (
+                    task.workflow_updated_at.isoformat()
+                    if task.workflow_updated_at
+                    else ""
+                ),
+                (
+                    "Güncel"
+                    if task.issue_fingerprint_matches
+                    else "Değişti - yeniden aç"
+                ),
                 task.issue_fingerprint,
             ]
         )

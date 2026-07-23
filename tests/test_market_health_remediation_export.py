@@ -36,6 +36,10 @@ def test_market_health_queue_csv_is_auditable_and_excel_compatible():
         "Veri yaşı (gün)",
         "Sorun",
         "Önerilen işlem",
+        "İş akışı durumu",
+        "Çalışma notu",
+        "Son güncelleme",
+        "Sorun kanıtı",
         "Sorun parmak izi",
     ]
     assert rows[1] == [
@@ -48,6 +52,10 @@ def test_market_health_queue_csv_is_auditable_and_excel_compatible():
         "2",
         "Kayıt parmak izi eşleşmiyor.",
         "Kaydı yeniden doğrula.",
+        "Açık",
+        "",
+        "",
+        "Güncel",
         "abc123",
     ]
 

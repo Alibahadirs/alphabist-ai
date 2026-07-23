@@ -139,6 +139,25 @@ def summarize_market_health_queue(
     )
 
 
+def build_market_health_task_state(
+    task: MarketHealthTask,
+    status: RemediationTaskStatus,
+    note: str,
+) -> RemediationTaskState:
+    if status == RemediationTaskStatus.REOPEN_REQUIRED:
+        raise ValueError(
+            "Yeniden açılmalı durumu yalnız sistem tarafından atanabilir."
+        )
+    return RemediationTaskState(
+        task_id=task.task_id,
+        symbol=task.symbol,
+        task_category=MARKET_HEALTH_TASK_CATEGORY,
+        status=status,
+        note=note.strip(),
+        issue_fingerprint=task.issue_fingerprint,
+    )
+
+
 def _build_task(
     item: MarketHealthItem,
     state: RemediationTaskState | None,

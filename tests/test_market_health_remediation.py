@@ -7,6 +7,7 @@ from app.data_quality.models import (
 from app.market_data.health import MarketHealthItem, MarketHealthSummary
 from app.market_data.remediation import (
     build_market_health_queue,
+    build_market_health_task_state,
     filter_market_health_queue,
     summarize_market_health_queue,
 )
@@ -257,3 +258,39 @@ def test_closed_task_requires_reopen_when_issue_evidence_changes():
         == RemediationTaskStatus.REOPEN_REQUIRED
     )
     assert changed_queue[0].issue_fingerprint_matches is False
+
+
+def test_build_task_state_preserves_market_evidence_and_normalizes_note():
+    task = build_market_health_queue(
+        _summary(_item("ASELS", "Eski", 90, "Gecikmeli fiyat"))
+    )[0]
+
+    state = build_market_health_task_state(
+        task,
+        RemediationTaskStatus.IN_PROGRESS,
+        "  Sağlayıcı kontrol ediliyor.  ",
+    )
+
+    assert state.task_id == task.task_id
+    assert state.symbol == "ASELS"
+    assert state.task_category == "Piyasa verisi"
+    assert state.status == RemediationTaskStatus.IN_PROGRESS
+    assert state.note == "Sağlayıcı kontrol ediliyor."
+    assert state.issue_fingerprint == task.issue_fingerprint
+
+
+def test_build_task_state_rejects_system_only_status():
+    task = build_market_health_queue(
+        _summary(_item("ASELS", "Eski", 90, "Gecikmeli fiyat"))
+    )[0]
+
+    try:
+        build_market_health_task_state(
+            task,
+            RemediationTaskStatus.REOPEN_REQUIRED,
+            "",
+        )
+    except ValueError as exc:
+        assert "sistem" in str(exc)
+    else:
+        raise AssertionError("Sistem durumu kullanıcı tarafından atanabildi.")
