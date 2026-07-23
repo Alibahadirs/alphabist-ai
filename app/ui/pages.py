@@ -30,6 +30,7 @@ from app.comparison.service import build_comparison
 from app.confidence.service import calculate_analysis_confidence
 from app.core.constants import CATEGORY_MAX_POINTS
 from app.core.exceptions import PdfParsingError, ValidationError as AppValidationError
+from app.core.preflight import PreflightReport, run_preflight
 from app.core.settings import settings
 from app.database.repository import (
     add_company_data_audit,
@@ -70,6 +71,7 @@ from app.database.backup import (
     restore_database_backup,
     validate_database_backup,
 )
+from app.database.health import DatabaseHealth, inspect_database_health
 from app.data_quality.service import FIELD_LABELS, build_data_quality_summary
 from app.data_quality.models import (
     RemediationTaskState,
@@ -5269,8 +5271,104 @@ def render_portfolio() -> None:
         st.rerun()
 
 
+def _build_system_status_rows(
+    preflight: PreflightReport,
+    database_health: DatabaseHealth,
+) -> list[dict[str, str]]:
+    rows = [
+        {
+            "Kontrol": check.label,
+            "Durum": check.status,
+            "Ayrıntı": check.detail,
+        }
+        for check in preflight.checks
+        if check.key != "database"
+    ]
+    rows.extend(
+        [
+            {
+                "Kontrol": "SQLite veritabanı",
+                "Durum": database_health.status,
+                "Ayrıntı": database_health.detail,
+            },
+            {
+                "Kontrol": "Yedek üretimi",
+                "Durum": (
+                    "Hazır" if database_health.backup_ready else "Hata"
+                ),
+                "Ayrıntı": database_health.backup_message,
+            },
+        ]
+    )
+    return rows
+
+
 def render_data_backup() -> None:
     st.title("Veri yedekleme")
+    st.caption(
+        "Yerel veritabanı sağlığı, yedekleme ve geri yükleme merkezi"
+    )
+
+    preflight = run_preflight()
+    database_health = inspect_database_health()
+    system_ready = preflight.ready and database_health.ready
+
+    with st.container(border=True):
+        st.subheader("Sistem durumu")
+        with st.container(horizontal=True):
+            st.metric(
+                "Uygulama sürümü",
+                settings.app_version,
+                border=True,
+            )
+            st.metric(
+                "Başlatma durumu",
+                "Hazır" if system_ready else "Kontrol gerekli",
+                border=True,
+            )
+            st.metric(
+                "Kayıtlı şirket",
+                database_health.company_count,
+                border=True,
+            )
+            st.metric(
+                "Güvenlik kopyası",
+                database_health.safety_backup_count,
+                border=True,
+            )
+        if system_ready:
+            st.success(
+                "Uygulama, veritabanı ve yedek üretimi doğrulandı."
+            )
+        else:
+            st.error(
+                "En az bir sistem kontrolü işlem gerektiriyor. "
+                "Ayrıntıları düzeltmeden geri yükleme yapmayın."
+            )
+        st.dataframe(
+            pd.DataFrame(
+                _build_system_status_rows(
+                    preflight,
+                    database_health,
+                )
+            ),
+            hide_index=True,
+            width="stretch",
+            column_config={
+                "Kontrol": st.column_config.TextColumn(
+                    "Kontrol",
+                    pinned=True,
+                ),
+                "Durum": st.column_config.TextColumn("Durum"),
+                "Ayrıntı": st.column_config.TextColumn("Ayrıntı"),
+            },
+        )
+        st.caption(
+            "Veritabanı boyutu: "
+            f"{database_health.size_bytes / 1024:.1f} KB | "
+            f"Tablo sayısı: {database_health.table_count} | "
+            f"Bütünlük: {database_health.integrity}"
+        )
 
     with st.container(border=True):
         st.subheader("Yedeği indir")
