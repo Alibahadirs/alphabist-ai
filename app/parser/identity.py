@@ -1,5 +1,6 @@
 import re
 import unicodedata
+from datetime import date
 from difflib import SequenceMatcher
 
 
@@ -86,6 +87,9 @@ def validate_report_identity(
     financial_company_name: str = "",
     activity_symbol: str = "",
     activity_company_name: str = "",
+    submitted_report_period_end: date | None = None,
+    financial_report_period_end: date | None = None,
+    activity_report_period_end: date | None = None,
 ) -> list[str]:
     errors: list[str] = []
     submitted = normalize_symbol(submitted_symbol)
@@ -116,5 +120,35 @@ def validate_report_identity(
             errors.append(
                 f"Girilen şirket unvanı {source_label} unvanıyla uyuşmuyor."
             )
+
+    report_periods = {
+        value
+        for value in (
+            financial_report_period_end,
+            activity_report_period_end,
+        )
+        if value is not None
+    }
+    if len(report_periods) > 1:
+        errors.append(
+            "Finansal rapor ile faaliyet raporunun dönem sonları farklı: "
+            + " / ".join(
+                value.strftime("%d.%m.%Y")
+                for value in sorted(report_periods)
+            )
+            + "."
+        )
+    if (
+        submitted_report_period_end is not None
+        and report_periods
+        and submitted_report_period_end not in report_periods
+    ):
+        errors.append(
+            "Girilen rapor dönemi "
+            f"({submitted_report_period_end:%d.%m.%Y}), raporda bulunan "
+            "dönemle "
+            f"({' / '.join(value.strftime('%d.%m.%Y') for value in sorted(report_periods))}) "
+            "uyuşmuyor."
+        )
 
     return list(dict.fromkeys(errors))

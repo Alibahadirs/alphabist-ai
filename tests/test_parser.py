@@ -363,6 +363,48 @@ def test_report_identity_accepts_consistent_short_name():
     ) == []
 
 
+def test_report_identity_rejects_financial_and_activity_period_mismatch():
+    errors = validate_report_identity(
+        submitted_symbol="AKSA",
+        submitted_company_name="Aksa Akrilik",
+        financial_symbol="AKSA",
+        financial_company_name="Aksa Akrilik A.Ş.",
+        activity_symbol="AKSA",
+        activity_company_name="Aksa Akrilik A.Ş.",
+        financial_report_period_end=date(2026, 3, 31),
+        activity_report_period_end=date(2026, 6, 30),
+    )
+
+    assert any("dönem sonları farklı" in error for error in errors)
+
+
+def test_report_identity_rejects_submitted_period_mismatch():
+    errors = validate_report_identity(
+        submitted_symbol="AKSA",
+        submitted_company_name="Aksa Akrilik",
+        financial_symbol="AKSA",
+        financial_company_name="Aksa Akrilik A.Ş.",
+        submitted_report_period_end=date(2026, 6, 30),
+        financial_report_period_end=date(2026, 3, 31),
+    )
+
+    assert any("Girilen rapor dönemi" in error for error in errors)
+
+
+def test_report_identity_accepts_consistent_periods():
+    assert validate_report_identity(
+        submitted_symbol="AKSA",
+        submitted_company_name="Aksa Akrilik",
+        financial_symbol="AKSA",
+        financial_company_name="Aksa Akrilik A.Ş.",
+        activity_symbol="AKSA",
+        activity_company_name="Aksa Akrilik A.Ş.",
+        submitted_report_period_end=date(2026, 3, 31),
+        financial_report_period_end=date(2026, 3, 31),
+        activity_report_period_end=date(2026, 3, 31),
+    ) == []
+
+
 def test_financial_report_warns_when_identity_is_missing(monkeypatch):
     monkeypatch.setattr(
         "app.parser.extractor._read_pdf",
