@@ -1,5 +1,9 @@
-from datetime import date
+from datetime import date, datetime
 
+from app.data_quality.models import (
+    RemediationTaskState,
+    RemediationTaskStatus,
+)
 from app.market_data.health import MarketHealthItem, MarketHealthSummary
 from app.market_data.remediation import (
     build_market_health_queue,
@@ -133,3 +137,53 @@ def test_queue_summary_counts_severity_and_unique_symbols():
     assert summary.high == 1
     assert summary.medium == 1
     assert summary.affected_symbols == 4
+
+
+def test_queue_applies_persisted_workflow_state():
+    base_queue = build_market_health_queue(
+        _summary(_item("ASELS", "Eski", 90, "Gecikmeli fiyat"))
+    )
+    state = RemediationTaskState(
+        task_id=base_queue[0].task_id,
+        symbol="ASELS",
+        task_category="Piyasa verisi",
+        status=RemediationTaskStatus.IN_PROGRESS,
+        note="Yedek sağlayıcı inceleniyor.",
+        issue_fingerprint=base_queue[0].issue_fingerprint,
+        updated_at=datetime(2026, 7, 23, 12, 0),
+    )
+
+    queue = build_market_health_queue(
+        _summary(_item("ASELS", "Eski", 90, "Gecikmeli fiyat")),
+        {state.task_id: state},
+    )
+
+    assert queue[0].workflow_status == RemediationTaskStatus.IN_PROGRESS
+    assert queue[0].workflow_note == "Yedek sağlayıcı inceleniyor."
+    assert queue[0].workflow_updated_at == datetime(2026, 7, 23, 12, 0)
+    assert queue[0].issue_fingerprint_matches is True
+
+
+def test_closed_task_requires_reopen_when_issue_evidence_changes():
+    original_queue = build_market_health_queue(
+        _summary(_item("ASELS", "Eski", 90, "İki gün eski"))
+    )
+    state = RemediationTaskState(
+        task_id=original_queue[0].task_id,
+        symbol="ASELS",
+        task_category="Piyasa verisi",
+        status=RemediationTaskStatus.COMPLETED,
+        note="Kontrol edildi.",
+        issue_fingerprint=original_queue[0].issue_fingerprint,
+    )
+
+    changed_queue = build_market_health_queue(
+        _summary(_item("ASELS", "Eski", 90, "Üç gün eski")),
+        {state.task_id: state},
+    )
+
+    assert (
+        changed_queue[0].workflow_status
+        == RemediationTaskStatus.REOPEN_REQUIRED
+    )
+    assert changed_queue[0].issue_fingerprint_matches is False

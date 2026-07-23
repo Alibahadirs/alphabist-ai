@@ -2,10 +2,18 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 
+from app.data_quality.models import (
+    RemediationTaskState,
+    RemediationTaskStatus,
+)
 from app.market_data.health import MarketHealthItem, MarketHealthSummary
+
+
+MARKET_HEALTH_TASK_CATEGORY = "Piyasa verisi"
 
 
 @dataclass(frozen=True)
@@ -20,6 +28,10 @@ class MarketHealthTask:
     issue_fingerprint: str
     latest_date: date | None
     age_days: int | None
+    workflow_status: RemediationTaskStatus = RemediationTaskStatus.OPEN
+    workflow_note: str = ""
+    workflow_updated_at: datetime | None = None
+    issue_fingerprint_matches: bool = True
 
 
 @dataclass(frozen=True)
@@ -43,9 +55,11 @@ _ACTIONS = {
 
 def build_market_health_queue(
     summary: MarketHealthSummary,
+    task_states: Mapping[str, RemediationTaskState] | None = None,
 ) -> tuple[MarketHealthTask, ...]:
+    states = task_states or {}
     tasks = [
-        _build_task(item)
+        _build_task(item, states.get(_stable_task_id(item.symbol)))
         for item in summary.items
         if item.status != "Doğrulandı"
     ]
@@ -95,7 +109,24 @@ def summarize_market_health_queue(
     )
 
 
-def _build_task(item: MarketHealthItem) -> MarketHealthTask:
+def _build_task(
+    item: MarketHealthItem,
+    state: RemediationTaskState | None,
+) -> MarketHealthTask:
+    issue_fingerprint = _issue_fingerprint(item)
+    issue_fingerprint_matches = bool(
+        not state
+        or state.status == RemediationTaskStatus.OPEN
+        or (
+            state.issue_fingerprint
+            and state.issue_fingerprint == issue_fingerprint
+        )
+    )
+    workflow_status = (
+        state.status if state else RemediationTaskStatus.OPEN
+    )
+    if state and not issue_fingerprint_matches:
+        workflow_status = RemediationTaskStatus.REOPEN_REQUIRED
     return MarketHealthTask(
         task_id=_stable_task_id(item.symbol),
         symbol=item.symbol,
@@ -107,9 +138,13 @@ def _build_task(item: MarketHealthItem) -> MarketHealthTask:
             item.status,
             "Piyasa veri kaydını incele ve yeniden doğrula.",
         ),
-        issue_fingerprint=_issue_fingerprint(item),
+        issue_fingerprint=issue_fingerprint,
         latest_date=item.latest_date,
         age_days=item.age_days,
+        workflow_status=workflow_status,
+        workflow_note=state.note if state else "",
+        workflow_updated_at=state.updated_at if state else None,
+        issue_fingerprint_matches=issue_fingerprint_matches,
     )
 
 
