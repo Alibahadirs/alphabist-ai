@@ -2,6 +2,7 @@ import streamlit as st
 
 from app.core.settings import settings
 from app.database.repository import init_db, seed_demo_data
+from app.database.startup import run_startup_backup
 from app.ui.pages import (
     render_comparison,
     render_company_form,
@@ -26,9 +27,12 @@ st.set_page_config(
 
 init_db()
 seed_demo_data()
+startup_backup_status = run_startup_backup()
 
 st.sidebar.title(settings.app_name)
 st.sidebar.caption(f"Sürüm {settings.app_version}")
+if not startup_backup_status.ready:
+    st.sidebar.warning(startup_backup_status.message)
 
 page = st.sidebar.radio(
     "Menü",
