@@ -97,6 +97,10 @@ def test_local_backup_is_written_and_validated(tmp_path, monkeypatch):
     assert backup.path.exists()
     assert backup.valid is True
     assert backup.backup_type == "Manuel"
+    assert backup.checksum_valid is True
+    assert backup.checksum_status == "Doğrulandı"
+    assert len(backup.checksum_sha256) == 64
+    assert backup.path.with_suffix(".db.sha256").exists()
     assert backup.file_name.startswith("alphabist-manual-20260723")
     assert summarize_database_backup(
         backup.path.read_bytes()
@@ -125,6 +129,7 @@ def test_manual_backup_retention_keeps_newest_files(
     assert all(item.backup_type == "Manuel" for item in backups)
     assert "100300" in backups[0].file_name
     assert "100200" in backups[1].file_name
+    assert len(list(backup_directory.glob("*.sha256"))) == 2
 
 
 def test_manual_backup_retention_requires_at_least_one_copy(tmp_path):
@@ -138,6 +143,26 @@ def test_manual_backup_retention_requires_at_least_one_copy(tmp_path):
         assert "en az bir" in str(exc).lower()
     else:
         raise AssertionError("Sıfır yedek saklama kabul edilmemeliydi.")
+
+
+def test_checksum_mismatch_marks_local_backup_invalid(
+    tmp_path, monkeypatch
+):
+    database_path = tmp_path / "source.db"
+    backup_directory = tmp_path / "backups"
+    _create_database(database_path, monkeypatch, "CHECKSUM")
+    backup = create_local_backup(database_path, backup_directory)
+    backup.path.with_suffix(".db.sha256").write_text(
+        "0" * 64,
+        encoding="ascii",
+    )
+
+    listed = list_local_backups(database_path, backup_directory)
+
+    assert len(listed) == 1
+    assert listed[0].valid is False
+    assert listed[0].checksum_valid is False
+    assert listed[0].checksum_status == "Uyuşmazlık"
 
 
 def test_backup_comparison_reports_incoming_record_deltas(
@@ -198,6 +223,8 @@ def test_restore_replaces_data_and_keeps_safety_backup(
     assert backups[0].path == safety_path
     assert backups[0].valid is True
     assert backups[0].size_bytes > 0
+    assert backups[0].checksum_valid is True
+    assert safety_path.with_suffix(".db.sha256").exists()
 
 
 def test_restore_failure_keeps_original_database(

@@ -1,3 +1,4 @@
+import hashlib
 import os
 import sqlite3
 import tempfile
@@ -33,6 +34,16 @@ class SafetyBackupInfo:
     modified_at: datetime
     valid: bool
     backup_type: str = "Geri yükleme öncesi"
+    checksum_sha256: str = ""
+    checksum_valid: bool | None = None
+
+    @property
+    def checksum_status(self) -> str:
+        if self.checksum_valid is True:
+            return "Doğrulandı"
+        if self.checksum_valid is False:
+            return "Uyuşmazlık"
+        return "Kanıt yok"
 
 
 @dataclass(frozen=True)
@@ -105,20 +116,63 @@ def _backup_directory(
     return backup_directory or database_path.parent / "backups"
 
 
+def _sha256(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def _checksum_path(database_backup_path: Path) -> Path:
+    return database_backup_path.with_suffix(
+        database_backup_path.suffix + ".sha256"
+    )
+
+
+def _write_checksum_manifest(path: Path, data: bytes) -> None:
+    checksum_path = _checksum_path(path)
+    temporary_path = checksum_path.with_suffix(
+        checksum_path.suffix + ".tmp"
+    )
+    try:
+        temporary_path.write_text(
+            _sha256(data) + "\n",
+            encoding="ascii",
+        )
+        temporary_path.replace(checksum_path)
+    finally:
+        temporary_path.unlink(missing_ok=True)
+
+
 def _backup_info(
     path: Path,
     *,
     backup_type: str,
 ) -> SafetyBackupInfo:
     stat = path.stat()
-    validation = validate_database_backup(path.read_bytes())
+    data = path.read_bytes()
+    validation = validate_database_backup(data)
+    actual_checksum = _sha256(data)
+    checksum_path = _checksum_path(path)
+    checksum_valid = None
+    if checksum_path.exists():
+        try:
+            expected_checksum = checksum_path.read_text(
+                encoding="ascii"
+            ).strip().lower()
+        except (OSError, UnicodeError):
+            checksum_valid = False
+        else:
+            checksum_valid = (
+                len(expected_checksum) == 64
+                and expected_checksum == actual_checksum
+            )
     return SafetyBackupInfo(
         path=path,
         file_name=path.name,
         size_bytes=stat.st_size,
         modified_at=datetime.fromtimestamp(stat.st_mtime),
-        valid=validation.valid,
+        valid=validation.valid and checksum_valid is not False,
         backup_type=backup_type,
+        checksum_sha256=actual_checksum,
+        checksum_valid=checksum_valid,
     )
 
 
@@ -307,6 +361,7 @@ def prune_manual_backups(
     deleted = []
     for path in manual_paths[keep_count:]:
         path.unlink()
+        _checksum_path(path).unlink(missing_ok=True)
         deleted.append(path)
     return tuple(deleted)
 
@@ -335,6 +390,11 @@ def create_local_backup(
     try:
         temporary_path.write_bytes(data)
         temporary_path.replace(final_path)
+        _write_checksum_manifest(final_path, data)
+    except Exception:
+        final_path.unlink(missing_ok=True)
+        _checksum_path(final_path).unlink(missing_ok=True)
+        raise
     finally:
         temporary_path.unlink(missing_ok=True)
 
@@ -371,6 +431,10 @@ def restore_database_backup(
         )
         safety_backup_path.write_bytes(
             create_database_backup(target_path)
+        )
+        _write_checksum_manifest(
+            safety_backup_path,
+            safety_backup_path.read_bytes(),
         )
 
     try:
