@@ -1,5 +1,18 @@
 # Değişiklik günlüğü
 
+## 1.23.0 - 2026-07-24
+
+### İzole kurtarma tatbikatı
+
+- Doğrulanmış yedeği üretim veritabanına dokunmadan ayrı geçici SQLite dosyasına geri yükleyen tatbikat motoru eklendi.
+- Tatbikat sonunda geri yüklenen veritabanı bütünlüğü ve zorunlu tablolar yeniden doğrulanır hale getirildi.
+- Kaynak ve geri yüklenen kopyanın şirket, takip listesi, portföy, puan geçmişi ve denetim kaydı sayıları karşılaştırılır hale getirildi.
+- Başarılı ve başarısız tatbikat sonuçları bağımsız SQLite geçmişinde saklanır hale getirildi.
+- Tatbikat kayıtlarına kaynak checksum’u ve içerik değişikliğini tespit eden SHA-256 parmak izi eklendi.
+- Tatbikat geçmişine başarılı ve başarısız sonuç filtresi eklendi.
+- Tam checksum ve bütünlük durumunu taşıyan Excel uyumlu UTF-8 CSV kanıt raporu eklendi.
+- Veri yedekleme ekranına yedek seçimi, tatbikat çalıştırma, sonuç sayaçları, geçmiş ve CSV indirme alanı eklendi.
+
 ## 1.22.0 - 2026-07-24
 
 ### Geri yükleme denetim geçmişi

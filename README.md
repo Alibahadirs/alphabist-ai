@@ -153,6 +153,8 @@ yerel Streamlit uygulaması.
 - `.db` ve doğrulanmış `.zip` dosyaları için ortak güvenli geri yükleme akışı
 - Başarılı ve başarısız geri yükleme girişimleri için parmak izi korumalı denetim geçmişi
 - Durum filtreli geri yükleme görünümü ve Excel uyumlu CSV kanıt raporu
+- Yerel yedeği üretim veritabanına dokunmadan sınayan izole kurtarma tatbikatı
+- Parmak izi korumalı tatbikat geçmişi, durum filtresi ve CSV kanıt raporu
 - Geri yükleme öncesinde mevcut ve yüklenecek kayıt sayılarını karşılaştırma
 - Windows açık dosya davranışıyla uyumlu işlemsel SQLite geri yükleme
 - Başarısız geri yüklemede güvenlik kopyasından otomatik geri alma
@@ -235,6 +237,10 @@ indirilebilir. Geri yükleme ekranı hem `.db` hem de doğrulanmış `.zip`
 dosyalarını kabul eder. Her geri yükleme girişimi kaynak dosya özeti, sonucu,
 güvenlik kopyası ve kayıt sayılarıyla denetim geçmişine yazılır. Bu geçmiş
 duruma göre filtrelenebilir ve CSV kanıt raporu olarak indirilebilir.
+Doğrulanmış yerel yedekler ayrıca geçici bir SQLite veritabanına gerçekten
+geri yüklenerek sınanabilir. Kurtarma tatbikatı kaynak ve hedef kayıt
+sayılarını karşılaştırır, üretim verisini değiştirmez ve sonucu ayrı bir
+bütünlük kontrollü geçmişte saklar.
 
 ## Yerel veri güvenliği
 
