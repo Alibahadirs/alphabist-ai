@@ -68,11 +68,12 @@ from app.database.repository import (
 from app.database.backup import (
     BackupComparison,
     compare_backup_to_database,
+    create_backup_bundle,
     create_database_backup,
     create_local_backup,
     list_local_backups,
+    load_backup_payload,
     restore_database_backup,
-    validate_database_backup,
 )
 from app.database.health import DatabaseHealth, inspect_database_health
 from app.data_quality.service import FIELD_LABELS, build_data_quality_summary
@@ -5497,46 +5498,86 @@ def render_data_backup() -> None:
         st.subheader("Yedeği indir")
         try:
             backup_data = create_database_backup()
+            bundle_data = create_backup_bundle()
         except FileNotFoundError as exc:
             st.error(str(exc))
         else:
-            st.metric(
-                "Yedek boyutu",
-                f"{len(backup_data) / 1024:.1f} KB",
-                border=True,
+            with st.container(horizontal=True):
+                st.metric(
+                    "Veritabanı yedeği",
+                    f"{len(backup_data) / 1024:.1f} KB",
+                    border=True,
+                )
+                st.metric(
+                    "Taşınabilir paket",
+                    f"{len(bundle_data) / 1024:.1f} KB",
+                    border=True,
+                )
+            st.caption(
+                "Taşınabilir paket; veritabanını, sürüm manifestini ve "
+                "SHA-256 bütünlük kanıtını tek ZIP dosyasında toplar."
             )
-            st.download_button(
-                "Yedeği indir",
-                data=backup_data,
-                file_name=(
-                    f"alphabist-yedek-{date.today():%Y%m%d}.db"
-                ),
-                mime="application/x-sqlite3",
-                icon=":material/download:",
-                type="primary",
-                width="stretch",
-            )
+            with st.container(horizontal=True):
+                st.download_button(
+                    "Veritabanını indir",
+                    data=backup_data,
+                    file_name=(
+                        f"alphabist-yedek-{date.today():%Y%m%d}.db"
+                    ),
+                    mime="application/x-sqlite3",
+                    icon=":material/database:",
+                    width="stretch",
+                )
+                st.download_button(
+                    "Taşınabilir paketi indir",
+                    data=bundle_data,
+                    file_name=(
+                        f"alphabist-paket-{date.today():%Y%m%d}.zip"
+                    ),
+                    mime="application/zip",
+                    icon=":material/folder_zip:",
+                    type="primary",
+                    width="stretch",
+                )
 
     with st.container(border=True):
         st.subheader("Yedeği geri yükle")
         uploaded = st.file_uploader(
             "AlphaBIST yedek dosyası",
-            type="db",
+            type=["db", "zip"],
             max_upload_size=100,
             key="database_restore_upload",
         )
-        validation = None
+        payload = None
         comparison = None
         if uploaded is not None:
-            validation = validate_database_backup(uploaded.getvalue())
-            if validation.valid:
-                st.success(validation.message)
-                st.caption(
-                    f"Doğrulanan tablo sayısı: {len(validation.tables)}"
+            try:
+                payload = load_backup_payload(
+                    uploaded.getvalue(),
+                    uploaded.name,
                 )
+            except ValueError as exc:
+                st.error(str(exc))
+            else:
+                st.success(
+                    f"{payload.source_type} doğrulandı ve geri "
+                    "yüklemeye hazır."
+                )
+                st.caption(
+                    "Paket içindeki iş kaydı: "
+                    f"{payload.summary.total_business_records}"
+                )
+                if payload.manifest is not None:
+                    st.caption(
+                        f"Uygulama sürümü: "
+                        f"{payload.manifest.app_version} | "
+                        f"Oluşturulma: {payload.manifest.created_at} | "
+                        f"SHA-256: "
+                        f"{payload.manifest.database_sha256[:12]}..."
+                    )
                 try:
                     comparison = compare_backup_to_database(
-                        uploaded.getvalue()
+                        payload.database_data
                     )
                 except (ValueError, FileNotFoundError) as exc:
                     st.error(str(exc))
@@ -5567,15 +5608,10 @@ def render_data_backup() -> None:
                             ),
                         },
                     )
-            else:
-                st.error(validation.message)
-
         confirmation_text = st.text_input(
             "Geri yüklemeyi onaylamak için GERI YUKLE yazın",
             disabled=(
-                validation is None
-                or not validation.valid
-                or comparison is None
+                payload is None or comparison is None
             ),
             key="restore_confirmation_text",
         )
@@ -5584,16 +5620,15 @@ def render_data_backup() -> None:
             icon=":material/restore:",
             type="primary",
             disabled=(
-                validation is None
-                or not validation.valid
+                payload is None
                 or comparison is None
                 or confirmation_text.strip().upper() != "GERI YUKLE"
             ),
         )
-        if restore_submitted and uploaded is not None:
+        if restore_submitted and payload is not None:
             try:
                 safety_backup = restore_database_backup(
-                    uploaded.getvalue()
+                    payload.database_data
                 )
             except (RuntimeError, ValueError) as exc:
                 st.error(str(exc))
