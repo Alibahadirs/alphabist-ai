@@ -166,20 +166,27 @@ def list_restore_audits(
     database_path: Path,
     *,
     limit: int = 100,
+    status: str | None = None,
 ) -> list[RestoreAuditRecord]:
     if limit < 1:
         raise ValueError("Geri yükleme geçmişi limiti pozitif olmalıdır.")
+    if status is not None and status not in RESTORE_STATUSES:
+        raise ValueError("Geçersiz geri yükleme geçmişi filtresi.")
     if not database_path.exists():
         return []
     with sqlite3.connect(database_path) as connection:
         connection.row_factory = sqlite3.Row
         ensure_restore_audit_table(connection)
-        rows = connection.execute(
-            """SELECT id, source_type, source_file_name, source_sha256,
-            status, message, safety_backup_name, incoming_company_count,
-            incoming_total_records, created_at, fingerprint
-            FROM restore_audit_history
-            ORDER BY id DESC LIMIT ?""",
-            (limit,),
-        ).fetchall()
+        query = """SELECT id, source_type, source_file_name, source_sha256,
+        status, message, safety_backup_name, incoming_company_count,
+        incoming_total_records, created_at, fingerprint
+        FROM restore_audit_history"""
+        parameters: tuple[object, ...]
+        if status is None:
+            parameters = (limit,)
+        else:
+            query += " WHERE status=?"
+            parameters = (status, limit)
+        query += " ORDER BY id DESC LIMIT ?"
+        rows = connection.execute(query, parameters).fetchall()
     return [RestoreAuditRecord(**dict(row)) for row in rows]
