@@ -76,6 +76,13 @@ from app.database.backup import (
     restore_database_backup,
 )
 from app.database.health import DatabaseHealth, inspect_database_health
+from app.database.restore_export import build_restore_audit_csv
+from app.database.restore_history import (
+    RESTORE_STATUS_FAILURE,
+    RESTORE_STATUS_SUCCESS,
+    RestoreAuditRecord,
+    list_restore_audits,
+)
 from app.data_quality.service import FIELD_LABELS, build_data_quality_summary
 from app.data_quality.models import (
     RemediationTaskState,
@@ -5381,6 +5388,30 @@ def _backup_comparison_rows(
     ]
 
 
+def _restore_audit_rows(
+    records: list[RestoreAuditRecord],
+) -> list[dict[str, int | str]]:
+    return [
+        {
+            "Tarih": record.created_at,
+            "Durum": record.status,
+            "Kaynak": record.source_type,
+            "Dosya": record.source_file_name,
+            "Şirket": record.incoming_company_count,
+            "Toplam kayıt": record.incoming_total_records,
+            "Güvenlik kopyası": record.safety_backup_name or "-",
+            "Bütünlük": (
+                "Doğrulandı"
+                if record.integrity_valid
+                else "Geçersiz"
+            ),
+            "SHA-256": record.source_sha256[:12] + "...",
+            "Açıklama": record.message,
+        }
+        for record in records
+    ]
+
+
 def render_data_backup() -> None:
     st.title("Veri yedekleme")
     st.caption(
@@ -5628,7 +5659,9 @@ def render_data_backup() -> None:
         if restore_submitted and payload is not None:
             try:
                 safety_backup = restore_database_backup(
-                    payload.database_data
+                    payload.database_data,
+                    source_type=payload.source_type,
+                    source_file_name=uploaded.name,
                 )
             except (RuntimeError, ValueError) as exc:
                 st.error(str(exc))
@@ -5700,6 +5733,102 @@ def render_data_backup() -> None:
                 st.error(
                     "Seçilen yerel yedek bütünlük kontrolünü geçemedi."
                 )
+
+    with st.container(border=True):
+        st.subheader("Geri yükleme geçmişi")
+        st.caption(
+            "Başarılı ve başarısız geri yükleme girişimlerini "
+            "bütünlük kanıtlarıyla izler."
+        )
+        status_label = st.selectbox(
+            "Durum filtresi",
+            ["Tümü", RESTORE_STATUS_SUCCESS, RESTORE_STATUS_FAILURE],
+            key="restore_audit_status_filter",
+        )
+        all_restore_records = list_restore_audits(
+            settings.database_path,
+            limit=100,
+        )
+        restore_records = (
+            all_restore_records
+            if status_label == "Tümü"
+            else [
+                record
+                for record in all_restore_records
+                if record.status == status_label
+            ]
+        )
+        success_count = sum(
+            record.status == RESTORE_STATUS_SUCCESS
+            for record in all_restore_records
+        )
+        failure_count = sum(
+            record.status == RESTORE_STATUS_FAILURE
+            for record in all_restore_records
+        )
+        integrity_issue_count = sum(
+            not record.integrity_valid
+            for record in all_restore_records
+        )
+        with st.container(horizontal=True):
+            st.metric(
+                "Toplam deneme",
+                len(all_restore_records),
+                border=True,
+            )
+            st.metric(
+                "Başarılı",
+                success_count,
+                border=True,
+            )
+            st.metric(
+                "Başarısız",
+                failure_count,
+                border=True,
+            )
+            st.metric(
+                "Kanıt sorunu",
+                integrity_issue_count,
+                border=True,
+            )
+        if integrity_issue_count:
+            st.error(
+                "Geri yükleme geçmişinde bütünlüğü doğrulanamayan "
+                f"{integrity_issue_count} kayıt var."
+            )
+        if not restore_records:
+            st.info("Seçilen durumda geri yükleme kaydı bulunmuyor.")
+        else:
+            st.dataframe(
+                pd.DataFrame(_restore_audit_rows(restore_records)),
+                hide_index=True,
+                width="stretch",
+                column_config={
+                    "Tarih": st.column_config.DatetimeColumn(
+                        "Tarih",
+                        format="DD.MM.YYYY HH:mm:ss",
+                    ),
+                    "Şirket": st.column_config.NumberColumn(
+                        "Şirket",
+                        format="localized",
+                    ),
+                    "Toplam kayıt": st.column_config.NumberColumn(
+                        "Toplam kayıt",
+                        format="localized",
+                    ),
+                },
+            )
+            st.download_button(
+                "Geri yükleme kanıtını indir",
+                data=build_restore_audit_csv(restore_records),
+                file_name=(
+                    "alphabist-geri-yukleme-gecmisi-"
+                    f"{date.today():%Y%m%d}.csv"
+                ),
+                mime="text/csv",
+                icon=":material/download:",
+                width="stretch",
+            )
 
 
 def render_market_data_check() -> None:
