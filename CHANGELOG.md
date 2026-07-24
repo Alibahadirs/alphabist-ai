@@ -1,5 +1,18 @@
 # Değişiklik günlüğü
 
+## 1.20.0 - 2026-07-24
+
+### Günlük otomatik ve bütünlük kanıtlı yedekleme
+
+- Uygulamanın oluşturduğu yerel yedeklerin yanına SHA-256 bütünlük kanıtı yazılması sağlandı.
+- SQLite bütünlüğü geçerli olsa bile SHA-256 kanıtı uyuşmayan kopyalar geçersiz sayılır hale getirildi.
+- Manuel ve geri yükleme öncesi güvenlik kopyalarının kanıt durumu yerel yedek modeline eklendi.
+- Her takvim gününde yalnız bir kez doğrulanmış otomatik yedek oluşturan idempotent politika eklendi.
+- Aynı günün otomatik yedeği bozuksa yeni ve doğrulanmış kopya oluşturulması sağlandı.
+- Otomatik yedekler için son 14 kopyayı koruyan bağımsız saklama sınırı getirildi.
+- Günlük otomatik yedekleme uygulamanın başlangıç akışına bağlandı; hata uygulamayı kapatmadan görünür duruma dönüştürüldü.
+- Sistem durumu ekranına yedek yaşı, doğrulanmış kopya sayısı, SHA-256 uyuşmazlık sayısı ve kısa özet eklendi.
+
 ## 1.19.0 - 2026-07-23
 
 ### Yerel yedekleme ve güvenli geri yükleme

@@ -145,6 +145,10 @@ yerel Streamlit uygulaması.
 - SQLite yedeğini bütünlük kontrolüyle indirme ve güvenli geri yükleme
 - Geri yükleme öncesi güvenlik kopyalarını listeleme ve yeniden indirme
 - Doğrulanmış yerel yedek oluşturma ve manuel yedek saklama sınırı
+- Yerel yedekler için SHA-256 bütünlük kanıtı ve değişiklik tespiti
+- Her takvim gününde bir kez çalışan doğrulanmış otomatik yedek
+- Son 14 otomatik kopyayı koruyan bağımsız saklama politikası
+- Yedek yaşı, doğrulanmış kopya ve kanıt uyuşmazlığı sağlık göstergeleri
 - Geri yükleme öncesinde mevcut ve yüklenecek kayıt sayılarını karşılaştırma
 - Windows açık dosya davranışıyla uyumlu işlemsel SQLite geri yükleme
 - Başarısız geri yüklemede güvenlik kopyasından otomatik geri alma
@@ -218,7 +222,10 @@ SQLite bütünlüğünü, kayıt sayısını, güvenlik kopyalarını ve geçerl
 üretilebildiğini birlikte gösterir. Aynı ekrandan son 5, 10 veya 20 manuel
 yedeği saklayacak şekilde yerel kopya oluşturulabilir. Geri yükleme öncesinde
 şirket, takip listesi, portföy, puan geçmişi ve denetim kaydı sayıları mevcut
-verilerle karşılaştırılır.
+verilerle karşılaştırılır. Uygulama her gün ilk açılışta doğrulanmış bir
+otomatik yedek oluşturur; aynı gün içindeki yeniden çalıştırmalar yeni dosya
+üretmez. Yerel yedeklerin SHA-256 kanıtı ve tazeliği sistem durumu tablosunda
+izlenir.
 
 ## Yerel veri güvenliği
 
