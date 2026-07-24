@@ -1,5 +1,18 @@
 # Değişiklik günlüğü
 
+## 1.21.0 - 2026-07-24
+
+### Taşınabilir ve doğrulanabilir yedek paketi
+
+- Veritabanı, SHA-256 kanıtı ve sürümlü manifesti tek ZIP dosyasında birleştiren taşınabilir yedek oluşturma eklendi.
+- Paket manifestine uygulama sürümü, oluşturulma zamanı, veritabanı boyutu ve iş kaydı sayıları yazılır hale getirildi.
+- ZIP içindeki veritabanı checksum değeri hem ayrı kanıt dosyası hem de manifest üzerinden çapraz doğrulanır hale getirildi.
+- Yinelenen, eksik, beklenmeyen, şifreli veya güvenli olmayan yollara sahip ZIP içerikleri reddedilir hale getirildi.
+- Açılmış paket boyutu sınırlandırılarak aşırı büyük ve riskli arşivler engellendi.
+- Manifest kayıt sayıları gerçek SQLite tablo sayılarıyla karşılaştırılır hale getirildi.
+- `.db` ve `.zip` yüklemelerini tek doğrulanmış geri yükleme girdisine dönüştüren ortak akış eklendi.
+- Veri yedekleme ekranına taşınabilir paket indirme, paket bilgisi önizleme ve ZIP geri yükleme desteği eklendi.
+
 ## 1.20.0 - 2026-07-24
 
 ### Günlük otomatik ve bütünlük kanıtlı yedekleme

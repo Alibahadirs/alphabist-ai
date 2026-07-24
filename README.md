@@ -149,6 +149,8 @@ yerel Streamlit uygulaması.
 - Her takvim gününde bir kez çalışan doğrulanmış otomatik yedek
 - Son 14 otomatik kopyayı koruyan bağımsız saklama politikası
 - Yedek yaşı, doğrulanmış kopya ve kanıt uyuşmazlığı sağlık göstergeleri
+- Veritabanı, sürüm manifesti ve SHA-256 kanıtını birleştiren taşınabilir ZIP yedeği
+- `.db` ve doğrulanmış `.zip` dosyaları için ortak güvenli geri yükleme akışı
 - Geri yükleme öncesinde mevcut ve yüklenecek kayıt sayılarını karşılaştırma
 - Windows açık dosya davranışıyla uyumlu işlemsel SQLite geri yükleme
 - Başarısız geri yüklemede güvenlik kopyasından otomatik geri alma
@@ -225,7 +227,10 @@ yedeği saklayacak şekilde yerel kopya oluşturulabilir. Geri yükleme öncesin
 verilerle karşılaştırılır. Uygulama her gün ilk açılışta doğrulanmış bir
 otomatik yedek oluşturur; aynı gün içindeki yeniden çalıştırmalar yeni dosya
 üretmez. Yerel yedeklerin SHA-256 kanıtı ve tazeliği sistem durumu tablosunda
-izlenir.
+izlenir. Bilgisayarlar arasında taşımak için veritabanı, uygulama sürümü,
+kayıt sayıları ve SHA-256 bütünlük kanıtını tek dosyada tutan ZIP paketi
+indirilebilir. Geri yükleme ekranı hem `.db` hem de doğrulanmış `.zip`
+dosyalarını kabul eder.
 
 ## Yerel veri güvenliği
 
