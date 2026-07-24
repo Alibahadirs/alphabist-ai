@@ -1,6 +1,10 @@
 from app.database import repository
+import os
+from datetime import datetime
+
 from app.database.backup import (
     create_database_backup,
+    create_local_backup,
     restore_database_backup,
 )
 from app.database.health import inspect_database_health
@@ -74,3 +78,33 @@ def test_corrupted_database_is_reported_as_error(tmp_path):
     assert health.status == "Hata"
     assert health.ready is False
     assert health.backup_ready is False
+
+
+def test_backup_freshness_uses_latest_verified_copy(
+    tmp_path, monkeypatch
+):
+    database_path = tmp_path / "alphabist.db"
+    backup_directory = tmp_path / "backups"
+    monkeypatch.setattr(repository, "DB_PATH", database_path)
+    repository.init_db()
+    backup = create_local_backup(
+        database_path,
+        backup_directory,
+        created_at=datetime(2026, 7, 20, 9, 0),
+    )
+    backup_timestamp = datetime(2026, 7, 20, 9, 0).timestamp()
+    os.utime(
+        backup.path,
+        (backup_timestamp, backup_timestamp),
+    )
+
+    health = inspect_database_health(
+        database_path,
+        backup_directory,
+        now=datetime(2026, 7, 24, 9, 0),
+    )
+
+    assert health.verified_backup_count == 1
+    assert health.checksum_issue_count == 0
+    assert health.backup_age_days == 4
+    assert health.backup_fresh is False

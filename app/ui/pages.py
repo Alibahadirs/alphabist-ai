@@ -5301,6 +5301,41 @@ def _build_system_status_rows(
                 ),
                 "Ayrıntı": database_health.backup_message,
             },
+            {
+                "Kontrol": "Yedek tazeliği",
+                "Durum": (
+                    "Hazır"
+                    if database_health.backup_fresh
+                    else "Uyarı"
+                ),
+                "Ayrıntı": (
+                    "Son doğrulanmış yedek bugün alındı."
+                    if database_health.backup_age_days == 0
+                    else (
+                        "Son doğrulanmış yedek "
+                        f"{database_health.backup_age_days} gün önce alındı."
+                        if database_health.backup_age_days is not None
+                        else "SHA-256 kanıtlı yerel yedek bulunmuyor."
+                    )
+                ),
+            },
+            {
+                "Kontrol": "SHA-256 kanıtları",
+                "Durum": (
+                    "Hazır"
+                    if database_health.checksum_issue_count == 0
+                    else "Hata"
+                ),
+                "Ayrıntı": (
+                    f"{database_health.verified_backup_count} "
+                    "yerel yedek doğrulandı."
+                    if database_health.checksum_issue_count == 0
+                    else (
+                        f"{database_health.checksum_issue_count} "
+                        "yedekte kanıt uyuşmazlığı var."
+                    )
+                ),
+            },
         ]
     )
     return rows
@@ -5376,6 +5411,19 @@ def render_data_backup() -> None:
             st.metric(
                 "Yerel yedek",
                 database_health.safety_backup_count,
+                border=True,
+            )
+            st.metric(
+                "Yedek tazeliği",
+                (
+                    "Bugün"
+                    if database_health.backup_age_days == 0
+                    else (
+                        f"{database_health.backup_age_days} gün"
+                        if database_health.backup_age_days is not None
+                        else "Yok"
+                    )
+                ),
                 border=True,
             )
         if system_ready:
@@ -5575,6 +5623,12 @@ def render_data_backup() -> None:
                                 "Doğrulandı"
                                 if item.valid
                                 else "Geçersiz"
+                            ),
+                            "SHA-256": item.checksum_status,
+                            "Özet": (
+                                item.checksum_sha256[:12]
+                                if item.checksum_sha256
+                                else "-"
                             ),
                         }
                         for item in local_backups

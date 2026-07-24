@@ -27,6 +27,10 @@ class DatabaseHealth:
     latest_safety_backup_at: datetime | None
     backup_ready: bool
     backup_message: str
+    backup_age_days: int | None = None
+    backup_fresh: bool = False
+    verified_backup_count: int = 0
+    checksum_issue_count: int = 0
 
     @property
     def ready(self) -> bool:
@@ -36,6 +40,8 @@ class DatabaseHealth:
 def inspect_database_health(
     database_path: Path | None = None,
     backup_directory: Path | None = None,
+    *,
+    now: datetime | None = None,
 ) -> DatabaseHealth:
     path = database_path or repository.DB_PATH
     if not path.exists():
@@ -107,8 +113,22 @@ def inspect_database_health(
             backup_message = f"Yedek üretilemedi: {exc}"
 
     local_backups = list_local_backups(path, backup_directory)
+    verified_backups = [
+        item
+        for item in local_backups
+        if item.valid and item.checksum_valid is True
+    ]
+    checksum_issue_count = sum(
+        item.checksum_valid is False for item in local_backups
+    )
     latest_backup_at = (
-        local_backups[0].modified_at if local_backups else None
+        verified_backups[0].modified_at if verified_backups else None
+    )
+    current_time = now or datetime.now()
+    backup_age_days = (
+        max(0, (current_time.date() - latest_backup_at.date()).days)
+        if latest_backup_at is not None
+        else None
     )
     return DatabaseHealth(
         status="Hazır" if healthy else "Hata",
@@ -121,4 +141,10 @@ def inspect_database_health(
         latest_safety_backup_at=latest_backup_at,
         backup_ready=backup_ready,
         backup_message=backup_message,
+        backup_age_days=backup_age_days,
+        backup_fresh=(
+            backup_age_days is not None and backup_age_days <= 1
+        ),
+        verified_backup_count=len(verified_backups),
+        checksum_issue_count=checksum_issue_count,
     )

@@ -28,6 +28,10 @@ def _database_health(*, backup_ready: bool = True) -> DatabaseHealth:
             if backup_ready
             else "Yedek üretilemedi."
         ),
+        backup_age_days=0,
+        backup_fresh=True,
+        verified_backup_count=1,
+        checksum_issue_count=0,
     )
 
 
@@ -55,6 +59,8 @@ def test_system_status_rows_include_runtime_and_backup_checks():
         "Python",
         "SQLite veritabanı",
         "Yedek üretimi",
+        "Yedek tazeliği",
+        "SHA-256 kanıtları",
     ]
     assert rows[-1]["Durum"] == "Hazır"
 
@@ -67,7 +73,7 @@ def test_system_status_rows_expose_backup_failure():
         _database_health(backup_ready=False),
     )
 
-    assert rows[-1] == {
+    assert rows[1] == {
         "Kontrol": "Yedek üretimi",
         "Durum": "Hata",
         "Ayrıntı": "Yedek üretilemedi.",
