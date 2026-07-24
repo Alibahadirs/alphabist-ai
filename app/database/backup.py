@@ -12,6 +12,11 @@ from pathlib import Path
 
 from app.core.settings import settings
 from app.database import repository
+from app.database.restore_history import (
+    RESTORE_STATUS_FAILURE,
+    RESTORE_STATUS_SUCCESS,
+    record_restore_audit,
+)
 
 
 REQUIRED_TABLES = {
@@ -855,12 +860,26 @@ def restore_database_backup(
     data: bytes,
     database_path: Path | None = None,
     backup_directory: Path | None = None,
+    *,
+    source_type: str = "SQLite veritabanı",
+    source_file_name: str = "alphabist-yedek.db",
 ) -> Path | None:
+    target_path = _database_path(database_path)
+    source_checksum = _sha256(data)
     validation = validate_database_backup(data)
     if not validation.valid:
+        if target_path.exists():
+            record_restore_audit(
+                target_path,
+                source_type=source_type,
+                source_file_name=source_file_name,
+                source_sha256=source_checksum,
+                status=RESTORE_STATUS_FAILURE,
+                message=validation.message,
+            )
         raise ValueError(validation.message)
 
-    target_path = _database_path(database_path)
+    incoming_summary = summarize_database_backup(data)
     target_path.parent.mkdir(parents=True, exist_ok=True)
     target_existed = target_path.exists()
     safety_backup_path: Path | None = None
@@ -892,7 +911,24 @@ def restore_database_backup(
                 "Geri yüklenen veritabanı doğrulanamadı: "
                 + restored_validation.message
             )
-    except Exception:
+        record_restore_audit(
+            target_path,
+            source_type=source_type,
+            source_file_name=source_file_name,
+            source_sha256=source_checksum,
+            status=RESTORE_STATUS_SUCCESS,
+            message="Geri yükleme tamamlandı ve veritabanı doğrulandı.",
+            safety_backup_name=(
+                safety_backup_path.name
+                if safety_backup_path is not None
+                else ""
+            ),
+            incoming_company_count=incoming_summary.company_count,
+            incoming_total_records=(
+                incoming_summary.total_business_records
+            ),
+        )
+    except Exception as exc:
         if safety_backup_path is not None:
             try:
                 _restore_database_from_bytes(
@@ -905,6 +941,29 @@ def restore_database_backup(
             try:
                 target_path.unlink(missing_ok=True)
             except OSError:
+                pass
+        if target_path.exists():
+            try:
+                record_restore_audit(
+                    target_path,
+                    source_type=source_type,
+                    source_file_name=source_file_name,
+                    source_sha256=source_checksum,
+                    status=RESTORE_STATUS_FAILURE,
+                    message=str(exc),
+                    safety_backup_name=(
+                        safety_backup_path.name
+                        if safety_backup_path is not None
+                        else ""
+                    ),
+                    incoming_company_count=(
+                        incoming_summary.company_count
+                    ),
+                    incoming_total_records=(
+                        incoming_summary.total_business_records
+                    ),
+                )
+            except (OSError, sqlite3.DatabaseError):
                 pass
         raise
     return safety_backup_path

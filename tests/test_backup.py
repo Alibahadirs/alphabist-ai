@@ -24,6 +24,7 @@ from app.database.backup import (
     validate_database_backup,
 )
 from app.scoring.models import FinancialMetrics
+from app.database.restore_history import list_restore_audits
 
 
 def _company(symbol: str) -> FinancialMetrics:
@@ -503,6 +504,12 @@ def test_restore_replaces_data_and_keeps_safety_backup(
     assert backups[0].size_bytes > 0
     assert backups[0].checksum_valid is True
     assert safety_path.with_suffix(".db.sha256").exists()
+    restore_audits = list_restore_audits(target_path)
+    assert len(restore_audits) == 1
+    assert restore_audits[0].status == "Başarılı"
+    assert restore_audits[0].source_file_name == "alphabist-yedek.db"
+    assert restore_audits[0].incoming_company_count == 1
+    assert restore_audits[0].integrity_valid is True
 
 
 def test_restore_failure_keeps_original_database(
@@ -539,6 +546,32 @@ def test_restore_failure_keeps_original_database(
         "OLD"
     ]
     assert len(list_safety_backups(target_path, safety_directory)) == 1
+    restore_audits = list_restore_audits(target_path)
+    assert len(restore_audits) == 1
+    assert restore_audits[0].status == "Başarısız"
+    assert "simulated" in restore_audits[0].message
+
+
+def test_invalid_restore_attempt_is_audited(tmp_path, monkeypatch):
+    target_path = tmp_path / "target.db"
+    _create_database(target_path, monkeypatch, "CURRENT")
+
+    try:
+        restore_database_backup(
+            b"invalid",
+            target_path,
+            source_type="Taşınabilir ZIP paketi",
+            source_file_name="broken.zip",
+        )
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Geçersiz geri yükleme reddedilmeliydi.")
+
+    restore_audits = list_restore_audits(target_path)
+    assert len(restore_audits) == 1
+    assert restore_audits[0].status == "Başarısız"
+    assert restore_audits[0].source_file_name == "broken.zip"
 
 
 def test_safety_backups_are_listed_newest_first(
