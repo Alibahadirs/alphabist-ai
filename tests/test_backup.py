@@ -1,8 +1,16 @@
+import hashlib
+import io
+import json
+import zipfile
 from datetime import datetime, timedelta
 
 from app.database import repository
 from app.database.backup import (
+    BACKUP_BUNDLE_CHECKSUM_NAME,
+    BACKUP_BUNDLE_DATABASE_NAME,
+    BACKUP_BUNDLE_MANIFEST_NAME,
     compare_backup_to_database,
+    create_backup_bundle,
     create_database_backup,
     ensure_daily_backup,
     create_local_backup,
@@ -50,6 +58,40 @@ def test_database_backup_is_valid_and_contains_required_tables(
     assert validation.valid is True
     assert "companies" in validation.tables
     assert backup_data.startswith(b"SQLite format 3\x00")
+
+
+def test_portable_backup_bundle_contains_manifest_and_checksum(
+    tmp_path, monkeypatch
+):
+    database_path = tmp_path / "source.db"
+    _create_database(database_path, monkeypatch, "BUNDLE")
+
+    bundle_data = create_backup_bundle(
+        database_path,
+        created_at=datetime(2026, 7, 24, 12, 30),
+    )
+
+    with zipfile.ZipFile(io.BytesIO(bundle_data)) as archive:
+        assert set(archive.namelist()) == {
+            BACKUP_BUNDLE_DATABASE_NAME,
+            BACKUP_BUNDLE_CHECKSUM_NAME,
+            BACKUP_BUNDLE_MANIFEST_NAME,
+        }
+        database_data = archive.read(BACKUP_BUNDLE_DATABASE_NAME)
+        checksum = archive.read(
+            BACKUP_BUNDLE_CHECKSUM_NAME
+        ).decode("ascii").strip()
+        manifest = json.loads(
+            archive.read(BACKUP_BUNDLE_MANIFEST_NAME)
+        )
+
+    assert checksum == hashlib.sha256(database_data).hexdigest()
+    assert manifest["schema_version"] == 1
+    assert manifest["database_file"] == BACKUP_BUNDLE_DATABASE_NAME
+    assert manifest["database_sha256"] == checksum
+    assert manifest["database_size"] == len(database_data)
+    assert manifest["company_count"] == 1
+    assert manifest["created_at"] == "2026-07-24T12:30:00"
 
 
 def test_invalid_backup_is_rejected():

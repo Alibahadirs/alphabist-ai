@@ -1,12 +1,16 @@
 import hashlib
+import io
+import json
 import os
 import sqlite3
 import tempfile
+import zipfile
 from contextlib import closing
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from app.core.settings import settings
 from app.database import repository
 
 
@@ -17,6 +21,10 @@ REQUIRED_TABLES = {
     "portfolio_positions",
     "company_data_audit",
 }
+BACKUP_BUNDLE_SCHEMA_VERSION = 1
+BACKUP_BUNDLE_DATABASE_NAME = "alphabist.db"
+BACKUP_BUNDLE_CHECKSUM_NAME = "alphabist.db.sha256"
+BACKUP_BUNDLE_MANIFEST_NAME = "manifest.json"
 
 
 @dataclass(frozen=True)
@@ -65,6 +73,36 @@ class BackupSummary:
                 self.audit_count,
             )
         )
+
+
+@dataclass(frozen=True)
+class BackupBundleManifest:
+    schema_version: int
+    app_version: str
+    created_at: str
+    database_file: str
+    database_sha256: str
+    database_size: int
+    company_count: int
+    watchlist_count: int
+    portfolio_position_count: int
+    score_history_count: int
+    audit_count: int
+
+    def to_dict(self) -> dict[str, int | str]:
+        return {
+            "schema_version": self.schema_version,
+            "app_version": self.app_version,
+            "created_at": self.created_at,
+            "database_file": self.database_file,
+            "database_sha256": self.database_sha256,
+            "database_size": self.database_size,
+            "company_count": self.company_count,
+            "watchlist_count": self.watchlist_count,
+            "portfolio_position_count": self.portfolio_position_count,
+            "score_history_count": self.score_history_count,
+            "audit_count": self.audit_count,
+        }
 
 
 @dataclass(frozen=True)
@@ -196,6 +234,56 @@ def create_database_backup(database_path: Path | None = None) -> bytes:
         return temporary_path.read_bytes()
     finally:
         temporary_path.unlink(missing_ok=True)
+
+
+def create_backup_bundle(
+    database_path: Path | None = None,
+    *,
+    created_at: datetime | None = None,
+) -> bytes:
+    database_data = create_database_backup(database_path)
+    validation = validate_database_backup(database_data)
+    if not validation.valid:
+        raise RuntimeError(validation.message)
+
+    summary = summarize_database_backup(database_data)
+    checksum = _sha256(database_data)
+    manifest = BackupBundleManifest(
+        schema_version=BACKUP_BUNDLE_SCHEMA_VERSION,
+        app_version=settings.app_version,
+        created_at=(created_at or datetime.now().astimezone()).isoformat(),
+        database_file=BACKUP_BUNDLE_DATABASE_NAME,
+        database_sha256=checksum,
+        database_size=len(database_data),
+        company_count=summary.company_count,
+        watchlist_count=summary.watchlist_count,
+        portfolio_position_count=summary.portfolio_position_count,
+        score_history_count=summary.score_history_count,
+        audit_count=summary.audit_count,
+    )
+
+    bundle = io.BytesIO()
+    with zipfile.ZipFile(
+        bundle,
+        mode="w",
+        compression=zipfile.ZIP_DEFLATED,
+    ) as archive:
+        archive.writestr(BACKUP_BUNDLE_DATABASE_NAME, database_data)
+        archive.writestr(
+            BACKUP_BUNDLE_CHECKSUM_NAME,
+            checksum + "\n",
+        )
+        archive.writestr(
+            BACKUP_BUNDLE_MANIFEST_NAME,
+            json.dumps(
+                manifest.to_dict(),
+                ensure_ascii=False,
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+        )
+    return bundle.getvalue()
 
 
 def validate_database_backup(data: bytes) -> BackupValidation:
