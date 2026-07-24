@@ -4,6 +4,7 @@ from app.database import repository
 from app.database.backup import (
     compare_backup_to_database,
     create_database_backup,
+    ensure_daily_backup,
     create_local_backup,
     list_local_backups,
     list_safety_backups,
@@ -163,6 +164,88 @@ def test_checksum_mismatch_marks_local_backup_invalid(
     assert listed[0].valid is False
     assert listed[0].checksum_valid is False
     assert listed[0].checksum_status == "Uyuşmazlık"
+
+
+def test_daily_backup_is_created_only_once_per_day(
+    tmp_path, monkeypatch
+):
+    database_path = tmp_path / "source.db"
+    backup_directory = tmp_path / "backups"
+    _create_database(database_path, monkeypatch, "DAILY")
+    morning = datetime(2026, 7, 24, 9, 0)
+
+    first = ensure_daily_backup(
+        database_path,
+        backup_directory,
+        now=morning,
+    )
+    second = ensure_daily_backup(
+        database_path,
+        backup_directory,
+        now=morning + timedelta(hours=5),
+    )
+
+    assert first.created is True
+    assert second.created is False
+    assert first.backup.path == second.backup.path
+    assert second.backup.checksum_valid is True
+    assert len(list(backup_directory.glob("alphabist-auto-*.db"))) == 1
+
+
+def test_invalid_daily_backup_is_replaced(tmp_path, monkeypatch):
+    database_path = tmp_path / "source.db"
+    backup_directory = tmp_path / "backups"
+    _create_database(database_path, monkeypatch, "REPLACE")
+    morning = datetime(2026, 7, 24, 9, 0)
+    first = ensure_daily_backup(
+        database_path,
+        backup_directory,
+        now=morning,
+    )
+    first.backup.path.with_suffix(".db.sha256").write_text(
+        "0" * 64,
+        encoding="ascii",
+    )
+
+    replacement = ensure_daily_backup(
+        database_path,
+        backup_directory,
+        now=morning + timedelta(hours=1),
+    )
+
+    assert replacement.created is True
+    assert replacement.backup.path != first.backup.path
+    assert replacement.backup.valid is True
+
+
+def test_automatic_backup_retention_keeps_newest_days(
+    tmp_path, monkeypatch
+):
+    database_path = tmp_path / "source.db"
+    backup_directory = tmp_path / "backups"
+    _create_database(database_path, monkeypatch, "AUTO")
+    start = datetime(2026, 7, 20, 8, 0)
+
+    for offset in range(4):
+        ensure_daily_backup(
+            database_path,
+            backup_directory,
+            keep_count=2,
+            now=start + timedelta(days=offset),
+        )
+
+    backups = [
+        item
+        for item in list_local_backups(
+            database_path,
+            backup_directory,
+        )
+        if item.backup_type == "Otomatik günlük"
+    ]
+
+    assert len(backups) == 2
+    assert "20260723" in backups[0].file_name
+    assert "20260722" in backups[1].file_name
 
 
 def test_backup_comparison_reports_incoming_record_deltas(

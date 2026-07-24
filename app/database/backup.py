@@ -99,6 +99,13 @@ class BackupComparison:
         return self.incoming.audit_count - self.current.audit_count
 
 
+@dataclass(frozen=True)
+class AutomaticBackupResult:
+    created: bool
+    backup: SafetyBackupInfo
+    reason: str
+
+
 def _temporary_database_path() -> Path:
     file_descriptor, name = tempfile.mkstemp(suffix=".db")
     os.close(file_descriptor)
@@ -331,6 +338,10 @@ def list_local_backups(
             for path in directory.glob("alphabist-manual-*.db")
         ),
         *(
+            _backup_info(path, backup_type="Otomatik günlük")
+            for path in directory.glob("alphabist-auto-*.db")
+        ),
+        *(
             _backup_info(path, backup_type="Geri yükleme öncesi")
             for path in directory.glob("alphabist-before-restore-*.db")
         ),
@@ -360,6 +371,33 @@ def prune_manual_backups(
     )
     deleted = []
     for path in manual_paths[keep_count:]:
+        path.unlink()
+        _checksum_path(path).unlink(missing_ok=True)
+        deleted.append(path)
+    return tuple(deleted)
+
+
+def prune_automatic_backups(
+    database_path: Path | None = None,
+    backup_directory: Path | None = None,
+    *,
+    keep_count: int = 14,
+) -> tuple[Path, ...]:
+    if keep_count < 1:
+        raise ValueError("En az bir otomatik yedek saklanmalıdır.")
+
+    target_path = _database_path(database_path)
+    directory = _backup_directory(target_path, backup_directory)
+    if not directory.exists():
+        return ()
+
+    automatic_paths = sorted(
+        directory.glob("alphabist-auto-*.db"),
+        key=lambda path: path.name,
+        reverse=True,
+    )
+    deleted = []
+    for path in automatic_paths[keep_count:]:
         path.unlink()
         _checksum_path(path).unlink(missing_ok=True)
         deleted.append(path)
@@ -404,6 +442,92 @@ def create_local_backup(
         keep_count=keep_count,
     )
     return _backup_info(final_path, backup_type="Manuel")
+
+
+def create_automatic_backup(
+    database_path: Path | None = None,
+    backup_directory: Path | None = None,
+    *,
+    keep_count: int = 14,
+    created_at: datetime | None = None,
+) -> SafetyBackupInfo:
+    target_path = _database_path(database_path)
+    directory = _backup_directory(target_path, backup_directory)
+    directory.mkdir(parents=True, exist_ok=True)
+
+    data = create_database_backup(target_path)
+    validation = validate_database_backup(data)
+    if not validation.valid:
+        raise RuntimeError(validation.message)
+
+    timestamp = (created_at or datetime.now()).strftime(
+        "%Y%m%d-%H%M%S-%f"
+    )
+    final_path = directory / f"alphabist-auto-{timestamp}.db"
+    temporary_path = directory / f".{final_path.name}.tmp"
+    try:
+        temporary_path.write_bytes(data)
+        temporary_path.replace(final_path)
+        _write_checksum_manifest(final_path, data)
+    except Exception:
+        final_path.unlink(missing_ok=True)
+        _checksum_path(final_path).unlink(missing_ok=True)
+        raise
+    finally:
+        temporary_path.unlink(missing_ok=True)
+
+    prune_automatic_backups(
+        target_path,
+        directory,
+        keep_count=keep_count,
+    )
+    return _backup_info(
+        final_path,
+        backup_type="Otomatik günlük",
+    )
+
+
+def ensure_daily_backup(
+    database_path: Path | None = None,
+    backup_directory: Path | None = None,
+    *,
+    keep_count: int = 14,
+    now: datetime | None = None,
+) -> AutomaticBackupResult:
+    target_path = _database_path(database_path)
+    directory = _backup_directory(target_path, backup_directory)
+    current_time = now or datetime.now()
+    daily_prefix = f"alphabist-auto-{current_time:%Y%m%d}-"
+
+    if directory.exists():
+        candidates = sorted(
+            directory.glob(f"{daily_prefix}*.db"),
+            key=lambda path: path.name,
+            reverse=True,
+        )
+        for path in candidates:
+            backup = _backup_info(
+                path,
+                backup_type="Otomatik günlük",
+            )
+            if backup.valid and backup.checksum_valid is True:
+                return AutomaticBackupResult(
+                    created=False,
+                    backup=backup,
+                    reason="Bugünün doğrulanmış otomatik yedeği mevcut.",
+                )
+
+    backup = create_automatic_backup(
+        target_path,
+        directory,
+        keep_count=keep_count,
+        created_at=current_time,
+    )
+    return AutomaticBackupResult(
+        created=True,
+        backup=backup,
+        reason="Günün doğrulanmış otomatik yedeği oluşturuldu.",
+    )
 
 
 def restore_database_backup(
