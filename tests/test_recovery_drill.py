@@ -1,13 +1,17 @@
+import csv
+import io
 import sqlite3
 from datetime import datetime
 
 from app.database import repository
 from app.database.backup import create_database_backup
 from app.database.recovery_drill import (
+    RecoveryDrillResult,
     list_recovery_drills,
     record_recovery_drill,
     run_recovery_drill,
 )
+from app.database.recovery_export import build_recovery_drill_csv
 from app.scoring.models import FinancialMetrics
 
 
@@ -110,3 +114,54 @@ def test_recovery_drill_history_detects_tampering(
         )
 
     assert list_recovery_drills(history_path)[0].integrity_valid is False
+
+
+def test_recovery_drill_history_can_filter_failed_results(tmp_path):
+    history_path = tmp_path / "history.db"
+    for success in (True, False):
+        record_recovery_drill(
+            history_path,
+            RecoveryDrillResult(
+                success=success,
+                source_name=f"{success}.db",
+                source_sha256="e" * 64,
+                message="Sonuç",
+                tested_at=f"2026-07-24T1{int(success)}:00:00",
+            ),
+        )
+
+    failed = list_recovery_drills(history_path, success=False)
+
+    assert len(failed) == 1
+    assert failed[0].success is False
+
+
+def test_recovery_drill_csv_is_excel_compatible(
+    tmp_path, monkeypatch
+):
+    source_path = tmp_path / "source.db"
+    history_path = tmp_path / "history.db"
+    _create_database(source_path, monkeypatch)
+    result = run_recovery_drill(
+        create_database_backup(source_path),
+        source_name="daily.db",
+    )
+    record_recovery_drill(history_path, result)
+
+    csv_data = build_recovery_drill_csv(
+        list_recovery_drills(history_path)
+    )
+    rows = list(
+        csv.reader(io.StringIO(csv_data.decode("utf-8-sig")))
+    )
+
+    assert csv_data.startswith(b"\xef\xbb\xbf")
+    assert rows[0][0:4] == [
+        "Kayıt ID",
+        "Tatbikat zamanı",
+        "Sonuç",
+        "Kaynak dosya",
+    ]
+    assert rows[1][2] == "Başarılı"
+    assert rows[1][3] == "daily.db"
+    assert rows[1][8] == "Doğrulandı"

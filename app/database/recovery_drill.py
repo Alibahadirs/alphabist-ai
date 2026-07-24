@@ -157,6 +157,7 @@ def list_recovery_drills(
     database_path: Path,
     *,
     limit: int = 100,
+    success: bool | None = None,
 ) -> list[RecoveryDrillRecord]:
     if limit < 1:
         raise ValueError("Kurtarma tatbikatı geçmişi limiti pozitif olmalıdır.")
@@ -165,13 +166,17 @@ def list_recovery_drills(
     with sqlite3.connect(database_path) as connection:
         connection.row_factory = sqlite3.Row
         ensure_recovery_drill_table(connection)
-        rows = connection.execute(
-            """SELECT id, source_name, source_sha256, success, message,
-            company_count, total_records, tested_at, fingerprint
-            FROM recovery_drill_history
-            ORDER BY id DESC LIMIT ?""",
-            (limit,),
-        ).fetchall()
+        query = """SELECT id, source_name, source_sha256, success, message,
+        company_count, total_records, tested_at, fingerprint
+        FROM recovery_drill_history"""
+        parameters: tuple[object, ...]
+        if success is None:
+            parameters = (limit,)
+        else:
+            query += " WHERE success=?"
+            parameters = (int(success), limit)
+        query += " ORDER BY id DESC LIMIT ?"
+        rows = connection.execute(query, parameters).fetchall()
     return [
         RecoveryDrillRecord(
             **{
