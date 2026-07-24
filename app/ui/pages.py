@@ -83,6 +83,13 @@ from app.database.restore_history import (
     RestoreAuditRecord,
     list_restore_audits,
 )
+from app.database.recovery_drill import (
+    RecoveryDrillRecord,
+    list_recovery_drills,
+    record_recovery_drill,
+    run_recovery_drill,
+)
+from app.database.recovery_export import build_recovery_drill_csv
 from app.data_quality.service import FIELD_LABELS, build_data_quality_summary
 from app.data_quality.models import (
     RemediationTaskState,
@@ -5412,6 +5419,28 @@ def _restore_audit_rows(
     ]
 
 
+def _recovery_drill_rows(
+    records: list[RecoveryDrillRecord],
+) -> list[dict[str, int | str]]:
+    return [
+        {
+            "Tatbikat zamanı": record.tested_at,
+            "Sonuç": "Başarılı" if record.success else "Başarısız",
+            "Kaynak": record.source_name,
+            "Şirket": record.company_count,
+            "Toplam kayıt": record.total_records,
+            "Bütünlük": (
+                "Doğrulandı"
+                if record.integrity_valid
+                else "Geçersiz"
+            ),
+            "SHA-256": record.source_sha256[:12] + "...",
+            "Açıklama": record.message,
+        }
+        for record in records
+    ]
+
+
 def render_data_backup() -> None:
     st.title("Veri yedekleme")
     st.caption(
@@ -5733,6 +5762,137 @@ def render_data_backup() -> None:
                 st.error(
                     "Seçilen yerel yedek bütünlük kontrolünü geçemedi."
                 )
+
+    with st.container(border=True):
+        st.subheader("Kurtarma tatbikatı")
+        st.caption(
+            "Seçilen yedeği üretim veritabanına dokunmadan ayrı bir "
+            "geçici SQLite dosyasına geri yükler ve kayıtları doğrular."
+        )
+        valid_local_backups = [
+            item for item in local_backups if item.valid
+        ]
+        if not valid_local_backups:
+            st.info(
+                "Tatbikat için önce doğrulanmış bir yerel yedek oluşturun."
+            )
+        else:
+            drill_backup = st.selectbox(
+                "Tatbikatta kullanılacak yedek",
+                valid_local_backups,
+                format_func=lambda item: item.file_name,
+                key="recovery_drill_backup",
+            )
+            drill_submitted = st.button(
+                "Kurtarma tatbikatını çalıştır",
+                icon=":material/health_and_safety:",
+                type="primary",
+                key="run_recovery_drill",
+            )
+            if drill_submitted:
+                with st.spinner(
+                    "Yedek izole veritabanına geri yükleniyor..."
+                ):
+                    drill_result = run_recovery_drill(
+                        drill_backup.path.read_bytes(),
+                        source_name=drill_backup.file_name,
+                    )
+                    record_recovery_drill(
+                        settings.database_path,
+                        drill_result,
+                    )
+                if drill_result.success:
+                    st.success(drill_result.message)
+                else:
+                    st.error(drill_result.message)
+
+        drill_status = st.selectbox(
+            "Tatbikat sonucu filtresi",
+            ["Tümü", "Başarılı", "Başarısız"],
+            key="recovery_drill_status_filter",
+        )
+        all_drill_records = list_recovery_drills(
+            settings.database_path,
+            limit=100,
+        )
+        drill_records = [
+            record
+            for record in all_drill_records
+            if (
+                drill_status == "Tümü"
+                or (drill_status == "Başarılı" and record.success)
+                or (drill_status == "Başarısız" and not record.success)
+            )
+        ]
+        drill_success_count = sum(
+            record.success for record in all_drill_records
+        )
+        drill_failure_count = (
+            len(all_drill_records) - drill_success_count
+        )
+        drill_integrity_issues = sum(
+            not record.integrity_valid
+            for record in all_drill_records
+        )
+        with st.container(horizontal=True):
+            st.metric(
+                "Toplam tatbikat",
+                len(all_drill_records),
+                border=True,
+            )
+            st.metric(
+                "Başarılı",
+                drill_success_count,
+                border=True,
+            )
+            st.metric(
+                "Başarısız",
+                drill_failure_count,
+                border=True,
+            )
+            st.metric(
+                "Kanıt sorunu",
+                drill_integrity_issues,
+                border=True,
+            )
+        if drill_integrity_issues:
+            st.error(
+                "Tatbikat geçmişinde bütünlüğü doğrulanamayan "
+                f"{drill_integrity_issues} kayıt var."
+            )
+        if not drill_records:
+            st.info("Seçilen durumda kurtarma tatbikatı bulunmuyor.")
+        else:
+            st.dataframe(
+                pd.DataFrame(_recovery_drill_rows(drill_records)),
+                hide_index=True,
+                width="stretch",
+                column_config={
+                    "Tatbikat zamanı": st.column_config.DatetimeColumn(
+                        "Tatbikat zamanı",
+                        format="DD.MM.YYYY HH:mm:ss",
+                    ),
+                    "Şirket": st.column_config.NumberColumn(
+                        "Şirket",
+                        format="localized",
+                    ),
+                    "Toplam kayıt": st.column_config.NumberColumn(
+                        "Toplam kayıt",
+                        format="localized",
+                    ),
+                },
+            )
+            st.download_button(
+                "Tatbikat kanıtını indir",
+                data=build_recovery_drill_csv(drill_records),
+                file_name=(
+                    "alphabist-kurtarma-tatbikati-"
+                    f"{date.today():%Y%m%d}.csv"
+                ),
+                mime="text/csv",
+                icon=":material/download:",
+                width="stretch",
+            )
 
     with st.container(border=True):
         st.subheader("Geri yükleme geçmişi")

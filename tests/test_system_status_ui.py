@@ -7,10 +7,12 @@ from app.core.preflight import (
 from app.database.backup import BackupComparison, BackupSummary
 from app.database.health import DatabaseHealth
 from app.database.restore_history import RestoreAuditRecord
+from app.database.recovery_drill import RecoveryDrillRecord
 from app.ui.pages import (
     _backup_comparison_rows,
     _build_system_status_rows,
     _restore_audit_rows,
+    _recovery_drill_rows,
 )
 
 
@@ -121,3 +123,24 @@ def test_restore_audit_rows_show_integrity_and_short_hash():
     assert row["Şirket"] == 6
     assert row["Bütünlük"] == "Geçersiz"
     assert row["SHA-256"] == "aaaaaaaaaaaa..."
+
+
+def test_recovery_drill_rows_show_result_and_short_hash():
+    record = RecoveryDrillRecord(
+        id=1,
+        source_name="daily.db",
+        source_sha256="b" * 64,
+        success=True,
+        message="Doğrulandı.",
+        company_count=6,
+        total_records=24,
+        tested_at="2026-07-24T16:00:00",
+        fingerprint="invalid",
+    )
+
+    row = _recovery_drill_rows([record])[0]
+
+    assert row["Sonuç"] == "Başarılı"
+    assert row["Kaynak"] == "daily.db"
+    assert row["Bütünlük"] == "Geçersiz"
+    assert row["SHA-256"] == "bbbbbbbbbbbb..."
