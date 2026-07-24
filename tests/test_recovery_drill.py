@@ -1,8 +1,13 @@
+import sqlite3
 from datetime import datetime
 
 from app.database import repository
 from app.database.backup import create_database_backup
-from app.database.recovery_drill import run_recovery_drill
+from app.database.recovery_drill import (
+    list_recovery_drills,
+    record_recovery_drill,
+    run_recovery_drill,
+)
 from app.scoring.models import FinancialMetrics
 
 
@@ -66,3 +71,42 @@ def test_recovery_drill_checksum_is_repeatable(
     )
 
     assert first.source_sha256 == second.source_sha256
+
+
+def test_recovery_drill_result_is_persisted_with_integrity(
+    tmp_path, monkeypatch
+):
+    source_path = tmp_path / "source.db"
+    history_path = tmp_path / "history.db"
+    _create_database(source_path, monkeypatch)
+    result = run_recovery_drill(
+        create_database_backup(source_path),
+        source_name="daily.db",
+    )
+
+    saved = record_recovery_drill(history_path, result)
+    records = list_recovery_drills(history_path)
+
+    assert saved.integrity_valid is True
+    assert records == [saved]
+    assert records[0].company_count == 1
+    assert records[0].total_records == 1
+
+
+def test_recovery_drill_history_detects_tampering(
+    tmp_path, monkeypatch
+):
+    source_path = tmp_path / "source.db"
+    history_path = tmp_path / "history.db"
+    _create_database(source_path, monkeypatch)
+    result = run_recovery_drill(
+        create_database_backup(source_path),
+        source_name="daily.db",
+    )
+    record_recovery_drill(history_path, result)
+    with sqlite3.connect(history_path) as connection:
+        connection.execute(
+            "UPDATE recovery_drill_history SET company_count=99"
+        )
+
+    assert list_recovery_drills(history_path)[0].integrity_valid is False
