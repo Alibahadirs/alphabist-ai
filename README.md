@@ -151,6 +151,8 @@ yerel Streamlit uygulaması.
 - Yedek yaşı, doğrulanmış kopya ve kanıt uyuşmazlığı sağlık göstergeleri
 - Veritabanı, sürüm manifesti ve SHA-256 kanıtını birleştiren taşınabilir ZIP yedeği
 - `.db` ve doğrulanmış `.zip` dosyaları için ortak güvenli geri yükleme akışı
+- Başarılı ve başarısız geri yükleme girişimleri için parmak izi korumalı denetim geçmişi
+- Durum filtreli geri yükleme görünümü ve Excel uyumlu CSV kanıt raporu
 - Geri yükleme öncesinde mevcut ve yüklenecek kayıt sayılarını karşılaştırma
 - Windows açık dosya davranışıyla uyumlu işlemsel SQLite geri yükleme
 - Başarısız geri yüklemede güvenlik kopyasından otomatik geri alma
@@ -230,7 +232,9 @@ otomatik yedek oluşturur; aynı gün içindeki yeniden çalıştırmalar yeni d
 izlenir. Bilgisayarlar arasında taşımak için veritabanı, uygulama sürümü,
 kayıt sayıları ve SHA-256 bütünlük kanıtını tek dosyada tutan ZIP paketi
 indirilebilir. Geri yükleme ekranı hem `.db` hem de doğrulanmış `.zip`
-dosyalarını kabul eder.
+dosyalarını kabul eder. Her geri yükleme girişimi kaynak dosya özeti, sonucu,
+güvenlik kopyası ve kayıt sayılarıyla denetim geçmişine yazılır. Bu geçmiş
+duruma göre filtrelenebilir ve CSV kanıt raporu olarak indirilebilir.
 
 ## Yerel veri güvenliği
 

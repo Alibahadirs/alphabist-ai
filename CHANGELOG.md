@@ -1,5 +1,18 @@
 # Değişiklik günlüğü
 
+## 1.22.0 - 2026-07-24
+
+### Geri yükleme denetim geçmişi
+
+- Başarılı ve başarısız geri yükleme girişimleri için bağımsız SQLite denetim tablosu eklendi.
+- Kaynak türü, dosya adı, SHA-256 özeti, kayıt sayıları, sonuç ve güvenlik kopyası bilgileri saklanır hale getirildi.
+- Her denetim kaydına içerik değişikliğini tespit eden tekrar üretilebilir SHA-256 parmak izi eklendi.
+- Geri yükleme başarılı olsa bile denetim kaydı yazılamazsa güvenlik kopyasına otomatik dönüş sağlandı.
+- Geçersiz yedek ve işlem sırasında oluşan hata denemeleri asıl hatayı maskelemeden kaydedilir hale getirildi.
+- Geri yükleme geçmişine başarılı ve başarısız durum filtresi eklendi.
+- Tam hash ve bütünlük durumunu taşıyan Excel uyumlu UTF-8 CSV kanıt raporu eklendi.
+- Veri yedekleme ekranına deneme sayaçları, kanıt sorunu uyarısı, geçmiş tablosu ve CSV indirme işlevi eklendi.
+
 ## 1.21.0 - 2026-07-24
 
 ### Taşınabilir ve doğrulanabilir yedek paketi
