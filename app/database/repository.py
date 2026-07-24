@@ -11,6 +11,7 @@ from app.data_quality.models import (
     RemediationTaskState,
 )
 from app.data_quality.remediation import remediation_event_hash
+from app.database.restore_history import ensure_restore_audit_table
 from app.history.models import ScoreHistoryEntry
 from app.market_data.models import (
     MarketDiagnosticSnapshot,
@@ -353,6 +354,7 @@ def init_db():
             """CREATE INDEX IF NOT EXISTS idx_report_trend_review_symbol
             ON report_trend_review_state(symbol)"""
         )
+        ensure_restore_audit_table(conn)
 
 def upsert_company(m):
     d = m.model_dump(mode="json")
