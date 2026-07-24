@@ -14,6 +14,7 @@ from app.database.backup import (
     create_database_backup,
     ensure_daily_backup,
     create_local_backup,
+    load_backup_payload,
     list_local_backups,
     list_safety_backups,
     prune_manual_backups,
@@ -194,6 +195,56 @@ def test_bundle_with_unexpected_file_is_rejected(tmp_path, monkeypatch):
 
     assert validation.valid is False
     assert "beklenmeyen" in validation.message.lower()
+
+
+def test_database_file_is_loaded_as_validated_payload(
+    tmp_path, monkeypatch
+):
+    database_path = tmp_path / "source.db"
+    _create_database(database_path, monkeypatch, "DATABASE")
+    database_data = create_database_backup(database_path)
+
+    payload = load_backup_payload(database_data, "backup.DB")
+
+    assert payload.source_type == "SQLite veritabanı"
+    assert payload.database_data == database_data
+    assert payload.summary.company_count == 1
+    assert payload.manifest is None
+
+
+def test_zip_file_is_loaded_as_validated_payload(
+    tmp_path, monkeypatch
+):
+    database_path = tmp_path / "source.db"
+    _create_database(database_path, monkeypatch, "PORTABLE")
+
+    payload = load_backup_payload(
+        create_backup_bundle(database_path),
+        "alphabist-backup.ZIP",
+    )
+
+    assert payload.source_type == "Taşınabilir ZIP paketi"
+    assert payload.summary.company_count == 1
+    assert payload.manifest is not None
+    assert payload.manifest.database_file == BACKUP_BUNDLE_DATABASE_NAME
+
+
+def test_unsupported_backup_payload_is_rejected():
+    try:
+        load_backup_payload(b"content", "backup.txt")
+    except ValueError as exc:
+        assert ".db veya .zip" in str(exc)
+    else:
+        raise AssertionError("Desteklenmeyen dosya kabul edilmemeliydi.")
+
+
+def test_invalid_zip_payload_is_rejected():
+    try:
+        load_backup_payload(b"not a zip", "backup.zip")
+    except ValueError as exc:
+        assert "paketi" in str(exc).lower()
+    else:
+        raise AssertionError("Bozuk ZIP paketi kabul edilmemeliydi.")
 
 
 def test_invalid_backup_is_rejected():

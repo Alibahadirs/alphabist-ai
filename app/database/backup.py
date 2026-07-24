@@ -182,6 +182,14 @@ class BackupBundleValidation:
 
 
 @dataclass(frozen=True)
+class ValidatedBackupPayload:
+    source_type: str
+    database_data: bytes
+    summary: BackupSummary
+    manifest: BackupBundleManifest | None = None
+
+
+@dataclass(frozen=True)
 class BackupComparison:
     current: BackupSummary
     incoming: BackupSummary
@@ -475,6 +483,39 @@ def validate_backup_bundle(data: bytes) -> BackupBundleValidation:
         message="Taşınabilir yedek paketi doğrulandı.",
         database_data=database_data,
         manifest=manifest,
+    )
+
+
+def load_backup_payload(
+    data: bytes,
+    file_name: str,
+) -> ValidatedBackupPayload:
+    suffix = Path(file_name).suffix.lower()
+    if suffix == ".db":
+        validation = validate_database_backup(data)
+        if not validation.valid:
+            raise ValueError(validation.message)
+        return ValidatedBackupPayload(
+            source_type="SQLite veritabanı",
+            database_data=data,
+            summary=summarize_database_backup(data),
+        )
+    if suffix == ".zip":
+        validation = validate_backup_bundle(data)
+        if not validation.valid:
+            raise ValueError(validation.message)
+        if validation.manifest is None:
+            raise ValueError("Yedek paketi manifesti bulunamadı.")
+        return ValidatedBackupPayload(
+            source_type="Taşınabilir ZIP paketi",
+            database_data=validation.database_data,
+            summary=summarize_database_backup(
+                validation.database_data
+            ),
+            manifest=validation.manifest,
+        )
+    raise ValueError(
+        "Desteklenmeyen yedek dosyası. .db veya .zip yükleyin."
     )
 
 
