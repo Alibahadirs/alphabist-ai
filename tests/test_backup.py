@@ -19,6 +19,7 @@ from app.database.backup import (
     prune_manual_backups,
     restore_database_backup,
     summarize_database_backup,
+    validate_backup_bundle,
     validate_database_backup,
 )
 from app.scoring.models import FinancialMetrics
@@ -92,6 +93,107 @@ def test_portable_backup_bundle_contains_manifest_and_checksum(
     assert manifest["database_size"] == len(database_data)
     assert manifest["company_count"] == 1
     assert manifest["created_at"] == "2026-07-24T12:30:00"
+
+
+def _rewrite_bundle(
+    bundle_data: bytes,
+    replacements: dict[str, bytes],
+    *,
+    extra_files: dict[str, bytes] | None = None,
+) -> bytes:
+    output = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(bundle_data)) as source:
+        original_files = {
+            name: source.read(name)
+            for name in source.namelist()
+        }
+    original_files.update(replacements)
+    original_files.update(extra_files or {})
+    with zipfile.ZipFile(
+        output,
+        mode="w",
+        compression=zipfile.ZIP_DEFLATED,
+    ) as target:
+        for name, content in original_files.items():
+            target.writestr(name, content)
+    return output.getvalue()
+
+
+def test_portable_backup_bundle_is_fully_validated(
+    tmp_path, monkeypatch
+):
+    database_path = tmp_path / "source.db"
+    _create_database(database_path, monkeypatch, "VALID")
+
+    validation = validate_backup_bundle(
+        create_backup_bundle(database_path)
+    )
+
+    assert validation.valid is True
+    assert validation.manifest is not None
+    assert validation.manifest.company_count == 1
+    assert validation.database_data.startswith(b"SQLite format 3\x00")
+
+
+def test_invalid_zip_is_rejected():
+    validation = validate_backup_bundle(b"not a zip")
+
+    assert validation.valid is False
+    assert "paketi" in validation.message.lower()
+
+
+def test_tampered_bundle_checksum_is_rejected(tmp_path, monkeypatch):
+    database_path = tmp_path / "source.db"
+    _create_database(database_path, monkeypatch, "TAMPER")
+    bundle_data = create_backup_bundle(database_path)
+    tampered = _rewrite_bundle(
+        bundle_data,
+        {BACKUP_BUNDLE_CHECKSUM_NAME: b"0" * 64},
+    )
+
+    validation = validate_backup_bundle(tampered)
+
+    assert validation.valid is False
+    assert "sha-256" in validation.message.lower()
+
+
+def test_manifest_count_mismatch_is_rejected(tmp_path, monkeypatch):
+    database_path = tmp_path / "source.db"
+    _create_database(database_path, monkeypatch, "COUNT")
+    bundle_data = create_backup_bundle(database_path)
+    with zipfile.ZipFile(io.BytesIO(bundle_data)) as archive:
+        manifest = json.loads(
+            archive.read(BACKUP_BUNDLE_MANIFEST_NAME)
+        )
+    manifest["company_count"] = 99
+    tampered = _rewrite_bundle(
+        bundle_data,
+        {
+            BACKUP_BUNDLE_MANIFEST_NAME: json.dumps(
+                manifest
+            ).encode("utf-8")
+        },
+    )
+
+    validation = validate_backup_bundle(tampered)
+
+    assert validation.valid is False
+    assert "kayıt sayıları" in validation.message.lower()
+
+
+def test_bundle_with_unexpected_file_is_rejected(tmp_path, monkeypatch):
+    database_path = tmp_path / "source.db"
+    _create_database(database_path, monkeypatch, "EXTRA")
+    tampered = _rewrite_bundle(
+        create_backup_bundle(database_path),
+        {},
+        extra_files={"../unexpected.txt": b"unsafe"},
+    )
+
+    validation = validate_backup_bundle(tampered)
+
+    assert validation.valid is False
+    assert "beklenmeyen" in validation.message.lower()
 
 
 def test_invalid_backup_is_rejected():

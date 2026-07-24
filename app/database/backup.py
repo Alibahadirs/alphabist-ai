@@ -25,6 +25,12 @@ BACKUP_BUNDLE_SCHEMA_VERSION = 1
 BACKUP_BUNDLE_DATABASE_NAME = "alphabist.db"
 BACKUP_BUNDLE_CHECKSUM_NAME = "alphabist.db.sha256"
 BACKUP_BUNDLE_MANIFEST_NAME = "manifest.json"
+BACKUP_BUNDLE_FILES = {
+    BACKUP_BUNDLE_DATABASE_NAME,
+    BACKUP_BUNDLE_CHECKSUM_NAME,
+    BACKUP_BUNDLE_MANIFEST_NAME,
+}
+MAX_BACKUP_BUNDLE_UNCOMPRESSED_SIZE = 128 * 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -103,6 +109,76 @@ class BackupBundleManifest:
             "score_history_count": self.score_history_count,
             "audit_count": self.audit_count,
         }
+
+    @classmethod
+    def from_dict(
+        cls,
+        data: object,
+    ) -> "BackupBundleManifest":
+        if not isinstance(data, dict):
+            raise ValueError("Paket manifesti bir nesne olmalıdır.")
+        try:
+            manifest = cls(
+                schema_version=int(data["schema_version"]),
+                app_version=str(data["app_version"]),
+                created_at=str(data["created_at"]),
+                database_file=str(data["database_file"]),
+                database_sha256=str(data["database_sha256"]).lower(),
+                database_size=int(data["database_size"]),
+                company_count=int(data["company_count"]),
+                watchlist_count=int(data["watchlist_count"]),
+                portfolio_position_count=int(
+                    data["portfolio_position_count"]
+                ),
+                score_history_count=int(data["score_history_count"]),
+                audit_count=int(data["audit_count"]),
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(
+                "Paket manifestinde eksik veya hatalı alan var."
+            ) from exc
+
+        if manifest.schema_version != BACKUP_BUNDLE_SCHEMA_VERSION:
+            raise ValueError(
+                "Desteklenmeyen yedek paketi şema sürümü."
+            )
+        if not manifest.app_version.strip():
+            raise ValueError("Paket uygulama sürümü boş olamaz.")
+        try:
+            datetime.fromisoformat(manifest.created_at)
+        except ValueError as exc:
+            raise ValueError(
+                "Paket oluşturulma zamanı geçersiz."
+            ) from exc
+        if manifest.database_file != BACKUP_BUNDLE_DATABASE_NAME:
+            raise ValueError("Paket veritabanı dosya adı geçersiz.")
+        if (
+            len(manifest.database_sha256) != 64
+            or any(
+                character not in "0123456789abcdef"
+                for character in manifest.database_sha256
+            )
+        ):
+            raise ValueError("Paket SHA-256 değeri geçersiz.")
+        numeric_values = (
+            manifest.database_size,
+            manifest.company_count,
+            manifest.watchlist_count,
+            manifest.portfolio_position_count,
+            manifest.score_history_count,
+            manifest.audit_count,
+        )
+        if any(value < 0 for value in numeric_values):
+            raise ValueError("Paket sayısal alanları negatif olamaz.")
+        return manifest
+
+
+@dataclass(frozen=True)
+class BackupBundleValidation:
+    valid: bool
+    message: str
+    database_data: bytes = b""
+    manifest: BackupBundleManifest | None = None
 
 
 @dataclass(frozen=True)
@@ -284,6 +360,122 @@ def create_backup_bundle(
             + "\n",
         )
     return bundle.getvalue()
+
+
+def validate_backup_bundle(data: bytes) -> BackupBundleValidation:
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as archive:
+            entries = archive.infolist()
+            names = [entry.filename for entry in entries]
+            if len(names) != len(set(names)):
+                return BackupBundleValidation(
+                    valid=False,
+                    message="Yedek paketinde yinelenen dosya var.",
+                )
+            if set(names) != BACKUP_BUNDLE_FILES:
+                return BackupBundleValidation(
+                    valid=False,
+                    message=(
+                        "Yedek paketi eksik veya beklenmeyen dosya "
+                        "içeriyor."
+                    ),
+                )
+            if any(
+                Path(name).name != name
+                or name.startswith(("/", "\\"))
+                or ".." in Path(name).parts
+                for name in names
+            ):
+                return BackupBundleValidation(
+                    valid=False,
+                    message="Yedek paketinde güvenli olmayan dosya yolu var.",
+                )
+            if any(entry.flag_bits & 0x1 for entry in entries):
+                return BackupBundleValidation(
+                    valid=False,
+                    message="Şifreli yedek paketleri desteklenmiyor.",
+                )
+            if (
+                sum(entry.file_size for entry in entries)
+                > MAX_BACKUP_BUNDLE_UNCOMPRESSED_SIZE
+            ):
+                return BackupBundleValidation(
+                    valid=False,
+                    message="Yedek paketinin açılmış boyutu sınırı aşıyor.",
+                )
+
+            database_data = archive.read(BACKUP_BUNDLE_DATABASE_NAME)
+            checksum_text = archive.read(
+                BACKUP_BUNDLE_CHECKSUM_NAME
+            ).decode("ascii").strip().lower()
+            manifest_data = json.loads(
+                archive.read(BACKUP_BUNDLE_MANIFEST_NAME).decode("utf-8")
+            )
+    except (
+        OSError,
+        UnicodeError,
+        json.JSONDecodeError,
+        zipfile.BadZipFile,
+        zipfile.LargeZipFile,
+    ):
+        return BackupBundleValidation(
+            valid=False,
+            message="Dosya geçerli bir AlphaBIST yedek paketi değil.",
+        )
+
+    try:
+        manifest = BackupBundleManifest.from_dict(manifest_data)
+    except ValueError as exc:
+        return BackupBundleValidation(valid=False, message=str(exc))
+
+    actual_checksum = _sha256(database_data)
+    if (
+        len(checksum_text) != 64
+        or checksum_text != actual_checksum
+        or manifest.database_sha256 != actual_checksum
+    ):
+        return BackupBundleValidation(
+            valid=False,
+            message="Yedek paketi SHA-256 bütünlük kontrolü başarısız.",
+        )
+    if manifest.database_size != len(database_data):
+        return BackupBundleValidation(
+            valid=False,
+            message="Yedek paketi veritabanı boyutu manifestle uyuşmuyor.",
+        )
+
+    database_validation = validate_database_backup(database_data)
+    if not database_validation.valid:
+        return BackupBundleValidation(
+            valid=False,
+            message=database_validation.message,
+        )
+    summary = summarize_database_backup(database_data)
+    manifest_counts = (
+        manifest.company_count,
+        manifest.watchlist_count,
+        manifest.portfolio_position_count,
+        manifest.score_history_count,
+        manifest.audit_count,
+    )
+    actual_counts = (
+        summary.company_count,
+        summary.watchlist_count,
+        summary.portfolio_position_count,
+        summary.score_history_count,
+        summary.audit_count,
+    )
+    if manifest_counts != actual_counts:
+        return BackupBundleValidation(
+            valid=False,
+            message="Yedek paketi kayıt sayıları manifestle uyuşmuyor.",
+        )
+    return BackupBundleValidation(
+        valid=True,
+        message="Taşınabilir yedek paketi doğrulandı.",
+        database_data=database_data,
+        manifest=manifest,
+    )
 
 
 def validate_database_backup(data: bytes) -> BackupValidation:
