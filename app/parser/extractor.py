@@ -168,7 +168,13 @@ def parse_turkish_number(raw_value: str) -> float:
 
 def _fold(value: str) -> str:
     normalized = unicodedata.normalize("NFKD", value)
-    return "".join(char for char in normalized if not unicodedata.combining(char)).casefold()
+    return (
+        "".join(
+            char for char in normalized if not unicodedata.combining(char)
+        )
+        .casefold()
+        .replace("ı", "i")
+    )
 
 
 def detect_monetary_scale(text: str) -> tuple[float, str, bool]:
@@ -470,6 +476,15 @@ def extract_financial_values(
         folded_line = _fold(clean_line)
         for fields, labels in field_labels.items():
             if any(field in extracted for field in fields):
+                continue
+
+            if fields == ("current_assets",) and (
+                "diger donen varliklar" in folded_line
+            ):
+                continue
+            if fields == ("current_liabilities",) and (
+                "diger kisa vadeli yukumlulukler" in folded_line
+            ):
                 continue
 
             for label in labels:

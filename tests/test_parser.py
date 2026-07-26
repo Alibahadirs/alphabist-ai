@@ -130,6 +130,28 @@ def test_extract_financial_values_from_statement_text():
     assert "operating_cash_flow" in fields
 
 
+def test_extract_financial_values_prefers_total_rows_with_uppercase_turkish_i():
+    text = """
+    DÖNEN VARLIKLAR
+    Diğer Dönen Varlıklar 2.140.000 2.090.802
+    TOPLAM DÖNEN VARLIKLAR 15.396.109.681 19.295.438.577
+    KISA VADELİ YÜKÜMLÜLÜKLER
+    Diğer Kısa Vadeli Yükümlülükler 3.152.311 4.030.602
+    TOPLAM KISA VADELİ YÜKÜMLÜLÜKLER 5.954.554.482 8.370.461.501
+    TOPLAM VARLIKLAR 16.107.037.620 20.032.125.974
+    """
+
+    draft, extracted = extract_financial_values(text)
+
+    assert draft.current_assets == 15_396_109_681
+    assert draft.current_liabilities == 5_954_554_482
+    assert draft.total_assets == 16_107_037_620
+    assert draft.previous_total_assets == 20_032_125_974
+    assert "current_assets" in extracted
+    assert "current_liabilities" in extracted
+    assert "total_assets" in extracted
+
+
 def test_note_numbers_and_empty_current_period_are_not_financial_values():
     text = """
     Konsolide Özkaynaklar Değişim Tabloları 4

@@ -1,5 +1,16 @@
 # Değişiklik günlüğü
 
+## 1.23.2 - 2026-07-26
+
+### Gerçek KAP raporu doğrulaması
+
+- Türkçe finansal tablo satırlarında büyük `I`, `İ` ve küçük `ı` harfleri ortak
+  biçimde eşleştirilir hale getirildi.
+- `Diğer Dönen Varlıklar` ve `Diğer Kısa Vadeli Yükümlülükler` satırlarının
+  yanlışlıkla toplam alanlara yazılması engellendi.
+- A1CAP 2026 ilk çeyrek KAP raporuyla toplam varlık, dönen varlık ve kısa vadeli
+  yükümlülük çıkarımı uçtan uca doğrulandı.
+
 ## 1.23.1 - 2026-07-26
 
 ### Piyasa görünümü ve grafik dayanıklılığı
