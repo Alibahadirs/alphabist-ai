@@ -988,6 +988,11 @@ def render_dashboard() -> None:
         if entry.methodology_version
         == settings.scoring_methodology_version
     ]
+    score_chart_data = (
+        [entry.total_score for entry in comparable_score_history]
+        if len(comparable_score_history) >= 2
+        else None
+    )
     snapshot_comparison = None
     previous_comparable_audit = select_previous_comparable_audit(
         audit_history
@@ -1012,9 +1017,7 @@ def render_dashboard() -> None:
             f"{score.total:.1f}/100",
             f"{score_delta:+.1f}" if score_delta is not None else None,
             border=True,
-            chart_data=[
-                entry.total_score for entry in comparable_score_history
-            ] or None,
+            chart_data=score_chart_data,
             chart_type="line",
         )
         st.metric("Not", score.grade, border=True)
@@ -1635,12 +1638,18 @@ def render_dashboard() -> None:
                     for entry in comparable_score_history
                 ]
             )
-            st.line_chart(
-                history_frame,
-                x="Tarih",
-                y="Alpha Score",
-                y_label="Puan",
-            )
+            if len(comparable_score_history) >= 2:
+                st.line_chart(
+                    history_frame,
+                    x="Tarih",
+                    y="Alpha Score",
+                    y_label="Puan",
+                )
+            else:
+                st.info(
+                    "Geçmiş grafiği için en az iki karşılaştırılabilir "
+                    "Alpha Score kaydı gerekir."
+                )
             st.caption(
                 f"{settings.scoring_methodology_version} metodolojisine ait "
                 f"son {len(comparable_score_history)} kayıt gösteriliyor."
@@ -1839,7 +1848,34 @@ def render_dashboard() -> None:
                     },
                 )
     except Exception as exc:
-        st.warning(f"Piyasa verisi alınamadı: {exc}")
+        try:
+            quote = _load_quote(symbol)
+        except Exception:
+            st.warning(f"Piyasa verisi alınamadı: {exc}")
+        else:
+            quote_date = _quote_date(quote)
+            change_percent = quote.get("change_percent")
+            st.metric(
+                "Son fiyat",
+                f"{float(quote['last']):,.2f} TRY",
+                (
+                    f"{float(change_percent):.2f}%"
+                    if change_percent is not None
+                    else None
+                ),
+                border=True,
+            )
+            st.caption(
+                f"Kaynak: {quote.get('source') or 'Bilinmiyor'} | "
+                f"{_market_data_disclosure(quote)} | "
+                "Fiyat tarihi: "
+                f"{quote_date.strftime('%d.%m.%Y') if quote_date else '-'}"
+            )
+            st.warning(
+                "Güncel fiyat alındı ancak tarihsel grafik verisi "
+                f"alınamadı: {exc} Teknik göstergeler ve birleşik AI "
+                "puanı, tarihsel veri doğrulanana kadar üretilmez."
+            )
 
 
 def _render_quality_correction_form() -> None:

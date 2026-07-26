@@ -1,5 +1,16 @@
 # Değişiklik günlüğü
 
+## 1.23.1 - 2026-07-26
+
+### Piyasa görünümü ve grafik dayanıklılığı
+
+- Tek Alpha Score kaydında boş ölçekli grafik üretimi engellendi; grafik için
+  gereken en az iki karşılaştırılabilir kayıt kullanıcıya açıklanır hale getirildi.
+- Tarihsel fiyat sağlayıcısı kullanılamadığında yedek kaynaktan alınan son fiyatın
+  görünür kalması sağlandı.
+- Tarihsel veri doğrulanamadığında teknik göstergeler ve birleşik AI puanının
+  üretilmediği açık ve güvenli bir durum mesajıyla gösterilir hale getirildi.
+
 ## 1.23.0 - 2026-07-24
 
 ### İzole kurtarma tatbikatı
