@@ -7,6 +7,7 @@ from app.daily_scan.analysis import assess_symbol
 from app.daily_scan.models import DailyScanResult
 from app.daily_scan.reporting import build_csv, build_html
 from app.daily_scan.runner import _config
+from app.daily_scan import provider
 
 
 def _history() -> pd.DataFrame:
@@ -47,3 +48,17 @@ def test_cloud_config_uses_environment(monkeypatch):
         "sender": "sender@example.com",
         "recipient": "recipient@example.com",
     }
+
+
+def test_history_loader_ignores_json_notice_lines(monkeypatch):
+    class Result:
+        returncode = 0
+        stdout = '"provider notice"\n{"symbol":"TEST","ok":false,"error":"yok"}\n'
+        stderr = ""
+
+    monkeypatch.setattr(provider, "_global_borsa_api_path", lambda: "module")
+    monkeypatch.setattr(provider.shutil, "which", lambda name: name)
+    monkeypatch.setattr(provider.subprocess, "run", lambda *args, **kwargs: Result())
+    histories, failures = provider.load_histories(["TEST"])
+    assert histories == {}
+    assert failures == {"TEST": "yok"}

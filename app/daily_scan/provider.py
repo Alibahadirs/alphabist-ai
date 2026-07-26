@@ -106,6 +106,8 @@ def load_histories(
             payload = json.loads(line)
         except json.JSONDecodeError:
             continue
+        if not isinstance(payload, dict):
+            continue
         symbol = str(payload.get("symbol") or "").upper()
         if not payload.get("ok"):
             failures[symbol] = str(payload.get("error") or "Bilinmeyen veri hatası")
