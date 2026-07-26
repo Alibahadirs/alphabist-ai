@@ -223,6 +223,9 @@ kullanır ve günlük değişim yüzdesini son iki kapanıştan yeniden hesaplar
 
 Uygulama varsayılan olarak `http://localhost:8501` adresinde açılır.
 
+Günlük kullanım için sade anlatımlı [AlphaBIST AI Kullanım Rehberi](KULLANIM_REHBERI.md)
+dosyasını izleyebilirsiniz.
+
 Uygulama içindeki **Veri yedekleme** ekranı; Python ve paket hazırlığını,
 SQLite bütünlüğünü, kayıt sayısını, güvenlik kopyalarını ve geçerli yedek
 üretilebildiğini birlikte gösterir. Aynı ekrandan son 5, 10 veya 20 manuel
