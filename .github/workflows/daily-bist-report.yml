@@ -40,4 +40,4 @@ jobs:
           pip install -r requirements.txt
           npm install -g borsa-api@1.2.0
       - name: Tüm BIST hisselerini tara ve e-posta gönder
-        run: python -m app.daily_scan.runner
+        run: python -m app.daily_scan.runner --force
