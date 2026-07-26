@@ -24,14 +24,14 @@ jobs:
       ALPHABIST_GMAIL_APP_PASSWORD: ${{ secrets.ALPHABIST_GMAIL_APP_PASSWORD }}
     steps:
       - name: Kaynak kodu al
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Python kur
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
       - name: Node.js kur
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: "22"
       - name: Bağımlılıkları kur
