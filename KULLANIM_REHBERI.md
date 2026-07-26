@@ -89,3 +89,17 @@ mesajını not edin. Uygulama adresi `http://localhost:8501` şeklindedir.
 AlphaBIST AI yatırım tavsiyesi üretmez. Uygulama, kullanıcı tarafından
 doğrulanan finansal verileri düzenleyen ve karar desteği sunan yerel bir analiz
 aracıdır.
+
+## 9. Günlük e-posta raporu
+
+1. Google hesabınızda iki adımlı doğrulamayı açıp 16 karakterlik bir uygulama
+   parolası oluşturun. Normal Gmail parolanızı kullanmayın.
+2. Proje klasöründe `.\.venv\Scripts\python.exe configure_daily_report.py`
+   komutunu çalıştırın. Uygulama parolasını açılan siyah ekrana girin.
+3. Ardından `powershell -ExecutionPolicy Bypass -File
+   .\install_daily_report_task.ps1` komutunu çalıştırın.
+4. Windows görevi hafta içi 19:00'da raporu üretir ve belirlediğiniz adrese yollar.
+
+Bilgisayar kapalıyken yerel program çalışamaz. Görev, bilgisayar daha sonra
+açıldığında ilk fırsatta çalışacak şekilde ayarlanır. Kesintisiz ve bilgisayardan
+bağımsız gönderim için ileride bulut sunucusuna taşıma yapılabilir.

@@ -258,6 +258,25 @@ otomatik oluşturur.
 python -m pytest -q
 ```
 
+## Günlük BIST teknik raporu
+
+Uygulama, KAP'taki BIST şirket listesini hafta içi her gün tarayıp destek,
+direnç, RSI, hareketli ortalama ve risk/kazanç ölçülerinden teknik bir izleme
+raporu oluşturabilir. Rapor bir HTML özet ve ayrıntılı CSV eki olarak Gmail ile
+gönderilir. Bu çıktı yatırım tavsiyesi değildir.
+
+İlk kullanımda Google hesabında iki adımlı doğrulamayı açın ve bir **uygulama
+parolası** üretin. Ardından proje klasöründe sırayla şunları çalıştırın:
+
+```powershell
+.\.venv\Scripts\python.exe configure_daily_report.py
+powershell -ExecutionPolicy Bypass -File .\install_daily_report_task.ps1
+```
+
+Parola projeye veya GitHub'a yazılmaz; Windows kimlik kasasında saklanır. Görev
+hafta içi 19:00'da çalışır. Bilgisayar o anda kapalıysa e-posta gönderilemez;
+Windows açıldığında görev ilk fırsatta çalışır.
+
 ## Kullanım akışı
 
 1. **Şirket ekle veya güncelle** ekranını açın.

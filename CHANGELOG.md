@@ -1,5 +1,16 @@
 # Değişiklik günlüğü
 
+## 1.24.0 - 2026-07-26
+
+### Günlük BIST teknik tarama ve e-posta raporu
+
+- KAP'taki güncel BIST şirket kodlarını alan günlük tarama altyapısı eklendi.
+- Destek, direnç, RSI, EMA20/EMA50, hacim ve risk/kazanç temelli teknik izleme
+  sınıflandırması eklendi.
+- HTML özet ve Excel uyumlu CSV eki üreten rapor ile Gmail gönderimi eklendi.
+- Gmail uygulama parolası kod dışında, Windows güvenli kimlik kasasında tutuldu.
+- Hafta içi 19:00 için Windows görev kurulum betiği ve açılışta telafi ayarı eklendi.
+
 ## 1.23.2 - 2026-07-26
 
 ### Gerçek KAP raporu doğrulaması
