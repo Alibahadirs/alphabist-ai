@@ -12,6 +12,8 @@ $Action = New-ScheduledTaskAction `
     -WorkingDirectory $ProjectDir
 $Trigger = New-ScheduledTaskTrigger -Weekly -WeeksInterval 1 -DaysOfWeek Monday,Tuesday,Wednesday,Thursday,Friday -At 7:00PM
 $Settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -WakeToRun -ExecutionTimeLimit (New-TimeSpan -Hours 2)
-$Principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
-Register-ScheduledTask -TaskName "AlphaBIST AI Günlük Rapor" -Action $Action -Trigger $Trigger -Settings $Settings -Principal $Principal -Force | Out-Null
+$WindowsUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+$Principal = New-ScheduledTaskPrincipal -UserId $WindowsUser -LogonType Interactive -RunLevel Limited
+$TaskName = "AlphaBIST AI Daily Report"
+Register-ScheduledTask -TaskName $TaskName -Action $Action -Trigger $Trigger -Settings $Settings -Principal $Principal -Force | Out-Null
 Write-Host "Görev hazır: hafta içi her gün 19:00. Bilgisayar kapalıysa açıldığında ilk fırsatta çalışır."
