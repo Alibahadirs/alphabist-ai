@@ -6,6 +6,7 @@ import pandas as pd
 from app.daily_scan.analysis import assess_symbol
 from app.daily_scan.models import DailyScanResult
 from app.daily_scan.reporting import build_csv, build_html
+from app.daily_scan.runner import _config
 
 
 def _history() -> pd.DataFrame:
@@ -37,3 +38,12 @@ def test_reports_include_disclaimer_and_excel_friendly_csv():
     assert "TEST" in html
     assert csv_data.startswith(b"\xef\xbb\xbf")
     assert b"TEST" in csv_data
+
+
+def test_cloud_config_uses_environment(monkeypatch):
+    monkeypatch.setenv("ALPHABIST_GMAIL_SENDER", "sender@example.com")
+    monkeypatch.setenv("ALPHABIST_REPORT_RECIPIENT", "recipient@example.com")
+    assert _config() == {
+        "sender": "sender@example.com",
+        "recipient": "recipient@example.com",
+    }

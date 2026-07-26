@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import smtplib
 from email.message import EmailMessage
 
@@ -14,6 +15,9 @@ def save_app_password(sender: str, password: str) -> None:
 
 
 def load_app_password(sender: str) -> str | None:
+    cloud_password = os.getenv("ALPHABIST_GMAIL_APP_PASSWORD")
+    if cloud_password:
+        return cloud_password.replace(" ", "")
     import keyring
 
     return keyring.get_password(KEYRING_SERVICE, sender)

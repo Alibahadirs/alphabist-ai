@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from datetime import date
 from pathlib import Path
 
@@ -15,6 +16,10 @@ CONFIG_PATH = settings.data_dir / "daily_report_config.json"
 
 
 def _config() -> dict[str, str]:
+    cloud_sender = os.getenv("ALPHABIST_GMAIL_SENDER")
+    cloud_recipient = os.getenv("ALPHABIST_REPORT_RECIPIENT")
+    if cloud_sender and cloud_recipient:
+        return {"sender": cloud_sender, "recipient": cloud_recipient}
     if not CONFIG_PATH.exists():
         raise RuntimeError("E-posta ayarı bulunamadı. Önce configure_daily_report.py çalıştırın.")
     return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))

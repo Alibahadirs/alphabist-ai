@@ -277,6 +277,19 @@ Parola projeye veya GitHub'a yazılmaz; Windows kimlik kasasında saklanır. Gö
 hafta içi 19:00'da çalışır. Bilgisayar o anda kapalıysa e-posta gönderilemez;
 Windows açıldığında görev ilk fırsatta çalışır.
 
+### Bilgisayardan bağımsız bulut çalışması
+
+`.github/workflows/daily-bist-report.yml` iş akışı GitHub Actions üzerinde hafta
+içi Türkiye saatiyle 19:00'da çalışır. Gönderen, alıcı ve Gmail uygulama parolası
+yalnızca GitHub Secrets alanından okunur. Güvenli bilgileri kaydetmek için:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\configure_cloud_report.ps1
+```
+
+Bulut görevi doğrulandıktan sonra aynı raporun iki kez gelmemesi için yerel
+Windows görevi kapatılmalıdır.
+
 ## Kullanım akışı
 
 1. **Şirket ekle veya güncelle** ekranını açın.

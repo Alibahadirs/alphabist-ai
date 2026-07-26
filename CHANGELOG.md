@@ -10,6 +10,8 @@
 - HTML özet ve Excel uyumlu CSV eki üreten rapor ile Gmail gönderimi eklendi.
 - Gmail uygulama parolası kod dışında, Windows güvenli kimlik kasasında tutuldu.
 - Hafta içi 19:00 için Windows görev kurulum betiği ve açılışta telafi ayarı eklendi.
+- Bilgisayar kapalıyken de çalışabilen GitHub Actions zamanlaması ve GitHub
+  Secrets tabanlı bulut e-posta ayarı eklendi.
 
 ## 1.23.2 - 2026-07-26
 
