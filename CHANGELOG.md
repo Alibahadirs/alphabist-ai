@@ -1,5 +1,17 @@
 # Değişiklik günlüğü
 
+## 1.25.0 - 2026-07-27
+
+### Yahoo Finance finansal tablolarıyla otomatik doldurma
+
+- Şirket ekleme ekranına `Yahoo Finance'tan çek` sekmesi eklendi.
+- BIST kodundan üç aylık gelir tablosu, bilanço ve nakit akışı alınarak temel
+  finansal oranların otomatik hesaplanması sağlandı.
+- Cari dönem, önceki yılın aynı çeyreğiyle karşılaştırılır hale getirildi.
+- Eksik Yahoo alanları açıkça uyarılır ve resmi rapor kontrolü onayı olmadan
+  kayıt yapılmaz.
+- Veri denetim geçmişinde kaynak `Yahoo Finance` olarak ayrı tutulur.
+
 ## 1.24.1 - 2026-07-27
 
 ### PDF hisse kodu algılama düzeltmesi

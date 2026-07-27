@@ -277,6 +277,17 @@ Parola projeye veya GitHub'a yazılmaz; Windows kimlik kasasında saklanır. Gö
 hafta içi 19:00'da çalışır. Bilgisayar o anda kapalıysa e-posta gönderilemez;
 Windows açıldığında görev ilk fırsatta çalışır.
 
+## Yahoo Finance ile finansal verileri doldurma
+
+**Şirket ekle veya güncelle** ekranındaki **Yahoo Finance'tan çek** sekmesinde
+BIST hisse kodunu girerek son üç aylık gelir tablosu, bilanço ve nakit akışı
+verilerini getirebilirsiniz. Uygulama son dönemi önceki yılın aynı çeyreğiyle
+karşılaştırır ve kullanılabilen oranları otomatik hesaplar.
+
+Yahoo Finance resmi KAP kaynağı değildir ve bazı BIST şirketlerinde alanlar eksik
+olabilir. Bu nedenle eksikler ekranda gösterilir ve resmi rapor kontrolü onayı
+olmadan analiz kaydedilmez.
+
 ### Bilgisayardan bağımsız bulut çalışması
 
 `.github/workflows/daily-bist-report.yml` iş akışı GitHub Actions üzerinde hafta

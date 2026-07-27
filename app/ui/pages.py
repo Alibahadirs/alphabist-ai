@@ -117,6 +117,7 @@ from app.data_quality.remediation import (
     verify_remediation_event_chain,
 )
 from app.market_data.provider import get_history, get_quote
+from app.market_data.yahoo_financials import fetch_yahoo_financials
 from app.market_data.batch import (
     MAX_MARKET_DIAGNOSTIC_BATCH,
     MarketBatchSummary,
@@ -3527,11 +3528,129 @@ def render_company_form() -> None:
     st.title("Şirket ekle veya güncelle")
     st.caption("Raporlardan otomatik doldurun veya finansal oranları elle girin.")
 
-    pdf_tab, manual_tab = st.tabs(["PDF ile otomatik doldur", "Manuel giriş"])
+    yahoo_tab, pdf_tab, manual_tab = st.tabs(
+        ["Yahoo Finance'tan çek", "PDF ile otomatik doldur", "Manuel giriş"]
+    )
+    with yahoo_tab:
+        _render_yahoo_company_form()
     with pdf_tab:
         _render_pdf_company_form()
     with manual_tab:
         _render_manual_company_form()
+
+
+def _render_yahoo_company_form() -> None:
+    st.caption(
+        "Hisse kodunu girerek Yahoo Finance'taki son üç aylık bilanço, gelir "
+        "tablosu ve nakit akışı verilerini otomatik doldurun."
+    )
+    symbol = st.text_input("BIST hisse kodu", "THYAO", key="yahoo_financial_symbol")
+    if st.button("Yahoo Finance'tan getir", key="yahoo_financial_fetch"):
+        try:
+            with st.spinner("Finansal tablolar alınıyor..."):
+                st.session_state["yahoo_financial_result"] = fetch_yahoo_financials(symbol)
+        except Exception as exc:
+            st.session_state.pop("yahoo_financial_result", None)
+            st.error(f"Yahoo Finance verileri alınamadı: {exc}")
+            return
+
+    result = st.session_state.get("yahoo_financial_result")
+    if result is None:
+        st.info("Başlamak için bir hisse kodu girip verileri getirin.")
+        return
+    draft = result.draft
+    metrics = to_financial_metrics(draft)
+    for warning in result.warnings:
+        st.warning(warning)
+    st.success(
+        f"{draft.symbol} için {result.current_period:%d.%m.%Y} dönemi getirildi."
+    )
+    company_profile = _profile_select(
+        "Şirket türü / sektör profili",
+        draft.company_profile,
+        "yahoo_company_profile",
+    )
+    with st.form("yahoo_company_form", border=True):
+        company_name = st.text_input("Şirket adı", value=draft.company_name)
+        left, right = st.columns(2)
+        with left:
+            revenue_growth = st.number_input(
+                "Ciro büyümesi (%)", value=metrics.revenue_growth, step=0.1
+            )
+            net_profit_growth = st.number_input(
+                "Net kâr büyümesi (%)", value=metrics.net_profit_growth, step=0.1
+            )
+            net_margin = st.number_input(
+                "Net kâr marjı (%)", value=metrics.net_margin, step=0.1
+            )
+            roe = st.number_input("ROE (%)", value=metrics.roe, step=0.1)
+            debt_to_equity = st.number_input(
+                "Borç / özkaynak", value=metrics.debt_to_equity, min_value=0.0,
+                step=0.01, format="%.4f",
+            )
+            current_ratio = st.number_input(
+                "Cari oran", value=metrics.current_ratio, min_value=0.0,
+                step=0.01, format="%.2f",
+            )
+        with right:
+            operating_cash_flow_input = _amount_input(
+                "Operasyonel nakit akışı", metrics.operating_cash_flow,
+                key="yahoo_operating_cash_flow",
+            )
+            free_cash_flow_input = _amount_input(
+                "Serbest nakit akışı", metrics.free_cash_flow,
+                key="yahoo_free_cash_flow",
+            )
+            asset_turnover = st.number_input(
+                "Aktif devir hızı", value=metrics.asset_turnover,
+                min_value=0.0, step=0.01, format="%.2f",
+            )
+            valuation = st.slider("Değerleme girdisi", 0, 100, 50)
+            management = st.slider("Yönetim girdisi", 0, 100, 70)
+            risk = st.slider("Risk dayanıklılığı", 0, 100, 50)
+        sector_metrics = _sector_inputs(company_profile, "yahoo_sector")
+        source_confirmed = st.checkbox(
+            "Yahoo Finance dönemini ve tutarlarını resmi raporla kontrol ettim"
+        )
+        subjective_confirmed = st.checkbox(
+            "Değerleme, yönetim ve risk puanlarını güncel verilerle kontrol ettim"
+        )
+        submitted = st.form_submit_button("Kontrol et ve kaydet", type="primary")
+    if not submitted:
+        return
+    if not source_confirmed:
+        st.error("Yahoo verilerini resmi raporla doğrulamadan kayıt yapılamaz.")
+        return
+    try:
+        operating_cash_flow = _parse_amount_input(
+            "Operasyonel nakit akışı", operating_cash_flow_input
+        )
+        free_cash_flow = _parse_amount_input("Serbest nakit akışı", free_cash_flow_input)
+    except AppValidationError as exc:
+        st.error(str(exc))
+        return
+    yahoo_sources = {
+        field: MetricSourceType.YAHOO
+        for field, value in metrics.model_dump().items()
+        if field not in {"symbol", "company_name", "company_profile"} and value is not None
+    }
+    _validate_and_save_company(
+        symbol=draft.symbol, company_name=company_name,
+        revenue_growth=revenue_growth, net_profit_growth=net_profit_growth,
+        net_margin=net_margin, roe=roe, debt_to_equity=debt_to_equity,
+        current_ratio=current_ratio, operating_cash_flow=operating_cash_flow,
+        free_cash_flow=free_cash_flow, asset_turnover=asset_turnover,
+        valuation=valuation, management=management, risk=risk,
+        subjective_inputs_confirmed=subjective_confirmed,
+        validation_warnings_confirmed=source_confirmed,
+        company_profile=company_profile, sector_metrics=sector_metrics,
+        source_type=DataSourceType.YAHOO, period_months=3,
+        report_period_end=draft.report_period_end,
+        comparison_period_end=result.comparison_period,
+        comparison_period_confirmed=result.comparison_period is not None,
+        field_sources=yahoo_sources,
+        source_values=build_source_value_snapshot(draft),
+    )
 
 
 def _render_pdf_company_form() -> None:

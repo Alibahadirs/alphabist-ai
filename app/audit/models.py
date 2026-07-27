@@ -8,6 +8,7 @@ from app.sector.profiles import CompanyProfile
 
 class DataSourceType(str, Enum):
     PDF = "pdf"
+    YAHOO = "yahoo"
     MANUAL = "manual"
     CORRECTION = "correction"
     LEGACY = "legacy"
@@ -15,6 +16,7 @@ class DataSourceType(str, Enum):
 
 class MetricSourceType(str, Enum):
     FINANCIAL_REPORT = "financial_report"
+    YAHOO = "yahoo"
     ACTIVITY_REPORT = "activity_report"
     SOURCE_CORRECTION = "source_correction"
     MANUAL = "manual"
@@ -23,6 +25,7 @@ class MetricSourceType(str, Enum):
 
 SOURCE_LABELS = {
     DataSourceType.PDF: "PDF raporları",
+    DataSourceType.YAHOO: "Yahoo Finance",
     DataSourceType.MANUAL: "Manuel giriş",
     DataSourceType.CORRECTION: "Veri kalite düzeltmesi",
     DataSourceType.LEGACY: "Kaynak belirtilmemiş",
@@ -30,6 +33,7 @@ SOURCE_LABELS = {
 
 METRIC_SOURCE_LABELS = {
     MetricSourceType.FINANCIAL_REPORT: "Finansal rapor",
+    MetricSourceType.YAHOO: "Yahoo Finance",
     MetricSourceType.ACTIVITY_REPORT: "Faaliyet raporu",
     MetricSourceType.SOURCE_CORRECTION: "PDF tutar düzeltmesi",
     MetricSourceType.MANUAL: "Kullanıcı girişi",
