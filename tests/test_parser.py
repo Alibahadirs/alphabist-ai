@@ -313,6 +313,24 @@ def test_extract_symbol_from_pdf_filename_when_text_has_no_code():
     assert metadata.company_name == "GÜBRE FABRİKALARI TÜRK A.Ş."
 
 
+def test_does_not_treat_bist_platform_or_report_word_as_symbol():
+    metadata = extract_company_metadata(
+        "KAP BIST PLATFORMU FAALİYET RAPORU",
+        "2026_FAALIYET_RAPORU.pdf",
+    )
+
+    assert metadata.symbol == ""
+
+
+def test_symbol_pattern_requires_complete_code_token():
+    metadata = extract_company_metadata(
+        "BIST PLATFORMU üzerinde yayımlanmıştır",
+        "AKSA_2026_RAPORU.pdf",
+    )
+
+    assert metadata.symbol == "AKSA"
+
+
 def test_normalizes_kervansaray_report_filename_to_official_symbol():
     metadata = extract_company_metadata(
         "KERVANSARAY YATIRIM HOLDİNG ANONİM ŞİRKETİ",

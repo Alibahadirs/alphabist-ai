@@ -109,14 +109,23 @@ PROFILE_FIELD_LABELS = {
 }
 
 SYMBOL_PATTERNS = (
-    re.compile(r"(?:BIST|PAY KODU|HİSSE KODU)\s*[:\-]?\s*([A-Z0-9]{3,6})", re.I),
-    re.compile(r"(?:BORSA KODU|İŞLEM KODU)\s*[:\-]?\s*([A-Z0-9]{3,6})", re.I),
+    re.compile(
+        r"(?:BIST|PAY KODU|HİSSE KODU)\s*[:\-]?\s*"
+        r"([A-Z0-9]{3,6})(?![A-Z0-9])",
+        re.I,
+    ),
+    re.compile(
+        r"(?:BORSA KODU|İŞLEM KODU)\s*[:\-]?\s*"
+        r"([A-Z0-9]{3,6})(?![A-Z0-9])",
+        re.I,
+    ),
 )
 IGNORED_FILENAME_WORDS = {
     "FAALIYET",
     "FINANSAL",
     "KONSOLIDE",
     "RAPOR",
+    "RAPORU",
     "REPORT",
     "SPK",
 }
@@ -319,6 +328,17 @@ def _symbol_from_filename(file_name: str) -> str:
     return ""
 
 
+def _valid_symbol_candidate(value: str) -> str:
+    candidate = re.sub(r"[^A-Z0-9]", "", value.upper())
+    if (
+        not re.fullmatch(r"[A-Z0-9]{3,6}", candidate)
+        or candidate in IGNORED_FILENAME_WORDS
+        or candidate.isdigit()
+    ):
+        return ""
+    return candidate
+
+
 def _canonical_symbol(symbol: str, company_name: str = "") -> str:
     normalized_symbol = re.sub(r"[^A-Z0-9]", "", symbol.upper())
     if normalized_symbol in SYMBOL_ALIASES:
@@ -389,7 +409,7 @@ def extract_company_metadata(text: str, file_name: str = "") -> CompanyMetadata:
     for pattern in SYMBOL_PATTERNS:
         match = pattern.search(text)
         if match:
-            symbol = match.group(1).upper()
+            symbol = _valid_symbol_candidate(match.group(1))
             break
     if not symbol and file_name:
         symbol = _symbol_from_filename(file_name)

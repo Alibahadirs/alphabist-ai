@@ -1,5 +1,14 @@
 # Değişiklik günlüğü
 
+## 1.24.1 - 2026-07-27
+
+### PDF hisse kodu algılama düzeltmesi
+
+- `BIST PLATFORMU` ifadesinin kısaltılarak hisse kodu sanılması engellendi.
+- Dosya adındaki `RAPORU` kelimesinin hisse kodu olarak seçilmesi engellendi.
+- Hisse kodu eşleşmelerinin tam 3-6 karakterlik bir kod olması zorunlu hale
+  getirildi; şüpheli durumda yanlış şirkete kayıt yapmak yerine alan boş bırakılır.
+
 ## 1.24.0 - 2026-07-26
 
 ### Günlük BIST teknik tarama ve e-posta raporu
